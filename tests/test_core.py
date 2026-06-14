@@ -12,6 +12,7 @@ from VVRP.CCmd import (
     CommandRegistry,
     CommandResult,
     ParseStatus,
+    TokenStyle,
     dispatch_line,
 )
 from VVRP.CCmd.examples import build_default_registry
@@ -19,6 +20,8 @@ from VVRP.CCmd.help import format_help
 from VVRP.CCmd.interactive import run_interactive_cli
 from VVRP.IFNET.Ethernet import is_ethernet_interface
 from VVRP.IFNET.Ethernet.admin import EthernetAdminProvider
+from VVRP.IFNET.Ethernet.dhcp import EthernetDhcpClientProvider
+from VVRP.IFNET.Ethernet.static import EthernetStaticIpv4Provider
 from VVRP.IFNET.Loopback import is_loopback_interface
 from VVRP.IFNET import (
     InterfaceAddress,
@@ -26,14 +29,21 @@ from VVRP.IFNET import (
     NetworkInterface,
     register_ifnet_commands,
 )
-from VVRP.IFNET.commands import INTERFACE_NAME_PATTERN
 from VVRP.IFNET.discovery import (
     assign_ifnet_indices,
     _interface_index,
     _interface_index_map,
     _interface_metadata_map,
 )
+from VVRP.IP.dhcp import DhcpClientResult
 from VVRP.IP.ping import build_ping_command, classify_ping_target
+from VVRP.IP.static import (
+    StaticIpv4Address,
+    StaticIpv4Result,
+    StaticIpv4ValidationError,
+    parse_ipv4_mask,
+    parse_static_ipv4_address,
+)
 
 
 def build_registry(calls: list[tuple[str, dict[str, str]]] | None = None) -> CommandRegistry:
@@ -183,6 +193,31 @@ class ParserTests(unittest.TestCase):
             result.complete_command,
         )
         self.assertTrue(result.executable)
+
+    def test_dynamic_interface_parameter_marks_prefix_ambiguous_and_unknown_invalid(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth0"), fake_ethernet("eth4")))
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("privileged")
+        ctx.push_mode("config")
+        registry.initialize_context(ctx)
+        parser = CommandParser(registry)
+
+        prefix = parser.parse("interface eth", mode="config", ctx=ctx)
+        self.assertEqual(ParseStatus.AMBIGUOUS, prefix.status)
+        self.assertEqual(("eth0", "eth4"), prefix.candidates)
+        self.assertEqual(TokenStyle.VALID, prefix.token_statuses[0].style)
+        self.assertEqual(TokenStyle.AMBIGUOUS, prefix.token_statuses[1].style)
+
+        unknown = parser.parse("interface eth5", mode="config", ctx=ctx)
+        self.assertEqual(ParseStatus.INVALID, unknown.status)
+        self.assertEqual(TokenStyle.VALID, unknown.token_statuses[0].style)
+        self.assertEqual(TokenStyle.INVALID, unknown.token_statuses[1].style)
+
+        exact = parser.parse("interface eth4", mode="config", ctx=ctx)
+        self.assertEqual(ParseStatus.VALID_UNIQUE, exact.status)
+        self.assertTrue(exact.executable)
 
     def test_ambiguous_token_does_not_complete_before_space(self):
         parser = CommandParser(build_default_registry())
@@ -388,22 +423,61 @@ class FakeAdminProvider:
         return InterfaceAdminResult(ok=True)
 
 
+class FakeDhcpProvider:
+    def __init__(self):
+        self.calls: list[tuple[str, str]] = []
+        self.fail_next: DhcpClientResult | None = None
+
+    def enable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
+        self.calls.append(("enable dhcp", interface.name))
+        if self.fail_next is not None:
+            result = self.fail_next
+            self.fail_next = None
+            return result
+        return DhcpClientResult(ok=True)
+
+    def disable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
+        self.calls.append(("disable dhcp", interface.name))
+        if self.fail_next is not None:
+            result = self.fail_next
+            self.fail_next = None
+            return result
+        return DhcpClientResult(ok=True)
+
+
+class FakeStaticIpv4Provider:
+    def __init__(self):
+        self.calls: list[tuple[str, str, StaticIpv4Address | None]] = []
+        self.fail_next: StaticIpv4Result | None = None
+
+    def set_static_ipv4(
+        self,
+        interface: NetworkInterface,
+        address: StaticIpv4Address,
+    ) -> StaticIpv4Result:
+        self.calls.append(("set static ipv4", interface.name, address))
+        if self.fail_next is not None:
+            result = self.fail_next
+            self.fail_next = None
+            return result
+        return StaticIpv4Result(ok=True)
+
+    def remove_static_ipv4(
+        self,
+        interface: NetworkInterface,
+        address: StaticIpv4Address | None = None,
+    ) -> StaticIpv4Result:
+        self.calls.append(("remove static ipv4", interface.name, address))
+        if self.fail_next is not None:
+            result = self.fail_next
+            self.fail_next = None
+            return result
+        return StaticIpv4Result(ok=True)
+
+
 def fake_interfaces() -> tuple[NetworkInterface, ...]:
     return (
-        NetworkInterface(
-            name="eth3",
-            ifnet_index=0,
-            index=2,
-            kind="ethernet",
-            is_up=True,
-            mac_address="AA:BB:CC:DD:EE:FF",
-            mtu=1500,
-            speed_mbps=1000,
-            addresses=(
-                InterfaceAddress(family="ipv4", address="192.0.2.10", prefix_length=24),
-                InterfaceAddress(family="ipv6", address="2001:db8::10", prefix_length=64),
-            ),
-        ),
+        fake_ethernet("eth3"),
         NetworkInterface(
             name="loopback_0",
             ifnet_index=0,
@@ -417,6 +491,23 @@ def fake_interfaces() -> tuple[NetworkInterface, ...]:
                 InterfaceAddress(family="ipv4", address="127.0.0.1", prefix_length=8),
                 InterfaceAddress(family="ipv6", address="::1", prefix_length=128),
             ),
+        ),
+    )
+
+
+def fake_ethernet(name: str, index: int = 2) -> NetworkInterface:
+    return NetworkInterface(
+        name=name,
+        ifnet_index=0,
+        index=index,
+        kind="ethernet",
+        is_up=True,
+        mac_address="AA:BB:CC:DD:EE:FF",
+        mtu=1500,
+        speed_mbps=1000,
+        addresses=(
+            InterfaceAddress(family="ipv4", address="192.0.2.10", prefix_length=24),
+            InterfaceAddress(family="ipv6", address="2001:db8::10", prefix_length=64),
         ),
     )
 
@@ -630,16 +721,6 @@ class IFNETCommandTests(unittest.TestCase):
             admin_provider=admin_provider,
             modes=("user", "privileged", "config", "interface", "hidden"),
         )
-
-        @registry.command(
-            f"interface <name:{INTERFACE_NAME_PATTERN}>",
-            help_text="Enter interface configuration mode",
-            modes=("config",),
-        )
-        def interface(ctx, args):
-            ctx.push_mode("interface", args["name"])
-            return CommandResult()
-
         ctx = CliContext(output=io.StringIO())
         ctx.push_mode("config")
 
@@ -892,6 +973,434 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertIn("permission denied", result.message)
 
 
+class DhcpClientCommandTests(unittest.TestCase):
+    def test_dhcp_alloc_commands_are_interface_only(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        parser = CommandParser(registry)
+
+        self.assertTrue(parser.parse("ip address dhcp-alloc", mode="interface").executable)
+        self.assertTrue(parser.parse("no ip address dhcp-alloc", mode="interface").executable)
+        self.assertEqual(
+            ParseStatus.INVALID,
+            parser.parse("ip address dhcp-alloc", mode="config").status,
+        )
+        self.assertEqual(
+            ParseStatus.INVALID,
+            parser.parse("no ip address dhcp-alloc", mode="config").status,
+        )
+
+    def test_ip_address_dhcp_alloc_calls_provider(self):
+        ifnet_provider = FakeInterfaceProvider(fake_interfaces())
+        dhcp_provider = FakeDhcpProvider()
+        registry = build_default_registry(
+            ifnet_provider=ifnet_provider,
+            ip_dhcp_provider=dhcp_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "ip address dhcp-alloc")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual([("enable dhcp", "eth3")], dhcp_provider.calls)
+
+    def test_no_ip_address_dhcp_alloc_calls_provider(self):
+        ifnet_provider = FakeInterfaceProvider(fake_interfaces())
+        dhcp_provider = FakeDhcpProvider()
+        registry = build_default_registry(
+            ifnet_provider=ifnet_provider,
+            ip_dhcp_provider=dhcp_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "no ip address dhcp-alloc")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual([("disable dhcp", "eth3")], dhcp_provider.calls)
+
+    def test_dhcp_alloc_rejects_loopback_interface(self):
+        ifnet_provider = FakeInterfaceProvider(fake_interfaces())
+        dhcp_provider = FakeDhcpProvider()
+        registry = build_default_registry(
+            ifnet_provider=ifnet_provider,
+            ip_dhcp_provider=dhcp_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "loopback_0")
+
+        outcome = dispatch_line(ctx, registry, "ip address dhcp-alloc")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual(
+            "% Loopback interface does not support DHCP client: loopback_0",
+            outcome.message,
+        )
+        self.assertEqual([], dhcp_provider.calls)
+
+    def test_dhcp_alloc_unknown_current_interface_reports_error(self):
+        dhcp_provider = FakeDhcpProvider()
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+            ip_dhcp_provider=dhcp_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "missing0")
+
+        outcome = dispatch_line(ctx, registry, "ip address dhcp-alloc")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual("% Interface not found: missing0", outcome.message)
+        self.assertEqual([], dhcp_provider.calls)
+
+    def test_dhcp_provider_failure_is_reported(self):
+        dhcp_provider = FakeDhcpProvider()
+        dhcp_provider.fail_next = DhcpClientResult(
+            ok=False,
+            message="% OS interface API failed: DHCP backend failed",
+        )
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+            ip_dhcp_provider=dhcp_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "ip address dhcp-alloc")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual("% OS interface API failed: DHCP backend failed", outcome.message)
+
+    def test_ethernet_dhcp_backend_dispatches_to_windows_api(self):
+        interface = fake_interfaces()[0]
+
+        with patch(
+            "VVRP.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp",
+            return_value="% DHCP client enabled; lease renewal pending",
+        ) as api:
+            result = EthernetDhcpClientProvider(system="Windows").enable_dhcp(interface)
+
+        self.assertTrue(result.ok)
+        self.assertIn("lease renewal pending", result.message)
+        api.assert_called_once_with(interface, True)
+
+        with patch("VVRP.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp") as api:
+            result = EthernetDhcpClientProvider(system="Windows").disable_dhcp(interface)
+
+        self.assertTrue(result.ok)
+        api.assert_called_once_with(interface, False)
+
+    def test_ethernet_dhcp_backend_reports_unsupported_linux(self):
+        result = EthernetDhcpClientProvider(system="Linux").enable_dhcp(fake_interfaces()[0])
+
+        self.assertFalse(result.ok)
+        self.assertIn("unsupported OS API backend for DHCP client: linux", result.message)
+
+    def test_windows_dhcp_updates_msft_netipinterface_with_put(self):
+        from VVRP.IFNET.Ethernet.windows import _set_msft_netipinterface_dhcp
+
+        class FakeIpInterface:
+            def __init__(self):
+                self.Dhcp = 0
+                self.put_calls = 0
+
+            def Put_(self):
+                self.put_calls += 1
+
+        ip_interface = FakeIpInterface()
+
+        _set_msft_netipinterface_dhcp(ip_interface, enabled=True)
+        self.assertEqual(1, ip_interface.Dhcp)
+        self.assertEqual(1, ip_interface.put_calls)
+
+        _set_msft_netipinterface_dhcp(ip_interface, enabled=False)
+        self.assertEqual(0, ip_interface.Dhcp)
+        self.assertEqual(2, ip_interface.put_calls)
+
+    def test_windows_dhcp_invokes_wmi_instance_method_directly(self):
+        from VVRP.IFNET.Ethernet.windows import _call_wmi_instance_method
+
+        class FakeAdapterConfiguration:
+            def __init__(self):
+                self.calls: list[str] = []
+
+            def EnableDHCP(self):
+                self.calls.append("EnableDHCP")
+                return 0
+
+        adapter_config = FakeAdapterConfiguration()
+
+        result = _call_wmi_instance_method(adapter_config, "EnableDHCP")
+
+        self.assertEqual(0, result)
+        self.assertEqual(["EnableDHCP"], adapter_config.calls)
+
+    def test_windows_dhcp_accepts_eager_wmi_method_return_value(self):
+        from VVRP.IFNET.Ethernet.windows import _call_wmi_instance_method
+
+        class FakeAdapterConfiguration:
+            EnableDHCP = 0
+
+        result = _call_wmi_instance_method(FakeAdapterConfiguration(), "EnableDHCP")
+
+        self.assertEqual(0, result)
+
+
+class StaticIpv4CommandTests(unittest.TestCase):
+    def test_static_ipv4_commands_are_interface_only(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        parser = CommandParser(registry)
+
+        self.assertTrue(parser.parse("ip address 192.0.2.10 24", mode="interface").executable)
+        self.assertTrue(
+            parser.parse("ip address 192.0.2.11 255.255.255.0 sub", mode="interface").executable
+        )
+        self.assertTrue(parser.parse("no ip address", mode="interface").executable)
+        self.assertTrue(
+            parser.parse("no ip address 192.0.2.10 255.255.255.0", mode="interface").executable
+        )
+        self.assertEqual(
+            ParseStatus.INVALID,
+            parser.parse("ip address 192.0.2.10 24", mode="config").status,
+        )
+
+    def test_parse_static_ipv4_accepts_mask_length_and_dotted_mask(self):
+        primary = parse_static_ipv4_address("1.1.1.1", "8")
+        secondary = parse_static_ipv4_address("10.0.0.10", "255.255.255.0", secondary=True)
+
+        self.assertEqual(8, primary.prefix_length)
+        self.assertEqual("255.0.0.0", primary.subnet_mask)
+        self.assertFalse(primary.secondary)
+        self.assertEqual(24, secondary.prefix_length)
+        self.assertTrue(secondary.secondary)
+
+    def test_parse_static_ipv4_rejects_non_contiguous_mask(self):
+        with self.assertRaises(StaticIpv4ValidationError):
+            parse_static_ipv4_address("192.0.2.10", "255.252.0.255")
+
+    def test_parse_static_ipv4_rejects_multicast_reserved_network_and_broadcast(self):
+        for address, mask in (
+            ("224.0.0.1", "24"),
+            ("240.0.0.1", "24"),
+            ("0.1.1.1", "8"),
+            ("192.0.2.10", "24"),
+            ("255.255.255.255", "32"),
+            ("1.1.1.0", "24"),
+            ("1.1.1.255", "24"),
+        ):
+            with self.subTest(address=address, mask=mask):
+                with self.assertRaises(StaticIpv4ValidationError):
+                    parse_static_ipv4_address(address, mask)
+
+    def test_parse_static_ipv4_accepts_31_and_32_host_prefixes(self):
+        self.assertEqual(31, parse_static_ipv4_address("1.1.1.0", "31").prefix_length)
+        self.assertEqual(32, parse_static_ipv4_address("1.1.1.1", "32").prefix_length)
+
+    def test_parse_ipv4_mask_rejects_bad_lengths_and_formats(self):
+        for mask in ("33", "-1", "255.0.255.0", "255.255.255.256", "255.025.0.0"):
+            with self.subTest(mask=mask):
+                with self.assertRaises(StaticIpv4ValidationError):
+                    parse_ipv4_mask(mask)
+
+    def test_ip_address_static_calls_provider(self):
+        ifnet_provider = FakeInterfaceProvider(fake_interfaces())
+        static_provider = FakeStaticIpv4Provider()
+        registry = build_default_registry(
+            ifnet_provider=ifnet_provider,
+            ip_static_ipv4_provider=static_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "ip address 1.1.1.1 8")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual(1, len(static_provider.calls))
+        action, interface_name, address = static_provider.calls[0]
+        self.assertEqual("set static ipv4", action)
+        self.assertEqual("eth3", interface_name)
+        self.assertEqual(StaticIpv4Address("1.1.1.1", 8), address)
+
+    def test_ip_address_static_sub_calls_provider_with_secondary_flag(self):
+        static_provider = FakeStaticIpv4Provider()
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+            ip_static_ipv4_provider=static_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "ip address 1.1.1.2 255.0.0.0 sub")
+
+        self.assertTrue(outcome.executed)
+        _, _, address = static_provider.calls[0]
+        self.assertEqual(StaticIpv4Address("1.1.1.2", 8, secondary=True), address)
+
+    def test_no_ip_address_without_arguments_removes_all_static_ipv4(self):
+        static_provider = FakeStaticIpv4Provider()
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+            ip_static_ipv4_provider=static_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "no ip address")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual([("remove static ipv4", "eth3", None)], static_provider.calls)
+
+    def test_no_ip_address_with_arguments_removes_one_static_ipv4(self):
+        static_provider = FakeStaticIpv4Provider()
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+            ip_static_ipv4_provider=static_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "no ip address 1.1.1.2 255.0.0.0 sub")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual(
+            [("remove static ipv4", "eth3", StaticIpv4Address("1.1.1.2", 8, secondary=True))],
+            static_provider.calls,
+        )
+
+    def test_static_ipv4_rejects_loopback_interface(self):
+        static_provider = FakeStaticIpv4Provider()
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+            ip_static_ipv4_provider=static_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "loopback_0")
+
+        outcome = dispatch_line(ctx, registry, "ip address 1.1.1.1 8")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual(
+            "% Loopback interface does not support static IPv4: loopback_0",
+            outcome.message,
+        )
+        self.assertEqual([], static_provider.calls)
+
+    def test_static_ipv4_provider_failure_is_reported(self):
+        static_provider = FakeStaticIpv4Provider()
+        static_provider.fail_next = StaticIpv4Result(
+            ok=False,
+            message="% OS interface API failed: static backend failed",
+        )
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+            ip_static_ipv4_provider=static_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "ip address 1.1.1.1 8")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual("% OS interface API failed: static backend failed", outcome.message)
+
+    def test_ethernet_static_backend_dispatches_to_windows_api(self):
+        interface = fake_interfaces()[0]
+        address = StaticIpv4Address("1.1.1.1", 8)
+
+        with patch("VVRP.IFNET.Ethernet.static._set_windows_ethernet_static_ipv4") as api:
+            result = EthernetStaticIpv4Provider(system="Windows").set_static_ipv4(
+                interface,
+                address,
+            )
+
+        self.assertTrue(result.ok)
+        api.assert_called_once_with(interface, address)
+
+        with patch("VVRP.IFNET.Ethernet.static._remove_windows_ethernet_static_ipv4") as api:
+            result = EthernetStaticIpv4Provider(system="Windows").remove_static_ipv4(
+                interface,
+                address,
+            )
+
+        self.assertTrue(result.ok)
+        api.assert_called_once_with(interface, address)
+
+    def test_ethernet_static_backend_reports_unsupported_linux(self):
+        result = EthernetStaticIpv4Provider(system="Linux").set_static_ipv4(
+            fake_interfaces()[0],
+            StaticIpv4Address("1.1.1.1", 8),
+        )
+
+        self.assertFalse(result.ok)
+        self.assertIn("unsupported OS API backend for static IPv4: linux", result.message)
+
+    def test_windows_static_ipv4_class_method_helper_passes_inputs(self):
+        from VVRP.IFNET.Ethernet.windows import _call_wmi_class_method
+
+        class FakeInParameters:
+            def SpawnInstance_(self):
+                return type("FakeInput", (), {})()
+
+        class FakeMethod:
+            InParameters = FakeInParameters()
+
+        class FakeClass:
+            Path_ = type("FakePath", (), {"Path": "MSFT_NetIPAddress"})
+
+            def Methods_(self, method_name):
+                self.method_name = method_name
+                return FakeMethod()
+
+        class FakeService:
+            def ExecMethod_(self, path, method_name, in_params):
+                self.call = (path, method_name, in_params)
+                return 0
+
+        service = FakeService()
+        wmi_class = FakeClass()
+
+        result = _call_wmi_class_method(
+            service,
+            wmi_class,
+            "Create",
+            {"IPAddress": "1.1.1.1", "PrefixLength": 8},
+        )
+
+        self.assertEqual(0, result)
+        self.assertEqual(("MSFT_NetIPAddress", "Create"), service.call[:2])
+        self.assertEqual("1.1.1.1", service.call[2].IPAddress)
+        self.assertEqual(8, service.call[2].PrefixLength)
+
+    def test_windows_static_ipv4_delete_helper_accepts_eager_return_value(self):
+        from VVRP.IFNET.Ethernet.windows import _delete_wmi_instance
+
+        class FakeAddress:
+            Delete_ = 0
+
+        _delete_wmi_instance(FakeAddress(), "MSFT_NetIPAddress.Delete_")
+
+    def test_windows_static_ipv4_manual_match_helpers(self):
+        from VVRP.IFNET.Ethernet.windows import (
+            _wmi_ipv4_address_is_manual,
+            _wmi_ipv4_address_matches,
+        )
+
+        row = type(
+            "FakeAddressRow",
+            (),
+            {
+                "PrefixOrigin": 1,
+                "SuffixOrigin": 1,
+                "IPAddress": "1.1.1.1",
+                "PrefixLength": 8,
+            },
+        )()
+
+        self.assertTrue(_wmi_ipv4_address_is_manual(row))
+        self.assertTrue(_wmi_ipv4_address_matches(row, StaticIpv4Address("1.1.1.1", 8)))
+        self.assertFalse(_wmi_ipv4_address_matches(row, StaticIpv4Address("1.1.1.2", 8)))
+
+
 class PingTests(unittest.TestCase):
     def test_ping_target_classification_accepts_ip_and_names(self):
         self.assertEqual("ipv4", classify_ping_target("192.168.1.1"))
@@ -951,7 +1460,7 @@ class ModeTests(unittest.TestCase):
         self.assertEqual("<R1> ", ctx.prompt)
 
     def test_mode_stack_and_prompts(self):
-        registry = build_default_registry()
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
         ctx = CliContext(hostname="R1", output=io.StringIO())
 
         self.assertTrue(dispatch_line(ctx, registry, "enable").executed)
@@ -1009,7 +1518,7 @@ class ModeTests(unittest.TestCase):
         )
 
     def test_commands_are_visible_only_in_registered_modes(self):
-        registry = build_default_registry()
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
         ctx = CliContext(output=io.StringIO())
 
         self.assertEqual(ParseStatus.INVALID, dispatch_line(ctx, registry, "config").status)
@@ -1029,6 +1538,39 @@ class ModeTests(unittest.TestCase):
         self.assertEqual(ParseStatus.INVALID, dispatch_line(ctx, registry, "shutdown").status)
         self.assertTrue(dispatch_line(ctx, registry, "interface eth3").executed)
         self.assertTrue(CommandParser(registry).parse("shutdown", mode=ctx.mode).executable)
+
+    def test_unknown_interface_does_not_enter_interface_mode(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+
+        dispatch_line(ctx, registry, "enable")
+        dispatch_line(ctx, registry, "config")
+        outcome = dispatch_line(ctx, registry, "interface eth100")
+
+        self.assertFalse(outcome.executed)
+        self.assertEqual(ParseStatus.INVALID, outcome.status)
+        self.assertEqual("% Invalid input", outcome.message)
+        self.assertEqual("config", ctx.mode)
+        self.assertEqual("Router(config)# ", ctx.prompt)
+        self.assertIn("% Invalid input", output.getvalue())
+
+    def test_interface_command_switches_interface_from_interface_mode(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth0"), fake_ethernet("eth4")))
+        )
+        ctx = CliContext(output=io.StringIO())
+
+        dispatch_line(ctx, registry, "enable")
+        dispatch_line(ctx, registry, "config")
+        self.assertTrue(dispatch_line(ctx, registry, "interface eth4").executed)
+        self.assertEqual("Router(config-if-eth4)# ", ctx.prompt)
+
+        self.assertTrue(dispatch_line(ctx, registry, "interface eth0").executed)
+
+        self.assertEqual("interface", ctx.mode)
+        self.assertEqual("eth0", ctx.mode_label)
+        self.assertEqual("Router(config-if-eth0)# ", ctx.prompt)
 
     def test_hostname_command_is_config_only_and_updates_prompt(self):
         registry = build_default_registry()

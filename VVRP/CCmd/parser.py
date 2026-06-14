@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .models import (
+    CliContext,
     CompletionCandidate,
     HelpCandidate,
     ParseResult,
@@ -18,6 +19,13 @@ class _TokenSlice:
     text: str
     start: int
     end: int
+
+
+@dataclass(frozen=True)
+class _EdgeMatch:
+    edge: TrieEdge
+    style: TokenStyle = TokenStyle.VALID
+    candidates: tuple[str, ...] = ()
 
 
 def _scan_tokens(text: str) -> tuple[list[_TokenSlice], bool]:
@@ -63,7 +71,12 @@ class CommandParser:
     def __init__(self, registry: CommandRegistry) -> None:
         self.registry = registry
 
-    def parse(self, text: str, mode: str = "user") -> ParseResult:
+    def parse(
+        self,
+        text: str,
+        mode: str = "user",
+        ctx: CliContext | None = None,
+    ) -> ParseResult:
         root = self.registry.root_for_mode(mode)
         token_slices, _ = _scan_tokens(text)
         if not token_slices:
@@ -110,8 +123,8 @@ class CommandParser:
                     error_position=token_slice.start,
                 )
 
-            edges = self._match_edges(node, token_slice.text)
-            if not edges:
+            matches = self._match_edges(node, token_slice.text, resolved_tokens, ctx)
+            if not matches:
                 token_statuses.append(
                     TokenStatus(token_slice.start, token_slice.end, TokenStyle.INVALID)
                 )
@@ -129,7 +142,7 @@ class CommandParser:
                     candidates=tuple(self._candidate_names(node)),
                 )
 
-            if len(edges) > 1:
+            if len(matches) > 1 or matches[0].style == TokenStyle.AMBIGUOUS:
                 token_statuses.append(
                     TokenStatus(token_slice.start, token_slice.end, TokenStyle.AMBIGUOUS)
                 )
@@ -144,10 +157,11 @@ class CommandParser:
                     args=args,
                     token_statuses=tuple(token_statuses),
                     error_position=token_slice.start,
-                    candidates=tuple(edge.token.display for edge in edges),
+                    candidates=matches[0].candidates
+                    or tuple(match.edge.token.display for match in matches),
                 )
 
-            edge = edges[0]
+            edge = matches[0].edge
             token_statuses.append(
                 TokenStatus(token_slice.start, token_slice.end, TokenStyle.VALID)
             )
@@ -175,6 +189,7 @@ class CommandParser:
         self,
         text_before_cursor: str,
         mode: str = "user",
+        ctx: CliContext | None = None,
     ) -> tuple[CompletionCandidate, ...]:
         token_slices, trailing_space = _scan_tokens(text_before_cursor)
         node = self.registry.root_for_mode(mode)
@@ -190,10 +205,10 @@ class CommandParser:
             previous_tokens = []
 
         for token_slice in previous_tokens:
-            edges = self._match_edges(node, token_slice.text)
-            if len(edges) != 1:
+            matches = self._match_edges(node, token_slice.text, [], ctx)
+            if len(matches) != 1 or matches[0].style != TokenStyle.VALID:
                 return ()
-            node = edges[0].node
+            node = matches[0].edge.node
 
         candidates: list[CompletionCandidate] = []
         start_position = -len(prefix) if prefix else 0
@@ -214,10 +229,23 @@ class CommandParser:
                     )
                 )
 
-        if not prefix:
-            for edge in node.parameter_edges:
-                if self._edge_is_hidden(edge):
-                    continue
+        for edge in node.parameter_edges:
+            if self._edge_is_hidden(edge):
+                continue
+            dynamic_values = self._parameter_values(edge, [item.text for item in previous_tokens], ctx)
+            if dynamic_values is not None:
+                for value in sorted(dynamic_values):
+                    if not prefix or value.startswith(prefix):
+                        candidates.append(
+                            CompletionCandidate(
+                                text=_format_resolved_token(value),
+                                start_position=start_position,
+                                display=value,
+                                meta=edge.token.display,
+                            )
+                        )
+                continue
+            if not prefix:
                 candidates.append(
                     CompletionCandidate(
                         text="",
@@ -233,11 +261,12 @@ class CommandParser:
         self,
         text_before_cursor: str,
         mode: str = "user",
+        ctx: CliContext | None = None,
     ) -> str | None:
         if not text_before_cursor or text_before_cursor[-1].isspace():
             return None
 
-        parsed = self.parse(text_before_cursor, mode=mode)
+        parsed = self.parse(text_before_cursor, mode=mode, ctx=ctx)
         if not parsed.valid_unique or not parsed.complete_command:
             return None
 
@@ -250,6 +279,7 @@ class CommandParser:
         self,
         text_before_question: str,
         mode: str = "user",
+        ctx: CliContext | None = None,
     ) -> tuple[HelpCandidate, ...]:
         text_before_question = text_before_question.split("?", 1)[0]
         token_slices, trailing_space = _scan_tokens(text_before_question)
@@ -266,10 +296,10 @@ class CommandParser:
             previous_tokens = []
 
         for token_slice in previous_tokens:
-            edges = self._match_edges(node, token_slice.text)
-            if len(edges) != 1:
+            matches = self._match_edges(node, token_slice.text, [], ctx)
+            if len(matches) != 1 or matches[0].style != TokenStyle.VALID:
                 return ()
-            node = edges[0].node
+            node = matches[0].edge.node
 
         candidates: list[HelpCandidate] = []
         for name, edge in sorted(node.literal_edges.items()):
@@ -285,6 +315,17 @@ class CommandParser:
 
         for edge in node.parameter_edges:
             if self._edge_is_hidden(edge):
+                continue
+            dynamic_values = self._parameter_values(edge, [item.text for item in previous_tokens], ctx)
+            if dynamic_values is not None:
+                for value in sorted(dynamic_values):
+                    if not prefix or value.startswith(prefix):
+                        candidates.append(
+                            HelpCandidate(
+                                display=value,
+                                help_text=self._edge_help_text(edge),
+                            )
+                        )
                 continue
             if not prefix or self._parameter_accepts_prefix(edge, prefix):
                 candidates.append(
@@ -304,22 +345,46 @@ class CommandParser:
 
         return tuple(candidates)
 
-    def _match_edges(self, node: TrieNode, value: str) -> list[TrieEdge]:
+    def _match_edges(
+        self,
+        node: TrieNode,
+        value: str,
+        resolved_tokens: list[str],
+        ctx: CliContext | None,
+    ) -> list[_EdgeMatch]:
         exact = node.literal_edges.get(value)
         if exact is not None:
-            return [exact]
+            return [_EdgeMatch(exact)]
 
         literal_matches = [
             edge for name, edge in sorted(node.literal_edges.items()) if name.startswith(value)
         ]
         if literal_matches:
-            return literal_matches
+            return [_EdgeMatch(edge) for edge in literal_matches]
 
-        parameter_matches = [
-            edge
-            for edge in node.parameter_edges
-            if edge.token.pattern is not None and edge.token.pattern.fullmatch(value)
-        ]
+        parameter_matches: list[_EdgeMatch] = []
+        for edge in node.parameter_edges:
+            if edge.token.pattern is None or edge.token.pattern.fullmatch(value) is None:
+                continue
+
+            dynamic_values = self._parameter_values(edge, resolved_tokens, ctx)
+            if dynamic_values is None:
+                parameter_matches.append(_EdgeMatch(edge))
+                continue
+
+            if value in dynamic_values:
+                parameter_matches.append(_EdgeMatch(edge, TokenStyle.VALID, (value,)))
+                continue
+
+            prefix_matches = tuple(
+                value_candidate
+                for value_candidate in sorted(dynamic_values)
+                if value_candidate.startswith(value)
+            )
+            if prefix_matches:
+                parameter_matches.append(
+                    _EdgeMatch(edge, TokenStyle.AMBIGUOUS, prefix_matches)
+                )
         return parameter_matches
 
     def _candidate_names(self, node: TrieNode) -> list[str]:
@@ -334,6 +399,16 @@ class CommandParser:
             edge.token.display.startswith(prefix)
             or edge.token.pattern.fullmatch(prefix) is not None
         )
+
+    def _parameter_values(
+        self,
+        edge: TrieEdge,
+        resolved_tokens: list[str],
+        ctx: CliContext | None,
+    ) -> tuple[str, ...] | None:
+        if edge.token.name is None:
+            return None
+        return self.registry.values_for_parameter(resolved_tokens, edge.token.name, ctx)
 
     def _edge_help_text(self, edge: TrieEdge) -> str:
         if edge.node.command is not None and edge.node.command.help_text:

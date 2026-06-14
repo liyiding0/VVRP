@@ -61,6 +61,29 @@ def register_ifnet_commands(
         return CommandResult(message=_format_interface_detail(interface, ctx.state))
 
     @registry.command(
+        f"interface <name:{INTERFACE_NAME_PATTERN}>",
+        help_text="Enter interface configuration mode",
+        modes=("config", "interface"),
+    )
+    def interface_config(ctx, args):
+        interface = _get_interface(ctx, provider, admin_provider, args["name"])
+        if isinstance(interface, CommandResult):
+            return interface
+        if ctx.mode == "interface":
+            ctx.mode_stack[-1].label = interface.name
+        else:
+            ctx.push_mode("interface", interface.name)
+        return CommandResult()
+
+    def interface_name_values(ctx):
+        try:
+            return tuple(interface.name for interface in _manager(ctx, provider, admin_provider).list_interfaces())
+        except InterfaceDiscoveryError:
+            return ()
+
+    registry.parameter_values(("interface",), "name", interface_name_values)
+
+    @registry.command(
         "shutdown",
         help_text="Administratively shut down current interface",
         modes=("interface",),

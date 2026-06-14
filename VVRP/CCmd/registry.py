@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from collections.abc import Sequence
 from typing import Callable, Iterable
 
 from .models import CliContext, CommandHandler, CommandSpec, TokenSpec
@@ -29,6 +30,10 @@ class CommandRegistry:
         self._commands_by_key: dict[tuple[str, ...], CommandSpec] = {}
         self._roots_by_mode: dict[str, TrieNode] = {}
         self._context_initializers: list[Callable[[CliContext], None]] = []
+        self._parameter_value_providers: dict[
+            tuple[tuple[str, ...], str],
+            Callable[[CliContext], Iterable[str]],
+        ] = {}
 
     @property
     def commands(self) -> tuple[CommandSpec, ...]:
@@ -107,6 +112,25 @@ class CommandRegistry:
     def initialize_context(self, ctx: CliContext) -> None:
         for initializer in self._context_initializers:
             initializer(ctx)
+
+    def parameter_values(
+        self,
+        prefix: Sequence[str],
+        name: str,
+        provider: Callable[[CliContext], Iterable[str]],
+    ) -> None:
+        self._parameter_value_providers[(tuple(prefix), name)] = provider
+
+    def values_for_parameter(
+        self,
+        prefix: Sequence[str],
+        name: str,
+        ctx: CliContext | None,
+    ) -> tuple[str, ...] | None:
+        provider = self._parameter_value_providers.get((tuple(prefix), name))
+        if provider is None or ctx is None:
+            return None
+        return tuple(dict.fromkeys(provider(ctx)))
 
     def _parse_pattern(self, pattern: str) -> Iterable[TokenSpec]:
         for raw_token in pattern.split():

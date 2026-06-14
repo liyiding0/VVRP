@@ -61,7 +61,7 @@ def run_interactive_cli(
         def lex_document(self, document):
             def get_line(lineno: int):
                 line = document.lines[lineno]
-                parsed = parser.parse(line, mode=ctx.mode)
+                parsed = parser.parse(line, mode=ctx.mode, ctx=ctx)
                 fragments = []
                 position = 0
                 style_map = {
@@ -87,7 +87,11 @@ def run_interactive_cli(
 
     class RouterCommandCompleter(Completer):
         def get_completions(self, document, complete_event):
-            for candidate in parser.completions(document.text_before_cursor, mode=ctx.mode):
+            for candidate in parser.completions(
+                document.text_before_cursor,
+                mode=ctx.mode,
+                ctx=ctx,
+            ):
                 if candidate.text:
                     yield Completion(
                         candidate.text,
@@ -106,7 +110,11 @@ def run_interactive_cli(
     @key_bindings.add(" ")
     def _(event) -> None:
         buffer = event.current_buffer
-        completed = parser.complete_before_space(buffer.document.text_before_cursor, mode=ctx.mode)
+        completed = parser.complete_before_space(
+            buffer.document.text_before_cursor,
+            mode=ctx.mode,
+            ctx=ctx,
+        )
         if completed is not None:
             buffer.document = Document(completed, cursor_position=len(completed))
             return
@@ -120,7 +128,7 @@ def run_interactive_cli(
             buffer.validate_and_handle()
             return
 
-        parsed = parser.parse(buffer.text, mode=ctx.mode)
+        parsed = parser.parse(buffer.text, mode=ctx.mode, ctx=ctx)
 
         if parsed.status == ParseStatus.EMPTY:
             buffer.validate_and_handle()

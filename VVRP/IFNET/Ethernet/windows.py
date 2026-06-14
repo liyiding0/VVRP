@@ -5,6 +5,7 @@ import socket
 from ctypes import wintypes
 
 from VVRP.IFNET.models import NetworkInterface
+from VVRP.IP.static import StaticIpv4Address
 
 
 ERROR_ACCESS_DENIED = 5
@@ -30,6 +31,42 @@ CM_PROB_DISABLED = 0x00000016
 
 MAX_ADAPTER_ADDRESS_LENGTH = 8
 AF_UNSPEC = 0
+ADDRESS_FAMILY_IPV4 = 2
+PREFIX_ORIGIN_MANUAL = 1
+
+WMI_SUCCESS_REBOOT_NOT_REQUIRED = 0
+WMI_SUCCESS_REBOOT_REQUIRED = 1
+WMI_DHCP_NOT_ENABLED = 100
+WMI_ACCESS_DENIED = 91
+
+WMI_RETURN_MESSAGES = {
+    64: "method not supported on this platform",
+    65: "unknown failure",
+    66: "invalid subnet mask",
+    67: "error processing an instance",
+    68: "invalid input parameter",
+    69: "more than five gateways specified",
+    70: "invalid IP address",
+    71: "invalid gateway IP address",
+    72: "error accessing registry",
+    73: "invalid domain name",
+    74: "invalid host name",
+    75: "no primary/secondary WINS server defined",
+    76: "invalid file",
+    77: "invalid system path",
+    78: "file copy failed",
+    79: "invalid security parameter",
+    80: "unable to configure TCP/IP service",
+    81: "unable to configure DHCP service",
+    82: "unable to renew DHCP lease",
+    83: "unable to release DHCP lease",
+    84: "IP not enabled on adapter",
+    85: "IPX not enabled on adapter",
+    WMI_ACCESS_DENIED: "access denied",
+    97: "interface not configurable",
+    98: "DHCP not enabled on adapter",
+    WMI_DHCP_NOT_ENABLED: "DHCP not enabled on adapter",
+}
 
 
 class GUID(ctypes.Structure):
@@ -121,6 +158,85 @@ def set_windows_network_adapter_enabled(
         )
 
 
+def set_windows_network_adapter_dhcp(
+    interface: NetworkInterface,
+    enabled: bool,
+) -> str:
+    _, ip_interface = _wmi_ipv4_interface_for_interface(interface)
+    _, adapter_config = _wmi_adapter_configuration_for_interface(interface)
+
+    if enabled:
+        _set_msft_netipinterface_dhcp(ip_interface, enabled=True)
+        if adapter_config is not None:
+            _call_wmi_instance_method(adapter_config, "EnableDHCP")
+            renew_code = _call_wmi_instance_method(
+                adapter_config,
+                "RenewDHCPLease",
+                raise_on_error=False,
+            )
+            if not _wmi_success(renew_code):
+                return (
+                    "% DHCP client enabled; DHCP lease renewal did not complete: "
+                    f"{_format_wmi_return('RenewDHCPLease', renew_code)}"
+                )
+        return ""
+
+    release_warning = ""
+    if adapter_config is not None:
+        release_code = _call_wmi_instance_method(
+            adapter_config,
+            "ReleaseDHCPLease",
+            raise_on_error=False,
+        )
+        if not _wmi_success(release_code) and release_code != WMI_DHCP_NOT_ENABLED:
+            release_warning = (
+                "% DHCP client disabled; DHCP lease release did not complete: "
+                f"{_format_wmi_return('ReleaseDHCPLease', release_code)}"
+            )
+
+    _set_msft_netipinterface_dhcp(ip_interface, enabled=False)
+    return release_warning
+
+
+def set_windows_static_ipv4(
+    interface: NetworkInterface,
+    address: StaticIpv4Address,
+) -> str:
+    _, ip_interface = _wmi_ipv4_interface_for_interface(interface)
+    _set_msft_netipinterface_dhcp(ip_interface, enabled=False)
+
+    service = _wmi_service(r"root\StandardCimv2")
+    existing = _wmi_manual_ipv4_addresses(service, interface, address)
+    if existing:
+        return ""
+
+    address_class = service.Get("MSFT_NetIPAddress")
+    code = _call_wmi_class_method(
+        service,
+        address_class,
+        "Create",
+        {
+            "AddressFamily": ADDRESS_FAMILY_IPV4,
+            "InterfaceIndex": _require_windows_interface_index(interface),
+            "IPAddress": address.address,
+            "PrefixLength": address.prefix_length,
+        },
+    )
+    _check_wmi_return(code, "MSFT_NetIPAddress.Create")
+    return ""
+
+
+def remove_windows_static_ipv4(
+    interface: NetworkInterface,
+    address: StaticIpv4Address | None = None,
+) -> str:
+    service = _wmi_service(r"root\StandardCimv2")
+    addresses = _wmi_manual_ipv4_addresses(service, interface, address)
+    for ip_address in addresses:
+        _delete_wmi_instance(ip_address, "MSFT_NetIPAddress.Delete_")
+    return ""
+
+
 def _adapter_identity_for_interface(interface: NetworkInterface) -> dict[str, object]:
     if interface.os_id:
         return {
@@ -196,6 +312,271 @@ def _network_device(adapter_guid: str, candidate_names: tuple[str, ...] = ()) ->
 
     setupapi.SetupDiDestroyDeviceInfoList(info_set)
     raise OSError(f"Windows network adapter device not found: {adapter_guid}")
+
+
+def _wmi_ipv4_interface_for_interface(interface: NetworkInterface):
+    service = _wmi_service(r"root\StandardCimv2")
+    for query in _wmi_netip_interface_queries(interface):
+        match = _wmi_first(service, query)
+        if match is not None:
+            return service, match
+    raise OSError(f"Windows IPv4 interface not found: {interface.name}")
+
+
+def _wmi_adapter_configuration_for_interface(interface: NetworkInterface):
+    service = _wmi_service(r"root\cimv2")
+    for query in _wmi_adapter_configuration_queries(interface):
+        match = _wmi_first(service, query)
+        if match is not None:
+            return service, match
+    return service, None
+
+
+def _wmi_manual_ipv4_addresses(
+    service,
+    interface: NetworkInterface,
+    address: StaticIpv4Address | None = None,
+):
+    queries: list[str] = [
+        "SELECT * FROM MSFT_NetIPAddress "
+        f"WHERE InterfaceIndex = {_require_windows_interface_index(interface)} "
+        f"AND AddressFamily = {ADDRESS_FAMILY_IPV4}"
+    ]
+    for name in _interface_identity_names(interface):
+        queries.append(
+            "SELECT * FROM MSFT_NetIPAddress "
+            f"WHERE InterfaceAlias = {_wql_string(name)} "
+            f"AND AddressFamily = {ADDRESS_FAMILY_IPV4}"
+        )
+
+    matches = []
+    seen_paths: set[str] = set()
+    for query in dict.fromkeys(queries):
+        try:
+            rows = list(service.ExecQuery(query))
+        except Exception as exc:
+            raise OSError(f"WMI query failed: {query}: {exc}") from exc
+        for row in rows:
+            path = getattr(getattr(row, "Path_", None), "Path", "")
+            if path and path in seen_paths:
+                continue
+            if not _wmi_ipv4_address_is_manual(row):
+                continue
+            if address is not None and not _wmi_ipv4_address_matches(row, address):
+                continue
+            if path:
+                seen_paths.add(path)
+            matches.append(row)
+    return tuple(matches)
+
+
+def _wmi_ipv4_address_is_manual(row) -> bool:
+    prefix_origin = getattr(row, "PrefixOrigin", None)
+    suffix_origin = getattr(row, "SuffixOrigin", None)
+    return prefix_origin == PREFIX_ORIGIN_MANUAL or suffix_origin == PREFIX_ORIGIN_MANUAL
+
+
+def _wmi_ipv4_address_matches(row, address: StaticIpv4Address) -> bool:
+    return (
+        str(getattr(row, "IPAddress", "")) == address.address
+        and int(getattr(row, "PrefixLength", -1)) == address.prefix_length
+    )
+
+
+def _require_windows_interface_index(interface: NetworkInterface) -> int:
+    if interface.index is not None:
+        return int(interface.index)
+    identity = _adapter_identity_for_interface(interface)
+    for ipv4_index, _, adapter_name, _, _ in _adapter_index_rows():
+        if _normalize_guid(adapter_name) == _normalize_guid(str(identity["adapter_name"])):
+            return ipv4_index
+    raise OSError("missing OS interface index")
+
+
+def _wmi_netip_interface_queries(interface: NetworkInterface) -> tuple[str, ...]:
+    queries: list[str] = []
+    if interface.index is not None:
+        queries.append(
+            "SELECT * FROM MSFT_NetIPInterface "
+            f"WHERE InterfaceIndex = {int(interface.index)} "
+            f"AND AddressFamily = {ADDRESS_FAMILY_IPV4}"
+        )
+    for name in _interface_identity_names(interface):
+        queries.append(
+            "SELECT * FROM MSFT_NetIPInterface "
+            f"WHERE InterfaceAlias = {_wql_string(name)} "
+            f"AND AddressFamily = {ADDRESS_FAMILY_IPV4}"
+        )
+    return tuple(dict.fromkeys(queries))
+
+
+def _wmi_adapter_configuration_queries(interface: NetworkInterface) -> tuple[str, ...]:
+    queries: list[str] = []
+    if interface.index is not None:
+        queries.append(
+            "SELECT * FROM Win32_NetworkAdapterConfiguration "
+            f"WHERE InterfaceIndex = {int(interface.index)}"
+        )
+    if interface.os_id:
+        queries.append(
+            "SELECT * FROM Win32_NetworkAdapterConfiguration "
+            f"WHERE SettingID = {_wql_string(interface.os_id)}"
+        )
+    for name in _interface_identity_names(interface):
+        queries.append(
+            "SELECT * FROM Win32_NetworkAdapterConfiguration "
+            f"WHERE Description = {_wql_string(name)}"
+        )
+        queries.append(
+            "SELECT * FROM Win32_NetworkAdapterConfiguration "
+            f"WHERE Caption = {_wql_string(name)}"
+        )
+    return tuple(dict.fromkeys(queries))
+
+
+def _interface_identity_names(interface: NetworkInterface) -> tuple[str, ...]:
+    names = [interface.name, interface.os_id, *interface.os_aliases]
+    try:
+        identity = _adapter_identity_for_interface(interface)
+    except OSError:
+        pass
+    else:
+        names.append(str(identity["adapter_name"]))
+        names.extend(str(name) for name in identity["names"])
+    return tuple(dict.fromkeys(name for name in names if name))
+
+
+def _set_msft_netipinterface_dhcp(ip_interface, enabled: bool) -> None:
+    try:
+        ip_interface.Dhcp = 1 if enabled else 0
+        ip_interface.Put_()
+    except Exception as exc:
+        if _is_access_denied_exception(exc):
+            raise PermissionError("MSFT_NetIPInterface.Put_: access denied") from exc
+        raise OSError(f"MSFT_NetIPInterface.Put_: WMI update failed: {exc}") from exc
+
+
+def _wmi_first(service, query: str):
+    try:
+        rows = list(service.ExecQuery(query))
+    except Exception as exc:
+        raise OSError(f"WMI query failed: {query}: {exc}") from exc
+    if not rows:
+        return None
+    return rows[0]
+
+
+def _wmi_service(namespace: str):
+    try:
+        import win32com.client
+    except ImportError as exc:
+        raise OSError(
+            "pywin32 is required for the Windows DHCP API backend"
+        ) from exc
+
+    try:
+        return win32com.client.GetObject(
+            rf"winmgmts:{{impersonationLevel=impersonate}}!\\.\{namespace}"
+        )
+    except Exception as exc:
+        if _is_access_denied_exception(exc):
+            raise PermissionError("WMI access denied") from exc
+        raise OSError(f"WMI connection failed: {exc}") from exc
+
+
+def _call_wmi_instance_method(
+    instance,
+    method_name: str,
+    raise_on_error: bool = True,
+) -> int:
+    try:
+        result = getattr(instance, method_name)
+        if callable(result):
+            result = result()
+        code = _wmi_return_code(result)
+    except Exception as exc:
+        if _is_access_denied_exception(exc):
+            raise PermissionError(f"{method_name}: access denied") from exc
+        raise OSError(f"{method_name}: WMI method failed: {exc}") from exc
+
+    if raise_on_error:
+        _check_wmi_return(code, method_name)
+    return code
+
+
+def _call_wmi_class_method(
+    service,
+    wmi_class,
+    method_name: str,
+    input_values: dict[str, object],
+    raise_on_error: bool = True,
+) -> int:
+    try:
+        method = wmi_class.Methods_(method_name)
+        in_params = method.InParameters.SpawnInstance_()
+        for key, value in input_values.items():
+            setattr(in_params, key, value)
+        result = service.ExecMethod_(wmi_class.Path_.Path, method_name, in_params)
+        code = _wmi_return_code(result)
+    except Exception as exc:
+        if _is_access_denied_exception(exc):
+            raise PermissionError(f"{method_name}: access denied") from exc
+        raise OSError(f"{method_name}: WMI class method failed: {exc}") from exc
+
+    if raise_on_error:
+        _check_wmi_return(code, method_name)
+    return code
+
+
+def _delete_wmi_instance(instance, method_name: str) -> None:
+    try:
+        result = getattr(instance, "Delete_")
+        if callable(result):
+            result = result()
+        code = _wmi_return_code(result)
+    except Exception as exc:
+        if _is_access_denied_exception(exc):
+            raise PermissionError(f"{method_name}: access denied") from exc
+        raise OSError(f"{method_name}: WMI delete failed: {exc}") from exc
+
+    _check_wmi_return(code, method_name)
+
+
+def _wmi_return_code(result) -> int:
+    if result is None:
+        return WMI_SUCCESS_REBOOT_NOT_REQUIRED
+    if isinstance(result, tuple):
+        for item in result:
+            if isinstance(item, int):
+                return int(item)
+        return WMI_SUCCESS_REBOOT_NOT_REQUIRED
+    return int(getattr(result, "ReturnValue", result))
+
+
+def _check_wmi_return(code: int, method_name: str) -> None:
+    if _wmi_success(code):
+        return
+    if code == WMI_ACCESS_DENIED:
+        raise PermissionError(f"{method_name}: access denied")
+    raise OSError(_format_wmi_return(method_name, code))
+
+
+def _wmi_success(code: int) -> bool:
+    return code in {WMI_SUCCESS_REBOOT_NOT_REQUIRED, WMI_SUCCESS_REBOOT_REQUIRED}
+
+
+def _format_wmi_return(method_name: str, code: int) -> str:
+    message = WMI_RETURN_MESSAGES.get(code, "unknown WMI return code")
+    return f"{method_name}: WMI return code {code} ({message})"
+
+
+def _is_access_denied_exception(exc: Exception) -> bool:
+    text = str(exc).casefold()
+    return "access denied" in text or "0x80070005" in text
+
+
+def _wql_string(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
 
 def _change_device_state(info_set, data: SP_DEVINFO_DATA, enabled: bool) -> None:

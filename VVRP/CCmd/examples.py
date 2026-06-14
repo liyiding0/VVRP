@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from VVRP.IFNET import register_ifnet_commands
-from VVRP.IFNET.commands import INTERFACE_NAME_PATTERN
+from VVRP.IFNET.admin import InterfaceAdminProvider
+from VVRP.IFNET.discovery import InterfaceProvider
 from VVRP.IP import register_ip_commands
+from VVRP.IP.dhcp import DhcpClientProvider
+from VVRP.IP.static import StaticIpv4Provider
 
 from .models import CommandResult
 from .parser import CommandParser
@@ -15,12 +18,17 @@ ALL_MODES = ("user", "privileged", "config", "interface", "hidden")
 HIDDEN_ENTRY_MODES = ("user", "privileged", "config", "interface")
 
 
-def build_default_registry() -> CommandRegistry:
+def build_default_registry(
+    ifnet_provider: InterfaceProvider | None = None,
+    ifnet_admin_provider: InterfaceAdminProvider | None = None,
+    ip_dhcp_provider: DhcpClientProvider | None = None,
+    ip_static_ipv4_provider: StaticIpv4Provider | None = None,
+) -> CommandRegistry:
     registry = CommandRegistry()
 
     @registry.command("show", help_text="Show command group", modes=SHOW_MODES)
     def show(ctx, args):
-        candidates = CommandParser(registry).help_candidates("show ", mode=ctx.mode)
+        candidates = CommandParser(registry).help_candidates("show ", mode=ctx.mode, ctx=ctx)
         if not candidates:
             return CommandResult(message="No show commands available")
 
@@ -33,8 +41,20 @@ def build_default_registry() -> CommandRegistry:
     def show_version(ctx, args):
         return CommandResult(message="VVRP CCmd version 0.1.0")
 
-    register_ifnet_commands(registry, modes=ALL_MODES)
-    register_ip_commands(registry, modes=ALL_MODES)
+    register_ifnet_commands(
+        registry,
+        provider=ifnet_provider,
+        admin_provider=ifnet_admin_provider,
+        modes=ALL_MODES,
+    )
+    register_ip_commands(
+        registry,
+        modes=ALL_MODES,
+        ifnet_provider=ifnet_provider,
+        ifnet_admin_provider=ifnet_admin_provider,
+        dhcp_provider=ip_dhcp_provider,
+        static_ipv4_provider=ip_static_ipv4_provider,
+    )
 
     @registry.command(
         "show hostname",
@@ -61,15 +81,6 @@ def build_default_registry() -> CommandRegistry:
     )
     def hostname(ctx, args):
         ctx.hostname = args["name"]
-        return CommandResult()
-
-    @registry.command(
-        f"interface <name:{INTERFACE_NAME_PATTERN}>",
-        help_text="Enter interface configuration mode",
-        modes=("config",),
-    )
-    def interface(ctx, args):
-        ctx.push_mode("interface", args["name"])
         return CommandResult()
 
     @registry.command(

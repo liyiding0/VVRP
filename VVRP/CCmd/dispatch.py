@@ -24,7 +24,7 @@ def dispatch_line(ctx: CliContext, registry: CommandRegistry, line: str) -> Disp
         ctx.write(message)
         return DispatchOutcome(False, line, ParseStatus.EMPTY, message)
 
-    parsed = parser.parse(line, mode=ctx.mode)
+    parsed = parser.parse(line, mode=ctx.mode, ctx=ctx)
 
     if parsed.status == ParseStatus.EMPTY:
         return DispatchOutcome(False, "", parsed.status)
