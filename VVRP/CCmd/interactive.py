@@ -5,25 +5,81 @@ import sys
 from pathlib import Path
 
 from .dispatch import dispatch_line
-from .models import CliContext, ParseStatus, TokenStyle
+from .help import format_help
+from .models import CliContext, ParseStatus, TokenStatus, TokenStyle
 from .parser import CommandParser
 from .registry import CommandRegistry
+from .running_config import load_running_config, set_running_config_path
+
+
+def _preserve_help_input(text: str) -> str:
+    return text.split("?", 1)[0]
+
+
+def _format_help_screen_update(prompt_text: str, input_text: str, help_text: str) -> str:
+    if not help_text:
+        return f"{prompt_text}{input_text}"
+    return f"{prompt_text}{input_text}\n{help_text}"
+
+
+def _format_colored_help_screen_update(
+    prompt_text: str,
+    input_text: str,
+    help_text: str,
+    token_statuses: tuple[TokenStatus, ...],
+) -> str:
+    colored_input = _render_input_with_token_styles(input_text, token_statuses)
+    if not help_text:
+        return f"{prompt_text}{colored_input}"
+    return f"{prompt_text}{colored_input}\n{help_text}"
+
+
+def _render_input_with_token_styles(
+    input_text: str,
+    token_statuses: tuple[TokenStatus, ...],
+) -> str:
+    fragments: list[str] = []
+    position = 0
+    ansi_by_style = {
+        TokenStyle.VALID: "\x1b[32m",
+        TokenStyle.AMBIGUOUS: "\x1b[33m",
+        TokenStyle.INVALID: "\x1b[31m",
+    }
+    reset = "\x1b[0m"
+    for token_status in token_statuses:
+        if position < token_status.start:
+            fragments.append(input_text[position:token_status.start])
+        token_text = input_text[token_status.start:token_status.end]
+        ansi_color = ansi_by_style.get(token_status.style)
+        if ansi_color:
+            fragments.append(f"{ansi_color}{token_text}{reset}")
+        else:
+            fragments.append(token_text)
+        position = token_status.end
+    if position < len(input_text):
+        fragments.append(input_text[position:])
+    return "".join(fragments)
 
 
 def _run_plain_cli(
     registry: CommandRegistry,
     prompt: str | None = None,
     hostname: str = "Router",
+    running_config_file: str | os.PathLike[str] | None = None,
 ) -> int:
     ctx = CliContext(hostname=hostname)
     registry.initialize_context(ctx)
+    load_running_config(ctx, registry, running_config_file)
+    pending_input = ""
     while not ctx.exit_requested:
         try:
-            line = input(prompt or ctx.prompt)
+            line = input(f"{prompt or ctx.prompt}{pending_input}")
         except EOFError:
             break
 
+        line = f"{pending_input}{line}"
         dispatch_line(ctx, registry, line)
+        pending_input = _preserve_help_input(line) if "?" in line else ""
 
     return 0
 
@@ -33,9 +89,15 @@ def run_interactive_cli(
     prompt: str | None = None,
     hostname: str = "Router",
     history_file: str | os.PathLike[str] | None = None,
+    running_config_file: str | os.PathLike[str] | None = None,
 ) -> int:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        return _run_plain_cli(registry, prompt=prompt, hostname=hostname)
+        return _run_plain_cli(
+            registry,
+            prompt=prompt,
+            hostname=hostname,
+            running_config_file=running_config_file,
+        )
 
     try:
         from prompt_toolkit import PromptSession
@@ -56,6 +118,8 @@ def run_interactive_cli(
     parser = CommandParser(registry)
     ctx = CliContext(hostname=hostname)
     registry.initialize_context(ctx)
+    set_running_config_path(ctx, running_config_file)
+    load_running_config(ctx, registry, running_config_file)
 
     class RouterCommandLexer(Lexer):
         def lex_document(self, document):
@@ -105,6 +169,24 @@ def run_interactive_cli(
             lambda: print_formatted_text(ANSI(f"{ansi_color}{message}\x1b[0m"))
         )
 
+    def show_help(
+        input_text: str,
+        message: str,
+        token_statuses: tuple[TokenStatus, ...],
+    ) -> None:
+        run_in_terminal(
+            lambda: print_formatted_text(
+                ANSI(
+                    _format_colored_help_screen_update(
+                        prompt or ctx.prompt,
+                        input_text,
+                        message,
+                        token_statuses,
+                    )
+                )
+            )
+        )
+
     key_bindings = KeyBindings()
 
     @key_bindings.add(" ")
@@ -125,7 +207,17 @@ def run_interactive_cli(
         buffer = event.current_buffer
 
         if "?" in buffer.text:
-            buffer.validate_and_handle()
+            input_text = buffer.text
+            parsed_for_color = parser.parse(input_text, mode=ctx.mode, ctx=ctx)
+            help_text = format_help(
+                parser.help_candidates(input_text, mode=ctx.mode, ctx=ctx)
+            )
+            preserved_text = _preserve_help_input(input_text)
+            show_help(input_text, help_text, parsed_for_color.token_statuses)
+            buffer.document = Document(
+                preserved_text,
+                cursor_position=len(preserved_text),
+            )
             return
 
         parsed = parser.parse(buffer.text, mode=ctx.mode, ctx=ctx)

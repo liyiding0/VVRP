@@ -93,7 +93,11 @@ class CommandParser:
 
         for index, token_slice in enumerate(token_slices):
             if token_slice.text == "?":
-                help_candidates = self.help_candidates(text[: token_slice.start], mode=mode)
+                help_candidates = self.help_candidates(
+                    text[: token_slice.start],
+                    mode=mode,
+                    ctx=ctx,
+                )
                 if help_candidates:
                     token_statuses.append(
                         TokenStatus(token_slice.start, token_slice.end, TokenStyle.VALID)
@@ -162,6 +166,17 @@ class CommandParser:
                 )
 
             edge = matches[0].edge
+            if edge.token.remainder:
+                remainder_text = text[token_slice.start:].strip()
+                assert edge.token.name is not None
+                args[edge.token.name] = remainder_text
+                resolved_tokens.append(_format_resolved_token(remainder_text))
+                token_statuses.append(
+                    TokenStatus(token_slice.start, len(text), TokenStyle.VALID)
+                )
+                node = edge.node
+                break
+
             token_statuses.append(
                 TokenStatus(token_slice.start, token_slice.end, TokenStyle.VALID)
             )
@@ -335,12 +350,7 @@ class CommandParser:
                     )
                 )
 
-        if (
-            not candidates
-            and prefix == ""
-            and node.command is not None
-            and not node.command.hidden
-        ):
+        if prefix == "" and node.command is not None and not node.command.hidden:
             candidates.append(HelpCandidate(display="<cr>", help_text=node.command.help_text))
 
         return tuple(candidates)

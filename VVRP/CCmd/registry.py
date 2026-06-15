@@ -9,6 +9,7 @@ from .models import CliContext, CommandHandler, CommandSpec, TokenSpec
 
 
 _PARAMETER_TOKEN_RE = re.compile(r"^<([A-Za-z_][A-Za-z0-9_]*):(.+)>$")
+_REMAINDER_TOKEN_RE = re.compile(r"^<([A-Za-z_][A-Za-z0-9_]*)\.\.\.:(.+)>$")
 
 
 @dataclass
@@ -134,6 +135,12 @@ class CommandRegistry:
 
     def _parse_pattern(self, pattern: str) -> Iterable[TokenSpec]:
         for raw_token in pattern.split():
+            remainder_match = _REMAINDER_TOKEN_RE.fullmatch(raw_token)
+            if remainder_match:
+                name, regex_text = remainder_match.groups()
+                yield TokenSpec.parameter_token(name, regex_text, remainder=True)
+                continue
+
             match = _PARAMETER_TOKEN_RE.fullmatch(raw_token)
             if match:
                 name, regex_text = match.groups()

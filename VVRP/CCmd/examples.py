@@ -10,6 +10,7 @@ from VVRP.IP.static import StaticIpv4Provider
 from .models import CommandResult
 from .parser import CommandParser
 from .registry import CommandRegistry
+from .running_config import set_global_config_command
 
 
 USER_MODES = ("user", "privileged")
@@ -81,7 +82,8 @@ def build_default_registry(
     )
     def hostname(ctx, args):
         ctx.hostname = args["name"]
-        return CommandResult()
+        message = set_global_config_command(ctx, "hostname", f"hostname {args['name']}")
+        return CommandResult(ok=not message, message=message)
 
     @registry.command(
         "_",

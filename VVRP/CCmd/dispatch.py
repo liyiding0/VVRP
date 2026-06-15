@@ -20,7 +20,7 @@ def dispatch_line(ctx: CliContext, registry: CommandRegistry, line: str) -> Disp
     parser = CommandParser(registry)
 
     if "?" in line:
-        message = format_help(parser.help_candidates(line, mode=ctx.mode))
+        message = format_help(parser.help_candidates(line, mode=ctx.mode, ctx=ctx))
         ctx.write(message)
         return DispatchOutcome(False, line, ParseStatus.EMPTY, message)
 

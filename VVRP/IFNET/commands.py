@@ -5,6 +5,10 @@ from collections.abc import Sequence
 
 from VVRP.CCmd.models import CommandResult
 from VVRP.CCmd.registry import CommandRegistry
+from VVRP.CCmd.running_config import (
+    remove_interface_config_command,
+    set_interface_config_command,
+)
 
 from .admin import InterfaceAdminProvider
 from .discovery import InterfaceDiscoveryError, InterfaceProvider
@@ -105,7 +109,13 @@ def register_ifnet_commands(
         if isinstance(verified, CommandResult):
             return verified
         shutdown_interface(ctx.state, interface.name)
-        return CommandResult(message=result.message)
+        config_error = set_interface_config_command(
+            ctx,
+            interface.name,
+            "shutdown",
+            "shutdown",
+        )
+        return CommandResult(ok=not config_error, message=config_error or result.message)
 
     @registry.command(
         "no shutdown",
@@ -127,7 +137,8 @@ def register_ifnet_commands(
         if isinstance(verified, CommandResult):
             return verified
         no_shutdown_interface(ctx.state, interface.name)
-        return CommandResult(message=result.message)
+        config_error = remove_interface_config_command(ctx, interface.name, "shutdown")
+        return CommandResult(ok=not config_error, message=config_error or result.message)
 
     @registry.context_initializer
     def initialize_ifnet(ctx):

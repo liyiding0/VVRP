@@ -86,13 +86,19 @@ class TokenSpec:
     name: str | None = None
     pattern_text: str | None = None
     pattern: Pattern[str] | None = None
+    remainder: bool = False
 
     @classmethod
     def literal_token(cls, value: str) -> TokenSpec:
         return cls(kind="literal", literal=value)
 
     @classmethod
-    def parameter_token(cls, name: str, pattern_text: str) -> TokenSpec:
+    def parameter_token(
+        cls,
+        name: str,
+        pattern_text: str,
+        remainder: bool = False,
+    ) -> TokenSpec:
         try:
             pattern = re.compile(pattern_text)
         except re.error as exc:
@@ -102,6 +108,7 @@ class TokenSpec:
             name=name,
             pattern_text=pattern_text,
             pattern=pattern,
+            remainder=remainder,
         )
 
     @property
