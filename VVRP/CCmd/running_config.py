@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from pathlib import Path
 from typing import Any
 
@@ -27,8 +28,6 @@ def load_running_config(
     registry,
     path: str | Path | None = None,
 ) -> list[str]:
-    from .dispatch import dispatch_line
-
     config_path = set_running_config_path(ctx, path)
     if not config_path.exists():
         return []
@@ -38,13 +37,21 @@ def load_running_config(
     ctx.state[RUNNING_CONFIG_LOADING_STATE_KEY] = True
     try:
         _enter_config_mode(ctx)
+        skip_indented_block = False
         for number, raw_line in enumerate(config_path.read_text(encoding="utf-8").splitlines(), start=1):
             line = raw_line.strip()
             if not line or line.startswith(("!", "#")):
                 continue
-            outcome = dispatch_line(ctx, registry, line)
+            is_indented = raw_line[:1].isspace()
+            if skip_indented_block and is_indented:
+                continue
+            if not is_indented:
+                skip_indented_block = False
+            outcome = _dispatch_line_silently(ctx, registry, line)
             if outcome.message.startswith("%"):
-                errors.append(f"{config_path}:{number}: {outcome.message}")
+                errors.append(f"{config_path}:{number}: {outcome.message}: {line}")
+                if not is_indented and _is_interface_command(line):
+                    skip_indented_block = True
     finally:
         ctx.state[RUNNING_CONFIG_LOADING_STATE_KEY] = False
         ctx.mode_stack = original_stack
@@ -98,6 +105,16 @@ def remove_interface_config_prefix(
     return _autosave(ctx)
 
 
+def interface_config_commands(
+    ctx: CliContext,
+    interface_name: str,
+) -> dict[str, str]:
+    commands = _config_store(ctx)["interfaces"].get(interface_name)
+    if not isinstance(commands, dict):
+        return {}
+    return dict(commands)
+
+
 def render_running_config(ctx: CliContext) -> str:
     store = _config_store(ctx)
     lines: list[str] = []
@@ -123,6 +140,21 @@ def write_running_config(ctx: CliContext) -> None:
     config_path = _running_config_path(ctx)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(render_running_config(ctx), encoding="utf-8")
+
+
+def _dispatch_line_silently(ctx: CliContext, registry, line: str):
+    from .dispatch import dispatch_line
+
+    original_output = ctx.output
+    ctx.output = io.StringIO()
+    try:
+        return dispatch_line(ctx, registry, line)
+    finally:
+        ctx.output = original_output
+
+
+def _is_interface_command(line: str) -> bool:
+    return line == "interface" or line.startswith("interface ")
 
 
 def _config_store(ctx: CliContext) -> dict[str, Any]:
@@ -191,9 +223,11 @@ def _ordered_interface_command_keys(commands: dict[str, str]) -> tuple[str, ...]
             return (0, key)
         if key == "ip-address-dhcp":
             return (1, key)
-        if key.startswith("ip-address:"):
+        if key == "ip-address:primary":
             return (2, key)
-        return (3, key)
+        if key.startswith("ip-address:"):
+            return (3, key)
+        return (4, key)
 
     return tuple(sorted(commands, key=sort_key))
 

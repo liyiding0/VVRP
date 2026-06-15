@@ -21,8 +21,13 @@ from .static import (
     StaticIpv4Provider,
     StaticIpv4Result,
     StaticIpv4ValidationError,
+    has_secondary_static_ipv4,
     parse_ipv4_mask,
     parse_static_ipv4_address,
+    primary_static_ipv4_from_interface,
+    static_ipv4_addresses_from_interface,
+    validate_static_ipv4_address_for_interface,
+    validate_static_ipv4_interface_policy,
 )
 
 __all__ = [
@@ -43,9 +48,14 @@ __all__ = [
     "classify_ping_target",
     "format_ping_reply",
     "format_ping_statistics",
+    "has_secondary_static_ipv4",
     "parse_ping_arguments",
     "parse_ipv4_mask",
     "parse_static_ipv4_address",
+    "primary_static_ipv4_from_interface",
     "register_ip_commands",
     "run_ping",
+    "static_ipv4_addresses_from_interface",
+    "validate_static_ipv4_address_for_interface",
+    "validate_static_ipv4_interface_policy",
 ]

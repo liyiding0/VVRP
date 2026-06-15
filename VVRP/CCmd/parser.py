@@ -92,6 +92,64 @@ class CommandParser:
         token_statuses: list[TokenStatus] = []
 
         for index, token_slice in enumerate(token_slices):
+            if token_slice.text.endswith("?") and token_slice.text != "?":
+                help_prefix = token_slice.text[:-1]
+                matches = self._match_edges(node, help_prefix, resolved_tokens, ctx)
+                if not matches:
+                    token_statuses.append(
+                        TokenStatus(token_slice.start, token_slice.end, TokenStyle.INVALID)
+                    )
+                    token_statuses.extend(
+                        TokenStatus(rest.start, rest.end, TokenStyle.INVALID)
+                        for rest in token_slices[index + 1 :]
+                    )
+                    return ParseResult(
+                        text=text,
+                        status=ParseStatus.INVALID,
+                        complete_command=" ".join(resolved_tokens),
+                        args=args,
+                        token_statuses=tuple(token_statuses),
+                        error_position=token_slice.start,
+                        candidates=tuple(self._candidate_names(node)),
+                    )
+
+                help_candidates = self.help_candidates(
+                    text[: token_slice.end],
+                    mode=mode,
+                    ctx=ctx,
+                )
+                if not help_candidates:
+                    token_statuses.append(
+                        TokenStatus(token_slice.start, token_slice.end, TokenStyle.INVALID)
+                    )
+                    return ParseResult(
+                        text=text,
+                        status=ParseStatus.INVALID,
+                        complete_command=" ".join(resolved_tokens),
+                        args=args,
+                        token_statuses=tuple(token_statuses),
+                        error_position=token_slice.start,
+                    )
+
+                style = (
+                    TokenStyle.AMBIGUOUS
+                    if len(matches) > 1 or matches[0].style == TokenStyle.AMBIGUOUS
+                    else TokenStyle.VALID
+                )
+                token_statuses.append(TokenStatus(token_slice.start, token_slice.end, style))
+                token_statuses.extend(
+                    TokenStatus(rest.start, rest.end, TokenStyle.INVALID)
+                    for rest in token_slices[index + 1 :]
+                )
+                return ParseResult(
+                    text=text,
+                    status=ParseStatus.VALID_UNIQUE,
+                    complete_command=" ".join([*resolved_tokens, token_slice.text]),
+                    args=args,
+                    token_statuses=tuple(token_statuses),
+                    candidates=tuple(candidate.display for candidate in help_candidates),
+                )
+
             if token_slice.text == "?":
                 help_candidates = self.help_candidates(
                     text[: token_slice.start],

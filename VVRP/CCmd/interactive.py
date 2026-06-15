@@ -69,7 +69,7 @@ def _run_plain_cli(
 ) -> int:
     ctx = CliContext(hostname=hostname)
     registry.initialize_context(ctx)
-    load_running_config(ctx, registry, running_config_file)
+    _print_running_config_errors(ctx, load_running_config(ctx, registry, running_config_file))
     pending_input = ""
     while not ctx.exit_requested:
         try:
@@ -119,7 +119,7 @@ def run_interactive_cli(
     ctx = CliContext(hostname=hostname)
     registry.initialize_context(ctx)
     set_running_config_path(ctx, running_config_file)
-    load_running_config(ctx, registry, running_config_file)
+    _print_running_config_errors(ctx, load_running_config(ctx, registry, running_config_file))
 
     class RouterCommandLexer(Lexer):
         def lex_document(self, document):
@@ -275,3 +275,8 @@ def run_interactive_cli(
         dispatch_line(ctx, registry, line)
 
     return 0
+
+
+def _print_running_config_errors(ctx: CliContext, errors: list[str]) -> None:
+    for error in errors:
+        ctx.write(error)

@@ -37,6 +37,7 @@ from VVRP.IFNET.Ethernet.admin import EthernetAdminProvider
 from VVRP.IFNET.Ethernet.dhcp import EthernetDhcpClientProvider
 from VVRP.IFNET.Ethernet.static import EthernetStaticIpv4Provider
 from VVRP.IFNET.Loopback import is_loopback_interface
+from VVRP.IFNET.Loopback.static import LoopbackStaticIpv4Provider
 from VVRP.IFNET import (
     InterfaceAddress,
     InterfaceAdminResult,
@@ -68,6 +69,7 @@ from VVRP.IP.static import (
     StaticIpv4ValidationError,
     parse_ipv4_mask,
     parse_static_ipv4_address,
+    validate_static_ipv4_address_for_interface,
 )
 
 
@@ -198,6 +200,21 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(ParseStatus.VALID_UNIQUE, result.status)
         self.assertEqual("show ?", result.complete_command)
         self.assertEqual(("interfaces", "ip", "version", "<cr>"), result.candidates)
+
+    def test_question_mark_suffix_keeps_prefix_token_style(self):
+        parser = CommandParser(build_default_registry())
+
+        ambiguous = parser.parse("show i?", mode="user")
+        self.assertEqual(ParseStatus.VALID_UNIQUE, ambiguous.status)
+        self.assertEqual(("interfaces", "ip"), ambiguous.candidates)
+        self.assertEqual(TokenStyle.VALID, ambiguous.token_statuses[0].style)
+        self.assertEqual(TokenStyle.AMBIGUOUS, ambiguous.token_statuses[1].style)
+        self.assertEqual((5, 7), (ambiguous.token_statuses[1].start, ambiguous.token_statuses[1].end))
+
+        unique = parser.parse("show ip?", mode="user")
+        self.assertEqual(ParseStatus.VALID_UNIQUE, unique.status)
+        self.assertEqual(("ip",), unique.candidates)
+        self.assertEqual(TokenStyle.VALID, unique.token_statuses[1].style)
 
     def test_unique_token_completes_before_space_for_any_command(self):
         parser = CommandParser(build_default_registry())
@@ -611,6 +628,17 @@ def fake_ethernet_without_ipv4(name: str, index: int = 3) -> NetworkInterface:
         addresses=(
             InterfaceAddress(family="ipv6", address="2001:db8::20", prefix_length=64),
         ),
+    )
+
+
+def with_ipv4(
+    interface: NetworkInterface,
+    address: str,
+    prefix_length: int,
+) -> NetworkInterface:
+    return replace(
+        interface,
+        addresses=(InterfaceAddress(family="ipv4", address=address, prefix_length=prefix_length),),
     )
 
 
@@ -1569,7 +1597,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
             static_provider.calls,
         )
 
-    def test_static_ipv4_rejects_loopback_interface(self):
+    def test_static_ipv4_rejects_loopback_non_host_mask(self):
         static_provider = FakeStaticIpv4Provider()
         registry = build_default_registry(
             ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
@@ -1582,7 +1610,128 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
         self.assertTrue(outcome.executed)
         self.assertEqual(
-            "% Loopback interface does not support static IPv4: loopback_0",
+            "% Invalid IPv4 mask length: Loopback interfaces support only /32",
+            outcome.message,
+        )
+        self.assertEqual([], static_provider.calls)
+
+    def test_static_ipv4_accepts_loopback_host_address(self):
+        static_provider = FakeStaticIpv4Provider()
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+            ip_static_ipv4_provider=static_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "loopback_0")
+
+        outcome = dispatch_line(ctx, registry, "ip address 10.10.10.1 32")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual(
+            [("set static ipv4", "loopback_0", StaticIpv4Address("10.10.10.1", 32))],
+            static_provider.calls,
+        )
+
+    def test_static_ipv4_rejects_ethernet_host_mask(self):
+        static_provider = FakeStaticIpv4Provider()
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+            ip_static_ipv4_provider=static_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "ip address 10.10.10.1 32")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual(
+            "% Invalid IPv4 mask length: /32 is supported only on Loopback interfaces",
+            outcome.message,
+        )
+        self.assertEqual([], static_provider.calls)
+
+    def test_static_ipv4_primary_replaces_previous_primary_config_slot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "running-config"
+            static_provider = FakeStaticIpv4Provider()
+            registry = build_default_registry(
+                ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+                ip_static_ipv4_provider=static_provider,
+            )
+            ctx = CliContext(output=io.StringIO())
+            set_running_config_path(ctx, config_path)
+            ctx.push_mode("interface", "eth3")
+
+            self.assertTrue(dispatch_line(ctx, registry, "ip address 10.1.1.1 24").executed)
+            self.assertTrue(dispatch_line(ctx, registry, "ip address 10.1.2.1 24").executed)
+
+            self.assertEqual(
+                "interface eth3\n ip address 10.1.2.1 24\n quit\n",
+                config_path.read_text(encoding="utf-8"),
+            )
+
+    def test_static_ipv4_rejects_cross_interface_duplicate_and_overlap(self):
+        eth3 = with_ipv4(fake_ethernet("eth3", index=2), "10.1.1.1", 24)
+        eth4 = fake_ethernet_without_ipv4("eth4", index=4)
+        interfaces = (eth3, eth4)
+
+        with self.assertRaisesRegex(StaticIpv4ValidationError, "duplicate address"):
+            validate_static_ipv4_address_for_interface(
+                StaticIpv4Address("10.1.1.1", 24),
+                eth4,
+                interfaces,
+            )
+
+        with self.assertRaisesRegex(StaticIpv4ValidationError, "subnet overlaps"):
+            validate_static_ipv4_address_for_interface(
+                StaticIpv4Address("10.1.1.2", 25),
+                eth4,
+                interfaces,
+            )
+
+    def test_static_ipv4_rejects_cross_interface_broadcast_conflicts(self):
+        eth3 = with_ipv4(fake_ethernet("eth3", index=2), "10.1.1.1", 24)
+        eth4 = fake_ethernet_without_ipv4("eth4", index=4)
+        interfaces = (eth3, eth4)
+
+        with self.assertRaisesRegex(StaticIpv4ValidationError, "broadcast address"):
+            validate_static_ipv4_address_for_interface(
+                StaticIpv4Address("10.1.1.255", 25),
+                eth4,
+                interfaces,
+            )
+
+        with self.assertRaisesRegex(StaticIpv4ValidationError, "broadcast address"):
+            validate_static_ipv4_address_for_interface(
+                StaticIpv4Address("10.1.1.128", 25),
+                eth4,
+                interfaces,
+            )
+
+    def test_no_ip_address_primary_rejects_when_secondary_exists(self):
+        static_provider = FakeStaticIpv4Provider()
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(
+                (
+                    replace(
+                        fake_ethernet("eth3"),
+                        addresses=(
+                            InterfaceAddress(family="ipv4", address="10.1.1.1", prefix_length=24),
+                            InterfaceAddress(family="ipv4", address="10.1.2.1", prefix_length=24),
+                        ),
+                    ),
+                )
+            ),
+            ip_static_ipv4_provider=static_provider,
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("interface", "eth3")
+
+        outcome = dispatch_line(ctx, registry, "no ip address 10.1.1.1 24")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual(
+            "% Please delete all secondary IPv4 addresses before deleting the primary address",
             outcome.message,
         )
         self.assertEqual([], static_provider.calls)
@@ -1635,6 +1784,28 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertIn("unsupported OS API backend for static IPv4: linux", result.message)
+
+    def test_loopback_static_backend_dispatches_to_windows_api(self):
+        interface = fake_interfaces()[1]
+        address = StaticIpv4Address("10.10.10.1", 32)
+
+        with patch("VVRP.IFNET.Loopback.static._set_windows_loopback_static_ipv4") as api:
+            result = LoopbackStaticIpv4Provider(system="Windows").set_static_ipv4(
+                interface,
+                address,
+            )
+
+        self.assertTrue(result.ok)
+        api.assert_called_once_with(interface, address)
+
+        with patch("VVRP.IFNET.Loopback.static._remove_windows_loopback_static_ipv4") as api:
+            result = LoopbackStaticIpv4Provider(system="Windows").remove_static_ipv4(
+                interface,
+                address,
+            )
+
+        self.assertTrue(result.ok)
+        api.assert_called_once_with(interface, address)
 
     def test_windows_static_ipv4_class_method_helper_passes_inputs(self):
         from VVRP.IFNET.Ethernet.windows import _call_wmi_class_method
@@ -1836,6 +2007,39 @@ class RunningConfigTests(unittest.TestCase):
                 " quit\n",
                 render_running_config(ctx),
             )
+
+    def test_load_running_config_skips_children_after_missing_interface(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "running-config"
+            config_path.write_text(
+                "\n".join(
+                    (
+                        "interface loopback_0",
+                        " ip address 10.10.10.1 32",
+                        " quit",
+                        "",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            static_provider = FakeStaticIpv4Provider()
+            output = io.StringIO()
+            registry = build_default_registry(
+                ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth3"),)),
+                ip_static_ipv4_provider=static_provider,
+            )
+            ctx = CliContext(output=output)
+            registry.initialize_context(ctx)
+
+            errors = load_running_config(ctx, registry, config_path)
+
+            self.assertEqual(
+                [f"{config_path}:1: % Invalid input: interface loopback_0"],
+                errors,
+            )
+            self.assertEqual("", output.getvalue())
+            self.assertEqual([], static_provider.calls)
+            self.assertEqual("user", ctx.mode)
 
 
 class PingTests(unittest.TestCase):
