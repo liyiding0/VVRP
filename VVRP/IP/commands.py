@@ -34,6 +34,7 @@ from .static import (
 
 
 DEFAULT_IP_COMMAND_MODES = ("user", "privileged", "config", "interface", "hidden")
+HOST_SHOW_COMMAND_MODES = ("hidden", "interface", "host-interface")
 IPV4_ADDRESS_PATTERN = r"(?:\d{1,3}\.){3}\d{1,3}"
 IPV4_MASK_PATTERN = r"(?:(?:\d{1,3}\.){3}\d{1,3}|\d{1,2})"
 INTERFACE_NAME_PATTERN = r".+"
@@ -60,9 +61,9 @@ def register_ip_commands(
         return CommandResult(ok=result.ok, message=result.message)
 
     @registry.command(
-        "show ip interface",
+        "show host ip interface",
         help_text="Show IPv4 interface information",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -71,9 +72,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_detail(result, ctx.state))
 
     @registry.command(
-        "show ip interface brief",
+        "show host ip interface brief",
         help_text="Show brief IPv4 interface summary",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_brief(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -82,9 +83,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
-        "show ip interface brief ethernet",
+        "show host ip interface brief ethernet",
         help_text="Show brief IPv4 summary for Ethernet interfaces",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_brief_ethernet(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -94,9 +95,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
-        "show ip interface brief loopback",
+        "show host ip interface brief loopback",
         help_text="Show brief IPv4 summary for loopback interfaces",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_brief_loopback(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -106,9 +107,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
-        "show ip interface brief ip-configured",
+        "show host ip interface brief ip-configured",
         help_text="Show brief IPv4 summary for interfaces with IPv4 configured",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_brief_ip_configured(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -118,9 +119,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
-        "show ip interface brief ip-configured except ethernet",
+        "show host ip interface brief ip-configured except ethernet",
         help_text="Show IPv4-configured interfaces except Ethernet",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_brief_ip_configured_except_ethernet(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -130,9 +131,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
-        "show ip interface brief ip-configured except loopback",
+        "show host ip interface brief ip-configured except loopback",
         help_text="Show IPv4-configured interfaces except loopback",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_brief_ip_configured_except_loopback(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -142,9 +143,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
-        f"show ip interface brief <name:{INTERFACE_NAME_PATTERN}>",
+        f"show host ip interface brief <name:{INTERFACE_NAME_PATTERN}>",
         help_text="Show brief IPv4 summary for an interface",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_brief_name(ctx, args):
         interface = _get_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
@@ -153,9 +154,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_brief((interface,), ctx.state))
 
     @registry.command(
-        "show ip interface description",
+        "show host ip interface description",
         help_text="Show IPv4 interface descriptions",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_description(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -164,9 +165,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
-        "show ip interface description ethernet",
+        "show host ip interface description ethernet",
         help_text="Show IPv4 descriptions for Ethernet interfaces",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_description_ethernet(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -176,9 +177,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
-        "show ip interface description loopback",
+        "show host ip interface description loopback",
         help_text="Show IPv4 descriptions for loopback interfaces",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_description_loopback(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -188,9 +189,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
-        "show ip interface description ip-configured",
+        "show host ip interface description ip-configured",
         help_text="Show IPv4 descriptions for interfaces with IPv4 configured",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_description_ip_configured(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -200,9 +201,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
-        "show ip interface description ip-configured except ethernet",
+        "show host ip interface description ip-configured except ethernet",
         help_text="Show IPv4-configured descriptions except Ethernet",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_description_ip_configured_except_ethernet(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -212,9 +213,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
-        "show ip interface description ip-configured except loopback",
+        "show host ip interface description ip-configured except loopback",
         help_text="Show IPv4-configured descriptions except loopback",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_description_ip_configured_except_loopback(ctx, args):
         result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
@@ -224,9 +225,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
-        f"show ip interface description <name:{INTERFACE_NAME_PATTERN}>",
+        f"show host ip interface description <name:{INTERFACE_NAME_PATTERN}>",
         help_text="Show IPv4 description for an interface",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_description_name(ctx, args):
         interface = _get_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
@@ -235,9 +236,9 @@ def register_ip_commands(
         return CommandResult(message=_format_ip_interface_description((interface,), ctx.state))
 
     @registry.command(
-        f"show ip interface <name:{INTERFACE_NAME_PATTERN}>",
+        f"show host ip interface <name:{INTERFACE_NAME_PATTERN}>",
         help_text="Show IPv4 information for an interface",
-        modes=tuple(modes),
+        modes=HOST_SHOW_COMMAND_MODES,
     )
     def show_ip_interface_name(ctx, args):
         interface = _get_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])

@@ -11,3 +11,4 @@ build/
 .venv/
 venv/
 running-config
+saved-configuration

@@ -18,7 +18,7 @@ from .policy import interface_can_shutdown
 from .state import is_admin_down, no_shutdown_interface, shutdown_interface
 
 
-DEFAULT_IFNET_COMMAND_MODES = ("user", "privileged")
+DEFAULT_IFNET_COMMAND_MODES = ("hidden", "interface")
 INTERFACE_NAME_PATTERN = r".+"
 OS_ADMIN_VERIFY_ATTEMPTS = 10
 OS_ADMIN_VERIFY_DELAY_SECONDS = 0.5
@@ -29,9 +29,10 @@ def register_ifnet_commands(
     provider: InterfaceProvider | None = None,
     admin_provider: InterfaceAdminProvider | None = None,
     modes: Sequence[str] = DEFAULT_IFNET_COMMAND_MODES,
+    register_interface_config_command: bool = True,
 ) -> None:
     @registry.command(
-        "show interfaces",
+        "show host interfaces",
         help_text="Show system interfaces",
         modes=tuple(modes),
     )
@@ -42,7 +43,7 @@ def register_ifnet_commands(
         return CommandResult(message=_format_interfaces_detail(result, ctx.state))
 
     @registry.command(
-        "show interfaces brief",
+        "show host interfaces brief",
         help_text="Show brief system interface summary",
         modes=tuple(modes),
     )
@@ -53,7 +54,7 @@ def register_ifnet_commands(
         return CommandResult(message=_format_interface_brief(result, ctx.state))
 
     @registry.command(
-        f"show interfaces <name:{INTERFACE_NAME_PATTERN}>",
+        f"show host interfaces <name:{INTERFACE_NAME_PATTERN}>",
         help_text="Show system interface detail",
         modes=tuple(modes),
     )
@@ -64,28 +65,29 @@ def register_ifnet_commands(
             return interface
         return CommandResult(message=_format_interface_detail(interface, ctx.state))
 
-    @registry.command(
-        f"interface <name:{INTERFACE_NAME_PATTERN}>",
-        help_text="Enter interface configuration mode",
-        modes=("config", "interface"),
-    )
-    def interface_config(ctx, args):
-        interface = _get_interface(ctx, provider, admin_provider, args["name"])
-        if isinstance(interface, CommandResult):
-            return interface
-        if ctx.mode == "interface":
-            ctx.mode_stack[-1].label = interface.name
-        else:
-            ctx.push_mode("interface", interface.name)
-        return CommandResult()
+    if register_interface_config_command:
+        @registry.command(
+            f"host interface <name:{INTERFACE_NAME_PATTERN}>",
+            help_text="Enter interface configuration mode",
+            modes=("hidden", "interface"),
+        )
+        def interface_config(ctx, args):
+            interface = _get_interface(ctx, provider, admin_provider, args["name"])
+            if isinstance(interface, CommandResult):
+                return interface
+            if ctx.mode == "interface":
+                ctx.mode_stack[-1].label = interface.name
+            else:
+                ctx.push_mode("interface", interface.name)
+            return CommandResult()
 
-    def interface_name_values(ctx):
-        try:
-            return tuple(interface.name for interface in _manager(ctx, provider, admin_provider).list_interfaces())
-        except InterfaceDiscoveryError:
-            return ()
+        def interface_name_values(ctx):
+            try:
+                return tuple(interface.name for interface in _manager(ctx, provider, admin_provider).list_interfaces())
+            except InterfaceDiscoveryError:
+                return ()
 
-    registry.parameter_values(("interface",), "name", interface_name_values)
+        registry.parameter_values(("host", "interface"), "name", interface_name_values)
 
     @registry.command(
         "shutdown",

@@ -3,13 +3,14 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Callable
 
 from .dispatch import dispatch_line
 from .help import format_help
 from .models import CliContext, ParseStatus, TokenStatus, TokenStyle
 from .parser import CommandParser
 from .registry import CommandRegistry
-from .running_config import load_running_config, set_running_config_path
+from .running_config import load_saved_configuration, set_saved_configuration_path
 
 
 def _preserve_help_input(text: str) -> str:
@@ -65,11 +66,14 @@ def _run_plain_cli(
     registry: CommandRegistry,
     prompt: str | None = None,
     hostname: str = "Router",
-    running_config_file: str | os.PathLike[str] | None = None,
+    saved_configuration_file: str | os.PathLike[str] | None = None,
 ) -> int:
     ctx = CliContext(hostname=hostname)
     registry.initialize_context(ctx)
-    _print_running_config_errors(ctx, load_running_config(ctx, registry, running_config_file))
+    _print_saved_configuration_errors(
+        ctx,
+        load_saved_configuration(ctx, registry, saved_configuration_file),
+    )
     pending_input = ""
     while not ctx.exit_requested:
         try:
@@ -84,19 +88,33 @@ def _run_plain_cli(
     return 0
 
 
+class _PromptToolkitAnsiOutput:
+    def __init__(self, print_formatted_text: Callable, ansi_factory: Callable) -> None:
+        self._print_formatted_text = print_formatted_text
+        self._ansi_factory = ansi_factory
+
+    def write(self, text: str) -> int:
+        if text:
+            self._print_formatted_text(self._ansi_factory(text), end="")
+        return len(text)
+
+    def flush(self) -> None:
+        return None
+
+
 def run_interactive_cli(
     registry: CommandRegistry,
     prompt: str | None = None,
     hostname: str = "Router",
     history_file: str | os.PathLike[str] | None = None,
-    running_config_file: str | os.PathLike[str] | None = None,
+    saved_configuration_file: str | os.PathLike[str] | None = None,
 ) -> int:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         return _run_plain_cli(
             registry,
             prompt=prompt,
             hostname=hostname,
-            running_config_file=running_config_file,
+            saved_configuration_file=saved_configuration_file,
         )
 
     try:
@@ -116,10 +134,16 @@ def run_interactive_cli(
         return 2
 
     parser = CommandParser(registry)
-    ctx = CliContext(hostname=hostname)
+    ctx = CliContext(
+        hostname=hostname,
+        output=_PromptToolkitAnsiOutput(print_formatted_text, ANSI),
+    )
     registry.initialize_context(ctx)
-    set_running_config_path(ctx, running_config_file)
-    _print_running_config_errors(ctx, load_running_config(ctx, registry, running_config_file))
+    set_saved_configuration_path(ctx, saved_configuration_file)
+    _print_saved_configuration_errors(
+        ctx,
+        load_saved_configuration(ctx, registry, saved_configuration_file),
+    )
 
     class RouterCommandLexer(Lexer):
         def lex_document(self, document):
@@ -277,6 +301,6 @@ def run_interactive_cli(
     return 0
 
 
-def _print_running_config_errors(ctx: CliContext, errors: list[str]) -> None:
+def _print_saved_configuration_errors(ctx: CliContext, errors: list[str]) -> None:
     for error in errors:
         ctx.write(error)

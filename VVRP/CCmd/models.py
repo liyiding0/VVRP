@@ -59,6 +59,8 @@ class CliContext:
             return f"{self.hostname}(config)# "
         if self.mode == "interface":
             return f"{self.hostname}(config-if-{self.mode_label})# "
+        if self.mode == "host-interface":
+            return f"({self.hostname}-host-if-{self.mode_label})# "
         if self.mode == "hidden":
             return f"({self.hostname}-hidden)# "
         return f"{self.hostname}({self.mode})# "

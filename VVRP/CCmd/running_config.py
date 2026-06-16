@@ -7,28 +7,37 @@ from typing import Any
 from .models import CliContext, ModeFrame
 
 
-DEFAULT_RUNNING_CONFIG_FILE = "running-config"
-RUNNING_CONFIG_STATE_KEY = "ccmd.running_config"
-RUNNING_CONFIG_PATH_STATE_KEY = "ccmd.running_config.path"
-RUNNING_CONFIG_LOADING_STATE_KEY = "ccmd.running_config.loading"
+DEFAULT_SAVED_CONFIGURATION_FILE = "saved-configuration"
+DEFAULT_RUNNING_CONFIG_FILE = DEFAULT_SAVED_CONFIGURATION_FILE
+RUNNING_CONFIG_STATE_KEY = "ccmd.running_configuration"
+SAVED_CONFIGURATION_PATH_STATE_KEY = "ccmd.saved_configuration.path"
+RUNNING_CONFIG_PATH_STATE_KEY = SAVED_CONFIGURATION_PATH_STATE_KEY
+RUNNING_CONFIG_LOADING_STATE_KEY = "ccmd.saved_configuration.loading"
+
+
+def set_saved_configuration_path(
+    ctx: CliContext,
+    path: str | Path | None = None,
+) -> Path:
+    config_path = Path(path or DEFAULT_SAVED_CONFIGURATION_FILE)
+    ctx.state[SAVED_CONFIGURATION_PATH_STATE_KEY] = config_path
+    _config_store(ctx)
+    return config_path
 
 
 def set_running_config_path(
     ctx: CliContext,
     path: str | Path | None = None,
 ) -> Path:
-    config_path = Path(path or DEFAULT_RUNNING_CONFIG_FILE)
-    ctx.state[RUNNING_CONFIG_PATH_STATE_KEY] = config_path
-    _config_store(ctx)
-    return config_path
+    return set_saved_configuration_path(ctx, path)
 
 
-def load_running_config(
+def load_saved_configuration(
     ctx: CliContext,
     registry,
     path: str | Path | None = None,
 ) -> list[str]:
-    config_path = set_running_config_path(ctx, path)
+    config_path = set_saved_configuration_path(ctx, path)
     if not config_path.exists():
         return []
 
@@ -36,7 +45,6 @@ def load_running_config(
     errors: list[str] = []
     ctx.state[RUNNING_CONFIG_LOADING_STATE_KEY] = True
     try:
-        _enter_config_mode(ctx)
         skip_indented_block = False
         for number, raw_line in enumerate(config_path.read_text(encoding="utf-8").splitlines(), start=1):
             line = raw_line.strip()
@@ -47,6 +55,7 @@ def load_running_config(
                 continue
             if not is_indented:
                 skip_indented_block = False
+            line = _prepare_running_config_mode(ctx, line, is_indented)
             outcome = _dispatch_line_silently(ctx, registry, line)
             if outcome.message.startswith("%"):
                 errors.append(f"{config_path}:{number}: {outcome.message}: {line}")
@@ -58,15 +67,36 @@ def load_running_config(
     return errors
 
 
-def set_global_config_command(ctx: CliContext, key: str, line: str) -> str:
+def load_running_config(
+    ctx: CliContext,
+    registry,
+    path: str | Path | None = None,
+) -> list[str]:
+    return load_saved_configuration(ctx, registry, path)
+
+
+def set_global_config_command(
+    ctx: CliContext,
+    key: str,
+    line: str,
+    autosave: bool = False,
+) -> str:
     store = _config_store(ctx)
     store["global"][key] = line
+    if not autosave:
+        return ""
     return _autosave(ctx)
 
 
-def remove_global_config_command(ctx: CliContext, key: str) -> str:
+def remove_global_config_command(
+    ctx: CliContext,
+    key: str,
+    autosave: bool = False,
+) -> str:
     store = _config_store(ctx)
     store["global"].pop(key, None)
+    if not autosave:
+        return ""
     return _autosave(ctx)
 
 
@@ -75,9 +105,12 @@ def set_interface_config_command(
     interface_name: str,
     key: str,
     line: str,
+    autosave: bool = False,
 ) -> str:
     commands = _interface_commands(ctx, interface_name)
     commands[key] = line
+    if not autosave:
+        return ""
     return _autosave(ctx)
 
 
@@ -85,10 +118,13 @@ def remove_interface_config_command(
     ctx: CliContext,
     interface_name: str,
     key: str,
+    autosave: bool = False,
 ) -> str:
     commands = _interface_commands(ctx, interface_name)
     commands.pop(key, None)
     _drop_empty_interface(ctx, interface_name)
+    if not autosave:
+        return ""
     return _autosave(ctx)
 
 
@@ -96,12 +132,15 @@ def remove_interface_config_prefix(
     ctx: CliContext,
     interface_name: str,
     prefix: str,
+    autosave: bool = False,
 ) -> str:
     commands = _interface_commands(ctx, interface_name)
     for key in tuple(commands):
         if key.startswith(prefix):
             commands.pop(key, None)
     _drop_empty_interface(ctx, interface_name)
+    if not autosave:
+        return ""
     return _autosave(ctx)
 
 
@@ -115,18 +154,73 @@ def interface_config_commands(
     return dict(commands)
 
 
-def render_running_config(ctx: CliContext) -> str:
+def set_host_interface_config_command(
+    ctx: CliContext,
+    interface_name: str,
+    key: str,
+    line: str,
+    autosave: bool = False,
+) -> str:
+    commands = _host_interface_commands(ctx, interface_name)
+    commands[key] = line
+    if not autosave:
+        return ""
+    return _autosave(ctx)
+
+
+def remove_host_interface_config_command(
+    ctx: CliContext,
+    interface_name: str,
+    key: str,
+    autosave: bool = False,
+) -> str:
+    commands = _host_interface_commands(ctx, interface_name)
+    commands.pop(key, None)
+    _drop_empty_host_interface(ctx, interface_name)
+    if not autosave:
+        return ""
+    return _autosave(ctx)
+
+
+def host_interface_config_commands(
+    ctx: CliContext,
+    interface_name: str,
+) -> dict[str, str]:
+    commands = _config_store(ctx)["host_interfaces"].get(interface_name)
+    if not isinstance(commands, dict):
+        return {}
+    return dict(commands)
+
+
+def render_host_interface_config(ctx: CliContext, interface_name: str) -> str:
+    commands = host_interface_config_commands(ctx, interface_name)
+    if not commands:
+        return ""
+
+    lines = [f"host interfaces {_format_cli_token(interface_name)}"]
+    for key in _ordered_host_interface_command_keys(commands):
+        lines.append(f" {commands[key]}")
+    lines.append(" quit")
+    return "\n".join(lines) + "\n"
+
+
+def render_running_configuration(ctx: CliContext) -> str:
     store = _config_store(ctx)
     lines: list[str] = []
 
     for key in _ordered_global_keys(store["global"]):
         lines.append(store["global"][key])
 
+    for interface_name in _ordered_interface_names(store["host_interfaces"]):
+        rendered = render_host_interface_config(ctx, interface_name).rstrip()
+        if rendered:
+            lines.extend(rendered.splitlines())
+
     for interface_name in _ordered_interface_names(store["interfaces"]):
         commands = store["interfaces"][interface_name]
         if not commands:
             continue
-        lines.append(f"interface {_format_cli_token(interface_name)}")
+        lines.append(f"host interface {_format_cli_token(interface_name)}")
         for key in _ordered_interface_command_keys(commands):
             lines.append(f" {commands[key]}")
         lines.append(" quit")
@@ -136,10 +230,25 @@ def render_running_config(ctx: CliContext) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_running_config(ctx: CliContext) -> None:
-    config_path = _running_config_path(ctx)
+def render_running_config(ctx: CliContext) -> str:
+    return render_running_configuration(ctx)
+
+
+def read_saved_configuration(ctx: CliContext) -> str:
+    config_path = _saved_configuration_path(ctx)
+    if not config_path.exists():
+        return ""
+    return config_path.read_text(encoding="utf-8")
+
+
+def write_saved_configuration(ctx: CliContext) -> None:
+    config_path = _saved_configuration_path(ctx)
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(render_running_config(ctx), encoding="utf-8")
+    config_path.write_text(render_running_configuration(ctx), encoding="utf-8")
+
+
+def write_running_config(ctx: CliContext) -> None:
+    write_saved_configuration(ctx)
 
 
 def _dispatch_line_silently(ctx: CliContext, registry, line: str):
@@ -154,6 +263,22 @@ def _dispatch_line_silently(ctx: CliContext, registry, line: str):
 
 
 def _is_interface_command(line: str) -> bool:
+    return (
+        _is_host_interfaces_command(line)
+        or _is_host_interface_command(line)
+        or _is_legacy_interface_command(line)
+    )
+
+
+def _is_host_interfaces_command(line: str) -> bool:
+    return line == "host interfaces" or line.startswith("host interfaces ")
+
+
+def _is_host_interface_command(line: str) -> bool:
+    return line == "host interface" or line.startswith("host interface ")
+
+
+def _is_legacy_interface_command(line: str) -> bool:
     return line == "interface" or line.startswith("interface ")
 
 
@@ -161,10 +286,11 @@ def _config_store(ctx: CliContext) -> dict[str, Any]:
     store = ctx.state.get(RUNNING_CONFIG_STATE_KEY)
     if isinstance(store, dict):
         store.setdefault("global", {})
+        store.setdefault("host_interfaces", {})
         store.setdefault("interfaces", {})
         return store
 
-    store = {"global": {}, "interfaces": {}}
+    store = {"global": {}, "host_interfaces": {}, "interfaces": {}}
     ctx.state[RUNNING_CONFIG_STATE_KEY] = store
     return store
 
@@ -186,25 +312,66 @@ def _drop_empty_interface(ctx: CliContext, interface_name: str) -> None:
         store["interfaces"].pop(interface_name, None)
 
 
+def _host_interface_commands(ctx: CliContext, interface_name: str) -> dict[str, str]:
+    store = _config_store(ctx)
+    interfaces = store["host_interfaces"]
+    commands = interfaces.get(interface_name)
+    if not isinstance(commands, dict):
+        commands = {}
+        interfaces[interface_name] = commands
+    return commands
+
+
+def _drop_empty_host_interface(ctx: CliContext, interface_name: str) -> None:
+    store = _config_store(ctx)
+    commands = store["host_interfaces"].get(interface_name)
+    if isinstance(commands, dict) and not commands:
+        store["host_interfaces"].pop(interface_name, None)
+
+
 def _autosave(ctx: CliContext) -> str:
     if ctx.state.get(RUNNING_CONFIG_LOADING_STATE_KEY):
         return ""
     try:
-        write_running_config(ctx)
+        write_saved_configuration(ctx)
     except OSError as exc:
-        return f"% running-config write failed: {exc}"
+        return f"% saved-configuration write failed: {exc}"
     return ""
 
 
-def _running_config_path(ctx: CliContext) -> Path:
-    value = ctx.state.get(RUNNING_CONFIG_PATH_STATE_KEY)
+def _saved_configuration_path(ctx: CliContext) -> Path:
+    value = ctx.state.get(SAVED_CONFIGURATION_PATH_STATE_KEY)
     if isinstance(value, Path):
         return value
-    return set_running_config_path(ctx)
+    return set_saved_configuration_path(ctx)
+
+
+def _running_config_path(ctx: CliContext) -> Path:
+    return _saved_configuration_path(ctx)
 
 
 def _enter_config_mode(ctx: CliContext) -> None:
     ctx.mode_stack = [ModeFrame("user"), ModeFrame("privileged"), ModeFrame("config")]
+
+
+def _enter_hidden_mode(ctx: CliContext) -> None:
+    ctx.mode_stack = [ModeFrame("user"), ModeFrame("hidden")]
+
+
+def _prepare_running_config_mode(ctx: CliContext, line: str, is_indented: bool) -> str:
+    if is_indented:
+        return line
+    if _is_host_interfaces_command(line):
+        _enter_hidden_mode(ctx)
+        return line
+    if _is_host_interface_command(line):
+        _enter_hidden_mode(ctx)
+        return line
+    if _is_legacy_interface_command(line):
+        _enter_hidden_mode(ctx)
+        return f"host {line}"
+    _enter_config_mode(ctx)
+    return line
 
 
 def _ordered_global_keys(commands: dict[str, str]) -> tuple[str, ...]:
@@ -228,6 +395,15 @@ def _ordered_interface_command_keys(commands: dict[str, str]) -> tuple[str, ...]
         if key.startswith("ip-address:"):
             return (3, key)
         return (4, key)
+
+    return tuple(sorted(commands, key=sort_key))
+
+
+def _ordered_host_interface_command_keys(commands: dict[str, str]) -> tuple[str, ...]:
+    def sort_key(key: str) -> tuple[int, str]:
+        if key == "import":
+            return (0, key)
+        return (1, key)
 
     return tuple(sorted(commands, key=sort_key))
 

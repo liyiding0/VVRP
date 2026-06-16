@@ -4,7 +4,7 @@
 
 - 命令縮寫：`sho` 可唯一補全為 `show`。
 - 即時著色：唯一有效為綠色，歧義為黃色，非法為紅色。
-- 正則參數：例如 `show interfaces <name:[A-Za-z0-9_.:/%-]+>`。
+- 正則參數：例如 `show host interfaces <name:[A-Za-z0-9_.:/%-]+>`。
 - 歷史命令：上下鍵回填歷史，必須再次回車才會執行。
 - handler 分發：命令解析後調用對應 Python 函數。
 - 模式/級別：一般模式、特權模式、配置模式、接口模式、隱藏模式。
@@ -27,9 +27,11 @@ python -m unittest discover -s tests
 ```text
 <Router> enable
 Router# config
-Router(config)# interface eth3
-Router(config-if-eth3)# _
-(Router-hidden)# quit
+Router(config)# _
+(Router-hidden)# host interfaces eth3
+(Router-host-if-eth3)# import
+(Router-host-if-eth3)# commit
+(Router-host-if-eth3)# quit
 Router(config)# hostname R1
 Router(config)# show hostname
 ping 192.168.1.1
@@ -37,12 +39,14 @@ ping 2001:db8::1
 ping example.com
 show
 show version
-show interfaces
-show interfaces brief
-show interfaces eth3
-Router(config)# interface eth3
-Router(config-if-eth3)# shutdown
-Router(config-if-eth3)# no shutdown
+show host interfaces
+show host interfaces brief
+show host interfaces eth3
+show dplane interfaces
+Router(config)# _
+(Router-hidden)# host interfaces eth3
+(Router-host-if-eth3)# no import
+(Router-host-if-eth3)# commit
 help
 exit
 ```
@@ -56,17 +60,17 @@ exit
   interfaces  Show system interfaces
   version    Show software version
 
-<Router> show interfaces ?
+<Router> show host interfaces ?
   brief  Show brief system interface summary
   <name>  Show system interface detail
 
-<Router> show interfaces brief ?
+<Router> show host interfaces brief ?
   <cr>  Show brief system interface summary
 ```
 
-`show interfaces brief` uses a Huawei VRP-style interface summary format:
+`show host interfaces brief` uses a Huawei VRP-style interface summary format:
 `Interface PHY Protocol InUti OutUti inErrors outErrors`.
-`show interfaces` displays detailed interface information, including the VVRP IFNET Index in `0x` hexadecimal format.
+`show host interfaces` displays detailed interface information, including the VVRP IFNET Index in `0x` hexadecimal format.
 `shutdown` and `no shutdown` are interface-mode IFNET commands that apply the change to the OS network adapter. They usually require Administrator/root privileges. Loopback interfaces cannot be shut down.
 Do not use `eth0` for destructive interface tests; use `eth3` in this workspace.
 
@@ -81,7 +85,7 @@ Do not use `eth0` for destructive interface tests; use `eth3` in this workspace.
 | 一般模式 | 程序啟動時進入 | `<Router>` |
 | 特權模式 | `enable` | `Router#` |
 | 配置模式 | `config` | `Router(config)#` |
-| 接口模式 | `interface eth3` | `Router(config-if-eth3)#` |
+| 主機接口模式 | `host interfaces eth3` | `(Router-host-if-eth3)#` |
 | 隱藏模式 | `_` | `(Router-hidden)#` |
 
 `quit` 在特權模式、配置模式、接口模式和隱藏模式下可用，用於回到上一級模式；一般模式是最上層，不提供 `quit`，退出程序請使用 `exit`。
