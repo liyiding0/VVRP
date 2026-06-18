@@ -31,6 +31,7 @@ from VVRP.CCmd.models import TokenStatus
 from VVRP.CCmd.running_config import (
     load_saved_configuration,
     render_running_configuration,
+    set_interface_config_command,
     set_saved_configuration_path,
 )
 from VVRP.IFNET.Ethernet import is_ethernet_interface
@@ -157,6 +158,7 @@ class ParserTests(unittest.TestCase):
 
         self.assertEqual(
             [
+                ("arp", "Show ARP mapping table"),
                 ("interfaces", "Show VVRP interfaces"),
                 ("version", "Show software version"),
                 ("<cr>", "Show command group"),
@@ -166,7 +168,7 @@ class ParserTests(unittest.TestCase):
 
     def test_help_candidates_for_parameter_position(self):
         parser = CommandParser(build_default_registry())
-        candidates = parser.help_candidates("show host interfaces ", mode="hidden")
+        candidates = parser.help_candidates("show host interface ", mode="hidden")
 
         self.assertEqual(
             [
@@ -179,7 +181,7 @@ class ParserTests(unittest.TestCase):
 
     def test_help_candidates_for_interfaces_brief_cr(self):
         parser = CommandParser(build_default_registry())
-        candidates = parser.help_candidates("show host interfaces brief ", mode="hidden")
+        candidates = parser.help_candidates("show host interface brief ", mode="hidden")
 
         self.assertEqual(
             [("<cr>", "Show brief host system interface summary")],
@@ -201,14 +203,14 @@ class ParserTests(unittest.TestCase):
 
         self.assertEqual(ParseStatus.VALID_UNIQUE, result.status)
         self.assertEqual("show ?", result.complete_command)
-        self.assertEqual(("interfaces", "version", "<cr>"), result.candidates)
+        self.assertEqual(("arp", "interfaces", "version", "<cr>"), result.candidates)
 
     def test_question_mark_suffix_keeps_prefix_token_style(self):
         parser = CommandParser(build_default_registry())
 
         ambiguous = parser.parse("show host i?", mode="hidden")
         self.assertEqual(ParseStatus.VALID_UNIQUE, ambiguous.status)
-        self.assertEqual(("interfaces", "ip"), ambiguous.candidates)
+        self.assertEqual(("interface", "ip"), ambiguous.candidates)
         self.assertEqual(TokenStyle.VALID, ambiguous.token_statuses[0].style)
         self.assertEqual(TokenStyle.VALID, ambiguous.token_statuses[1].style)
         self.assertEqual(TokenStyle.AMBIGUOUS, ambiguous.token_statuses[2].style)
@@ -226,7 +228,7 @@ class ParserTests(unittest.TestCase):
         self.assertEqual("config ", parser.complete_before_space("conf", mode="privileged"))
         self.assertEqual("interface ", parser.complete_before_space("inter", mode="config"))
         self.assertEqual(
-            "host interfaces ",
+            "host interface ",
             parser.complete_before_space("host inter", mode="hidden"),
         )
 
@@ -234,14 +236,14 @@ class ParserTests(unittest.TestCase):
         parser = CommandParser(build_default_registry())
 
         result = parser.parse(
-            'host interfaces "VMware Network Adapter VMnet1"',
+            'host interface "VMware Network Adapter VMnet1"',
             mode="hidden",
         )
 
         self.assertEqual(ParseStatus.VALID_UNIQUE, result.status)
         self.assertEqual({"name": "VMware Network Adapter VMnet1"}, result.args)
         self.assertEqual(
-            'host interfaces "VMware Network Adapter VMnet1"',
+            'host interface "VMware Network Adapter VMnet1"',
             result.complete_command,
         )
         self.assertTrue(result.executable)
@@ -255,20 +257,20 @@ class ParserTests(unittest.TestCase):
         registry.initialize_context(ctx)
         parser = CommandParser(registry)
 
-        prefix = parser.parse("host interfaces eth", mode="hidden", ctx=ctx)
+        prefix = parser.parse("host interface eth", mode="hidden", ctx=ctx)
         self.assertEqual(ParseStatus.AMBIGUOUS, prefix.status)
         self.assertEqual(("eth0", "eth4"), prefix.candidates)
         self.assertEqual(TokenStyle.VALID, prefix.token_statuses[0].style)
         self.assertEqual(TokenStyle.VALID, prefix.token_statuses[1].style)
         self.assertEqual(TokenStyle.AMBIGUOUS, prefix.token_statuses[2].style)
 
-        unknown = parser.parse("host interfaces eth5", mode="hidden", ctx=ctx)
+        unknown = parser.parse("host interface eth5", mode="hidden", ctx=ctx)
         self.assertEqual(ParseStatus.INVALID, unknown.status)
         self.assertEqual(TokenStyle.VALID, unknown.token_statuses[0].style)
         self.assertEqual(TokenStyle.VALID, unknown.token_statuses[1].style)
         self.assertEqual(TokenStyle.INVALID, unknown.token_statuses[2].style)
 
-        exact = parser.parse("host interfaces eth4", mode="hidden", ctx=ctx)
+        exact = parser.parse("host interface eth4", mode="hidden", ctx=ctx)
         self.assertEqual(ParseStatus.VALID_UNIQUE, exact.status)
         self.assertTrue(exact.executable)
 
@@ -486,6 +488,8 @@ class ModuleBoundaryTests(unittest.TestCase):
         self.assertIsNone(importlib.util.find_spec("VVRP.CCmd.ping"))
         self.assertIsNotNone(importlib.util.find_spec("VVRP.IP.ping"))
         self.assertIsNotNone(importlib.util.find_spec("VVRP.IFNET"))
+        self.assertIsNotNone(importlib.util.find_spec("VVRP.ETHERNET"))
+        self.assertIsNotNone(importlib.util.find_spec("VVRP.ARP"))
         self.assertIsNotNone(importlib.util.find_spec("VVRP.IFNET.Ethernet"))
         self.assertIsNotNone(importlib.util.find_spec("VVRP.IFNET.Loopback"))
 
@@ -776,7 +780,7 @@ class IFNETCommandTests(unittest.TestCase):
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
 
-        outcome = dispatch_line(ctx, registry, "show host interfaces brief")
+        outcome = dispatch_line(ctx, registry, "show host interface brief")
 
         self.assertTrue(outcome.executed)
         text = output.getvalue()
@@ -804,7 +808,7 @@ class IFNETCommandTests(unittest.TestCase):
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
 
-        outcome = dispatch_line(ctx, registry, "show host interfaces eth3")
+        outcome = dispatch_line(ctx, registry, "show host interface eth3")
 
         self.assertTrue(outcome.executed)
         text = output.getvalue()
@@ -822,7 +826,7 @@ class IFNETCommandTests(unittest.TestCase):
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
 
-        outcome = dispatch_line(ctx, registry, "show host interfaces")
+        outcome = dispatch_line(ctx, registry, "show host interface")
 
         self.assertTrue(outcome.executed)
         text = output.getvalue()
@@ -840,7 +844,7 @@ class IFNETCommandTests(unittest.TestCase):
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
 
-        outcome = dispatch_line(ctx, registry, "show host interfaces missing0")
+        outcome = dispatch_line(ctx, registry, "show host interface missing0")
 
         self.assertTrue(outcome.executed)
         self.assertEqual("% Interface not found: missing0", outcome.message)
@@ -966,11 +970,11 @@ class IFNETCommandTests(unittest.TestCase):
         parser = CommandParser(build_default_registry())
 
         for mode in ("hidden", "interface", "host-interface"):
-            self.assertTrue(parser.parse("show host interfaces", mode=mode).executable, mode)
-            self.assertTrue(parser.parse("show host interfaces brief", mode=mode).executable, mode)
-            self.assertTrue(parser.parse("show host interfaces eth3", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show host interface", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show host interface brief", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show host interface eth3", mode=mode).executable, mode)
         for mode in ("user", "privileged", "config"):
-            self.assertEqual(ParseStatus.INVALID, parser.parse("show host interfaces", mode=mode).status, mode)
+            self.assertEqual(ParseStatus.INVALID, parser.parse("show host interface", mode=mode).status, mode)
         for mode in ("user", "privileged", "config", "hidden", "interface", "host-interface"):
             self.assertTrue(parser.parse("show interfaces", mode=mode).executable, mode)
             self.assertTrue(parser.parse("show interfaces brief", mode=mode).executable, mode)
@@ -978,8 +982,7 @@ class IFNETCommandTests(unittest.TestCase):
             self.assertTrue(parser.parse("show interfaces brief eth3", mode=mode).executable, mode)
         abbreviated_host_interfaces = parser.parse("host interface eth3", mode="hidden")
         self.assertTrue(abbreviated_host_interfaces.executable)
-        self.assertEqual("host interfaces eth3", abbreviated_host_interfaces.complete_command)
-        self.assertTrue(parser.parse("host interfaces eth3", mode="hidden").executable)
+        self.assertEqual("host interface eth3", abbreviated_host_interfaces.complete_command)
         self.assertTrue(parser.parse("interface eth3", mode="config").executable)
         self.assertTrue(parser.parse("shutdown", mode="interface").executable)
         self.assertTrue(parser.parse("no shutdown", mode="interface").executable)
@@ -1004,11 +1007,12 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertTrue(parser.parse("show dplane interfaces brief", mode="hidden").executable)
         self.assertTrue(parser.parse("show dplane interfaces", mode="host-interface").executable)
         self.assertTrue(parser.parse("show dplane interfaces brief", mode="host-interface").executable)
-        self.assertTrue(parser.parse("host interfaces eth3", mode="hidden").executable)
+        self.assertTrue(parser.parse("host interface eth3", mode="host-interface").executable)
         self.assertTrue(parser.parse("import", mode="host-interface").executable)
         self.assertTrue(parser.parse("no import", mode="host-interface").executable)
         self.assertTrue(parser.parse("commit", mode="host-interface").executable)
         self.assertTrue(parser.parse("show this", mode="host-interface").executable)
+        self.assertTrue(parser.parse("show this", mode="interface").executable)
         self.assertTrue(parser.parse("save", mode="host-interface").executable)
         self.assertTrue(parser.parse("save", mode="interface").executable)
         self.assertTrue(parser.parse("save", mode="config").executable)
@@ -1027,7 +1031,7 @@ class IFNETCommandTests(unittest.TestCase):
             )
             self.assertEqual(
                 ParseStatus.INVALID,
-                parser.parse("host interfaces eth3", mode=mode).status,
+                parser.parse("host interface eth3", mode=mode).status,
                 mode,
             )
 
@@ -1063,6 +1067,69 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertIn("\x1b[38;2;242;242;242mmatched\x1b[0m", eth3_line)
         self.assertNotIn(r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}", eth3_line)
 
+    def test_host_interface_help_has_ip_and_no_descriptions(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        parser = CommandParser(registry)
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("host-interface", "eth3")
+
+        candidates = parser.help_candidates("", mode="host-interface", ctx=ctx)
+
+        help_by_display = {candidate.display: candidate.help_text for candidate in candidates}
+        self.assertEqual("Configure IP features", help_by_display["ip"])
+        self.assertEqual(
+            "Negate a command or set its defaults",
+            help_by_display["no"],
+        )
+
+    def test_host_interface_view_can_switch_host_and_vvrp_interfaces(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth2"), fake_ethernet("eth3")))
+        )
+        ctx = CliContext(output=io.StringIO())
+        registry.initialize_context(ctx)
+        stage_import_interface(ctx.state, "eth3")
+        commit_imports(ctx.state)
+        ctx.push_mode("host-interface", "eth2")
+
+        self.assertTrue(dispatch_line(ctx, registry, "host interface eth3").executed)
+        self.assertEqual("host-interface", ctx.mode)
+        self.assertEqual("eth3", ctx.mode_label)
+
+        self.assertTrue(dispatch_line(ctx, registry, "interface eth3").executed)
+        self.assertEqual("interface", ctx.mode)
+        self.assertEqual("eth3", ctx.mode_label)
+
+    def test_vvrp_interface_show_this_displays_current_interface_config(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth2"), fake_ethernet("eth3")))
+        )
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        registry.initialize_context(ctx)
+        stage_import_interface(ctx.state, "eth2")
+        stage_import_interface(ctx.state, "eth3")
+        commit_imports(ctx.state)
+        ctx.push_mode("config")
+
+        self.assertTrue(dispatch_line(ctx, registry, "interface eth2").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
+        self.assertEqual("interface eth2\n quit\n", output.getvalue())
+
+        output.truncate(0)
+        output.seek(0)
+        set_interface_config_command(ctx, "eth2", "shutdown", "shutdown")
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
+        self.assertEqual("interface eth2\n shutdown\n quit\n", output.getvalue())
+
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "interface eth3").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
+        self.assertEqual("interface eth3\n quit\n", output.getvalue())
+
     def test_host_interface_import_requires_match_and_commit(self):
         registry = build_default_registry(
             ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
@@ -1079,24 +1146,24 @@ class IFNETCommandTests(unittest.TestCase):
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
 
-        self.assertTrue(dispatch_line(ctx, registry, "host interfaces eth3").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "host interface eth3").executed)
         self.assertEqual("host-interface", ctx.mode)
         self.assertEqual("eth3", ctx.mode_label)
         self.assertEqual("Router(host-if-eth3)# ", ctx.prompt)
         self.assertTrue(dispatch_line(ctx, registry, "show").executed)
         self.assertTrue(dispatch_line(ctx, registry, "show dplane interfaces brief").executed)
-        self.assertTrue(dispatch_line(ctx, registry, "show host interfaces eth3").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "show host interface eth3").executed)
         self.assertTrue(dispatch_line(ctx, registry, "show host ip interface eth3").executed)
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
-        self.assertEqual("host interfaces eth3\n quit\n", output.getvalue())
+        self.assertEqual("host interface eth3\n quit\n", output.getvalue())
 
         self.assertTrue(dispatch_line(ctx, registry, "import").executed)
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
-        self.assertEqual("host interfaces eth3\n quit\n", output.getvalue())
+        self.assertEqual("host interface eth3\n quit\n", output.getvalue())
         self.assertEqual("", render_running_configuration(ctx))
         output.truncate(0)
         output.seek(0)
@@ -1123,13 +1190,13 @@ class IFNETCommandTests(unittest.TestCase):
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
-        self.assertEqual("host interfaces eth3\n import\n quit\n", output.getvalue())
+        self.assertEqual("host interface eth3\n import\n quit\n", output.getvalue())
 
         self.assertTrue(dispatch_line(ctx, registry, "no import").executed)
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
-        self.assertEqual("host interfaces eth3\n import\n quit\n", output.getvalue())
+        self.assertEqual("host interface eth3\n import\n quit\n", output.getvalue())
         output.truncate(0)
         output.seek(0)
         ctx.push_mode("hidden")
@@ -1150,7 +1217,7 @@ class IFNETCommandTests(unittest.TestCase):
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
-        self.assertEqual("host interfaces eth3\n quit\n", output.getvalue())
+        self.assertEqual("host interface eth3\n quit\n", output.getvalue())
 
     def test_host_interface_import_rejects_unmatched_interfaces(self):
         registry = build_default_registry(
@@ -1160,7 +1227,7 @@ class IFNETCommandTests(unittest.TestCase):
         ctx = CliContext(output=io.StringIO())
         ctx.push_mode("hidden")
 
-        self.assertTrue(dispatch_line(ctx, registry, "host interfaces eth3").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "host interface eth3").executed)
         outcome = dispatch_line(ctx, registry, "import")
 
         self.assertTrue(outcome.executed)
@@ -1185,7 +1252,7 @@ class IFNETCommandTests(unittest.TestCase):
             set_saved_configuration_path(ctx, config_path)
             ctx.push_mode("hidden")
 
-            self.assertTrue(dispatch_line(ctx, registry, "host interfaces eth3").executed)
+            self.assertTrue(dispatch_line(ctx, registry, "host interface eth3").executed)
             self.assertTrue(dispatch_line(ctx, registry, "import").executed)
 
             self.assertFalse(config_path.exists())
@@ -1196,26 +1263,26 @@ class IFNETCommandTests(unittest.TestCase):
 
             self.assertTrue(dispatch_line(ctx, registry, "commit").executed)
             self.assertEqual(
-                "host interfaces eth3\n import\n quit\n",
+                "host interface eth3\n import\n quit\n",
                 render_running_configuration(ctx),
             )
             self.assertTrue(dispatch_line(ctx, registry, "save").executed)
             self.assertEqual(
-                "host interfaces eth3\n import\n quit\n",
+                "host interface eth3\n import\n quit\n",
                 config_path.read_text(encoding="utf-8"),
             )
 
             config_path.unlink()
             self.assertTrue(dispatch_line(ctx, registry, "save").executed)
             self.assertEqual(
-                "host interfaces eth3\n import\n quit\n",
+                "host interface eth3\n import\n quit\n",
                 config_path.read_text(encoding="utf-8"),
             )
 
             self.assertTrue(dispatch_line(ctx, registry, "no import").executed)
             self.assertTrue(dispatch_line(ctx, registry, "commit").executed)
             self.assertEqual(
-                "host interfaces eth3\n import\n quit\n",
+                "host interface eth3\n import\n quit\n",
                 config_path.read_text(encoding="utf-8"),
             )
 
@@ -1237,7 +1304,7 @@ class IFNETCommandTests(unittest.TestCase):
 
             self.assertEqual([], errors)
             self.assertEqual(
-                "host interfaces eth3\n import\n quit\n",
+                "host interface eth3\n import\n quit\n",
                 render_running_configuration(restored),
             )
             restored.push_mode("hidden")
@@ -1262,7 +1329,7 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertEqual([("shutdown", "eth3")], admin_provider.calls)
         output.truncate(0)
         output.seek(0)
-        dispatch_line(ctx, registry, "show host interfaces eth3")
+        dispatch_line(ctx, registry, "show host interface eth3")
         self.assertIn("eth3 is administratively down, line protocol is down", output.getvalue())
 
         self.assertTrue(dispatch_line(ctx, registry, "no shutdown").executed)
@@ -1272,7 +1339,7 @@ class IFNETCommandTests(unittest.TestCase):
         )
         output.truncate(0)
         output.seek(0)
-        dispatch_line(ctx, registry, "show host interfaces eth3")
+        dispatch_line(ctx, registry, "show host interface eth3")
         self.assertIn("eth3 is up, line protocol is up", output.getvalue())
 
     def test_shutdown_accepts_quoted_interface_name_with_spaces(self):
@@ -1321,7 +1388,7 @@ class IFNETCommandTests(unittest.TestCase):
         dispatch_line(ctx, registry, "shutdown")
         output.truncate(0)
         output.seek(0)
-        dispatch_line(ctx, registry, "show host interfaces brief")
+        dispatch_line(ctx, registry, "show host interface brief")
 
         self.assertIn("eth3", output.getvalue())
         self.assertIn("*down", output.getvalue())
@@ -1349,7 +1416,7 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertEqual([], admin_provider.calls)
         output.truncate(0)
         output.seek(0)
-        dispatch_line(ctx, registry, "show host interfaces loopback_0")
+        dispatch_line(ctx, registry, "show host interface loopback_0")
         self.assertIn("loopback_0 is up, line protocol is up(s)", output.getvalue())
 
     def test_shutdown_unknown_interface_reports_error(self):
@@ -1393,7 +1460,7 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertEqual("% OS interface API failed: access denied", outcome.message)
         output.truncate(0)
         output.seek(0)
-        dispatch_line(ctx, registry, "show host interfaces eth3")
+        dispatch_line(ctx, registry, "show host interface eth3")
         self.assertIn("eth3 is up, line protocol is up", output.getvalue())
 
     def test_shutdown_does_not_mark_state_when_os_readback_stays_up(self):
@@ -1417,7 +1484,7 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertIn("did not take effect", outcome.message)
         output.truncate(0)
         output.seek(0)
-        dispatch_line(ctx, registry, "show host interfaces brief")
+        dispatch_line(ctx, registry, "show host interface brief")
         self.assertIn("eth3", output.getvalue())
         eth3_line = next(
             line for line in output.getvalue().splitlines() if line.startswith("eth3")
@@ -1463,7 +1530,7 @@ class IFNETCommandTests(unittest.TestCase):
             "VVRP.IFNET.discovery.importlib.import_module",
             side_effect=ImportError("No module named psutil"),
         ):
-            outcome = dispatch_line(ctx, registry, "show host interfaces")
+            outcome = dispatch_line(ctx, registry, "show host interface")
 
         self.assertTrue(outcome.executed)
         self.assertIn("psutil is required for IFNET interface discovery", outcome.message)
@@ -2157,12 +2224,12 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
             self.assertFalse(config_path.exists())
             self.assertEqual(
-                "host interfaces eth3\n ip address 10.1.2.1 24\n quit\n",
+                "host interface eth3\n ip address 10.1.2.1 24\n quit\n",
                 render_running_configuration(ctx),
             )
             self.assertTrue(dispatch_line(ctx, registry, "save").executed)
             self.assertEqual(
-                "host interfaces eth3\n ip address 10.1.2.1 24\n quit\n",
+                "host interface eth3\n ip address 10.1.2.1 24\n quit\n",
                 config_path.read_text(encoding="utf-8"),
             )
 
@@ -2340,6 +2407,79 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertEqual("1.1.1.1", service.call[2].IPAddress)
         self.assertEqual(8, service.call[2].PrefixLength)
 
+    def test_windows_static_ipv4_builds_unicast_iphelper_row(self):
+        from VVRP.IFNET.Ethernet.windows import AF_INET, _unicast_ipv4_row
+
+        row = _unicast_ipv4_row(fake_ethernet("eth3"), StaticIpv4Address("1.1.1.1", 24))
+
+        self.assertEqual(AF_INET, row.Address.Ipv4.sin_family)
+        self.assertEqual([1, 1, 1, 1], list(row.Address.Ipv4.sin_addr.S_un_b))
+        self.assertEqual(2, row.InterfaceIndex)
+        self.assertEqual(24, row.OnLinkPrefixLength)
+
+    def test_windows_static_ipv4_uses_iphelper_create(self):
+        from VVRP.IFNET.Ethernet.windows import _create_unicast_ipv4_address
+
+        class FakeIphlpapi:
+            def InitializeUnicastIpAddressEntry(self, row):
+                return None
+
+            def CreateUnicastIpAddressEntry(self, row):
+                self.row = row._obj
+                return 0
+
+        iphlpapi = FakeIphlpapi()
+        interface = fake_ethernet("eth3")
+
+        with patch("VVRP.IFNET.Ethernet.windows._iphlpapi", return_value=iphlpapi):
+            _create_unicast_ipv4_address(interface, StaticIpv4Address("1.1.1.1", 24))
+
+        self.assertEqual([1, 1, 1, 1], list(iphlpapi.row.Address.Ipv4.sin_addr.S_un_b))
+        self.assertEqual(24, iphlpapi.row.OnLinkPrefixLength)
+
+    def test_windows_adapter_configuration_queries_prefer_setting_id(self):
+        from VVRP.IFNET.Ethernet.windows import _wmi_adapter_configuration_queries
+
+        interface = replace(fake_ethernet("eth3"), os_id="{GUID}")
+
+        queries = _wmi_adapter_configuration_queries(interface)
+
+        self.assertIn("WHERE SettingID = '{GUID}'", queries[0])
+        self.assertIn("WHERE InterfaceIndex = 2", queries[1])
+
+    def test_windows_secondary_static_ipv4_uses_iphelper_create(self):
+        from VVRP.IFNET.Ethernet.windows import set_windows_static_ipv4
+
+        class FakeIphlpapi:
+            def InitializeUnicastIpAddressEntry(self, row):
+                return None
+
+            def CreateUnicastIpAddressEntry(self, row):
+                self.row = row._obj
+                return 0
+
+        interface = fake_ethernet("eth3")
+        address = StaticIpv4Address("1.1.1.2", 24, secondary=True)
+        iphlpapi = FakeIphlpapi()
+
+        with (
+            patch(
+                "VVRP.IFNET.Ethernet.windows._wmi_ipv4_interface_for_interface",
+                return_value=(object(), object()),
+            ),
+            patch("VVRP.IFNET.Ethernet.windows._set_msft_netipinterface_dhcp"),
+            patch(
+                "VVRP.IFNET.Ethernet.windows._wmi_manual_ipv4_addresses",
+                return_value=(),
+            ),
+            patch("VVRP.IFNET.Ethernet.windows._wmi_service", return_value=object()),
+            patch("VVRP.IFNET.Ethernet.windows._iphlpapi", return_value=iphlpapi),
+        ):
+            set_windows_static_ipv4(interface, address)
+
+        self.assertEqual([1, 1, 1, 2], list(iphlpapi.row.Address.Ipv4.sin_addr.S_un_b))
+        self.assertEqual(24, iphlpapi.row.OnLinkPrefixLength)
+
     def test_windows_static_ipv4_delete_helper_accepts_eager_return_value(self):
         from VVRP.IFNET.Ethernet.windows import _delete_wmi_instance
 
@@ -2431,18 +2571,18 @@ class ConfigurationTests(unittest.TestCase):
             ctx.push_mode("config")
             ctx.push_mode("hidden")
 
-            self.assertTrue(dispatch_line(ctx, registry, "host interfaces eth3").executed)
+            self.assertTrue(dispatch_line(ctx, registry, "host interface eth3").executed)
             self.assertTrue(dispatch_line(ctx, registry, "ip address 1.1.1.1 8").executed)
 
             self.assertFalse(config_path.exists())
             self.assertEqual(
-                "host interfaces eth3\n ip address 1.1.1.1 8\n quit\n",
+                "host interface eth3\n ip address 1.1.1.1 8\n quit\n",
                 render_running_configuration(ctx),
             )
 
             self.assertTrue(dispatch_line(ctx, registry, "save").executed)
             self.assertEqual(
-                "host interfaces eth3\n ip address 1.1.1.1 8\n quit\n",
+                "host interface eth3\n ip address 1.1.1.1 8\n quit\n",
                 config_path.read_text(encoding="utf-8"),
             )
 
@@ -2459,14 +2599,14 @@ class ConfigurationTests(unittest.TestCase):
             ctx.push_mode("privileged")
             ctx.push_mode("config")
             ctx.push_mode("hidden")
-            dispatch_line(ctx, registry, "host interfaces eth3")
+            dispatch_line(ctx, registry, "host interface eth3")
             dispatch_line(ctx, registry, "ip address 1.1.1.1 8")
             dispatch_line(ctx, registry, "ip address 1.1.1.2 8 sub")
 
             self.assertTrue(dispatch_line(ctx, registry, "no ip address 1.1.1.2 8 sub").executed)
 
             self.assertEqual(
-                "host interfaces eth3\n ip address 1.1.1.1 8\n quit\n",
+                "host interface eth3\n ip address 1.1.1.1 8\n quit\n",
                 render_running_configuration(ctx),
             )
             self.assertFalse(config_path.exists())
@@ -2489,13 +2629,13 @@ class ConfigurationTests(unittest.TestCase):
             ctx.push_mode("privileged")
             ctx.push_mode("config")
             ctx.push_mode("hidden")
-            dispatch_line(ctx, registry, "host interfaces eth3")
+            dispatch_line(ctx, registry, "host interface eth3")
             dispatch_line(ctx, registry, "ip address 1.1.1.1 8")
 
             self.assertTrue(dispatch_line(ctx, registry, "ip address dhcp-alloc").executed)
 
             self.assertEqual(
-                "host interfaces eth3\n ip address dhcp-alloc\n quit\n",
+                "host interface eth3\n ip address dhcp-alloc\n quit\n",
                 render_running_configuration(ctx),
             )
             self.assertFalse(config_path.exists())
@@ -2512,7 +2652,7 @@ class ConfigurationTests(unittest.TestCase):
                 "\n".join(
                     (
                         "hostname R9",
-                        "host interfaces eth3",
+                        "host interface eth3",
                         " ip address 1.1.1.1 8",
                         " ip address 1.1.1.2 8 sub",
                         " quit",
@@ -2544,7 +2684,7 @@ class ConfigurationTests(unittest.TestCase):
             )
             self.assertEqual(
                 "hostname R9\n"
-                "host interfaces eth3\n"
+                "host interface eth3\n"
                 " ip address 1.1.1.1 8\n"
                 " ip address 1.1.1.2 8 sub\n"
                 " quit\n",
@@ -2557,7 +2697,7 @@ class ConfigurationTests(unittest.TestCase):
             config_path.write_text(
                 "\n".join(
                     (
-                        "host interfaces eth3",
+                        "host interface eth3",
                         " import",
                         " quit",
                         "interface eth3",
@@ -2590,7 +2730,7 @@ class ConfigurationTests(unittest.TestCase):
             self.assertEqual([], errors)
             self.assertEqual([], static_provider.calls)
             self.assertEqual(
-                "host interfaces eth3\n"
+                "host interface eth3\n"
                 " import\n"
                 " quit\n"
                 "interface eth3\n"
@@ -2766,7 +2906,7 @@ class ModeTests(unittest.TestCase):
         self.assertEqual("hidden", ctx.mode)
         self.assertEqual("R1(hidden)# ", ctx.prompt)
 
-        self.assertTrue(dispatch_line(ctx, registry, "host interfaces eth3").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "host interface eth3").executed)
         self.assertEqual("host-interface", ctx.mode)
         self.assertEqual("R1(host-if-eth3)# ", ctx.prompt)
 
@@ -2834,11 +2974,11 @@ class ModeTests(unittest.TestCase):
         self.assertEqual(ParseStatus.INVALID, dispatch_line(ctx, registry, "show version").status)
         self.assertEqual(
             ParseStatus.INVALID,
-            dispatch_line(ctx, registry, "show host interfaces eth3").status,
+            dispatch_line(ctx, registry, "show host interface eth3").status,
         )
         self.assertEqual(ParseStatus.INVALID, dispatch_line(ctx, registry, "shutdown").status)
         self.assertTrue(dispatch_line(ctx, registry, "_").executed)
-        self.assertTrue(dispatch_line(ctx, registry, "host interfaces eth3").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "host interface eth3").executed)
         self.assertTrue(CommandParser(registry).parse("import", mode=ctx.mode).executable)
         self.assertEqual(ParseStatus.INVALID, dispatch_line(ctx, registry, "shutdown").status)
 
@@ -2850,7 +2990,7 @@ class ModeTests(unittest.TestCase):
         dispatch_line(ctx, registry, "enable")
         dispatch_line(ctx, registry, "config")
         dispatch_line(ctx, registry, "_")
-        outcome = dispatch_line(ctx, registry, "host interfaces eth100")
+        outcome = dispatch_line(ctx, registry, "host interface eth100")
 
         self.assertFalse(outcome.executed)
         self.assertEqual(ParseStatus.INVALID, outcome.status)
@@ -2868,12 +3008,12 @@ class ModeTests(unittest.TestCase):
         dispatch_line(ctx, registry, "enable")
         dispatch_line(ctx, registry, "config")
         dispatch_line(ctx, registry, "_")
-        self.assertTrue(dispatch_line(ctx, registry, "host interfaces eth4").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "host interface eth4").executed)
         self.assertEqual("Router(host-if-eth4)# ", ctx.prompt)
 
         self.assertTrue(dispatch_line(ctx, registry, "quit").executed)
         self.assertEqual("hidden", ctx.mode)
-        self.assertTrue(dispatch_line(ctx, registry, "host interfaces eth0").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "host interface eth0").executed)
 
         self.assertEqual("host-interface", ctx.mode)
         self.assertEqual("eth0", ctx.mode_label)

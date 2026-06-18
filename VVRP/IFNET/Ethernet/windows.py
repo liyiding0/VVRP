@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import ipaddress
 import socket
 from ctypes import wintypes
 
@@ -11,6 +12,7 @@ from VVRP.IP.static import StaticIpv4Address
 ERROR_ACCESS_DENIED = 5
 ERROR_NO_MORE_ITEMS = 259
 ERROR_NO_MORE_DATA = 234
+ERROR_NOT_FOUND = 1168
 ERROR_SUCCESS = 0
 ERROR_INSUFFICIENT_BUFFER = 122
 ERROR_BUFFER_OVERFLOW = 111
@@ -31,8 +33,10 @@ CM_PROB_DISABLED = 0x00000016
 
 MAX_ADAPTER_ADDRESS_LENGTH = 8
 AF_UNSPEC = 0
+AF_INET = 2
 ADDRESS_FAMILY_IPV4 = 2
 PREFIX_ORIGIN_MANUAL = 1
+SUFFIX_ORIGIN_MANUAL = 1
 
 WMI_SUCCESS_REBOOT_NOT_REQUIRED = 0
 WMI_SUCCESS_REBOOT_REQUIRED = 1
@@ -66,6 +70,12 @@ WMI_RETURN_MESSAGES = {
     97: "interface not configurable",
     98: "DHCP not enabled on adapter",
     WMI_DHCP_NOT_ENABLED: "DHCP not enabled on adapter",
+}
+
+IPHELPER_ERROR_MESSAGES = {
+    5: "access denied",
+    87: "invalid parameter",
+    5010: "object already exists",
 }
 
 
@@ -113,6 +123,82 @@ class SP_PROPCHANGE_PARAMS(ctypes.Structure):
 
 class IP_ADAPTER_ADDRESSES(ctypes.Structure):
     pass
+
+
+class IN_ADDR(ctypes.Union):
+    _fields_ = [
+        ("S_addr", wintypes.ULONG),
+        ("S_un_b", ctypes.c_ubyte * 4),
+    ]
+
+
+class SOCKADDR_IN(ctypes.Structure):
+    _fields_ = [
+        ("sin_family", wintypes.USHORT),
+        ("sin_port", wintypes.USHORT),
+        ("sin_addr", IN_ADDR),
+        ("sin_zero", ctypes.c_char * 8),
+    ]
+
+
+class IN6_ADDR(ctypes.Union):
+    _fields_ = [
+        ("Byte", ctypes.c_ubyte * 16),
+        ("Word", wintypes.USHORT * 8),
+    ]
+
+
+class SOCKADDR_IN6(ctypes.Structure):
+    _fields_ = [
+        ("sin6_family", wintypes.USHORT),
+        ("sin6_port", wintypes.USHORT),
+        ("sin6_flowinfo", wintypes.ULONG),
+        ("sin6_addr", IN6_ADDR),
+        ("sin6_scope_id", wintypes.ULONG),
+    ]
+
+
+class SOCKADDR_INET(ctypes.Union):
+    _fields_ = [
+        ("Ipv4", SOCKADDR_IN),
+        ("Ipv6", SOCKADDR_IN6),
+        ("si_family", wintypes.USHORT),
+    ]
+
+
+class NET_LUID(ctypes.Union):
+    _fields_ = [
+        ("Value", ctypes.c_ulonglong),
+    ]
+
+
+class SCOPE_ID(ctypes.Union):
+    _fields_ = [
+        ("Value", wintypes.ULONG),
+    ]
+
+
+class LARGE_INTEGER(ctypes.Union):
+    _fields_ = [
+        ("QuadPart", ctypes.c_longlong),
+    ]
+
+
+class MIB_UNICASTIPADDRESS_ROW(ctypes.Structure):
+    _fields_ = [
+        ("Address", SOCKADDR_INET),
+        ("InterfaceLuid", NET_LUID),
+        ("InterfaceIndex", wintypes.ULONG),
+        ("PrefixOrigin", ctypes.c_int),
+        ("SuffixOrigin", ctypes.c_int),
+        ("ValidLifetime", wintypes.ULONG),
+        ("PreferredLifetime", wintypes.ULONG),
+        ("OnLinkPrefixLength", ctypes.c_ubyte),
+        ("SkipAsSource", wintypes.BOOLEAN),
+        ("DadState", ctypes.c_int),
+        ("ScopeId", SCOPE_ID),
+        ("CreationTimeStamp", LARGE_INTEGER),
+    ]
 
 
 IP_ADAPTER_ADDRESSES_POINTER = ctypes.POINTER(IP_ADAPTER_ADDRESSES)
@@ -202,27 +288,48 @@ def set_windows_static_ipv4(
     interface: NetworkInterface,
     address: StaticIpv4Address,
 ) -> str:
-    _, ip_interface = _wmi_ipv4_interface_for_interface(interface)
-    _set_msft_netipinterface_dhcp(ip_interface, enabled=False)
+    _create_unicast_ipv4_address(interface, address)
+    return ""
 
-    service = _wmi_service(r"root\StandardCimv2")
-    existing = _wmi_manual_ipv4_addresses(service, interface, address)
-    if existing:
-        return ""
 
-    address_class = service.Get("MSFT_NetIPAddress")
-    code = _call_wmi_class_method(
-        service,
-        address_class,
-        "Create",
-        {
-            "AddressFamily": ADDRESS_FAMILY_IPV4,
-            "InterfaceIndex": _require_windows_interface_index(interface),
-            "IPAddress": address.address,
-            "PrefixLength": address.prefix_length,
-        },
+def _set_windows_primary_static_ipv4(
+    interface: NetworkInterface,
+    address: StaticIpv4Address,
+) -> str:
+    service, adapter_config = _wmi_adapter_configuration_for_interface(interface)
+    if adapter_config is None:
+        raise OSError(f"Windows adapter configuration not found: {interface.name}")
+
+    addresses = [address.address]
+    masks = [address.subnet_mask]
+    for existing in _wmi_manual_ipv4_addresses(_wmi_service(r"root\StandardCimv2"), interface):
+        existing_address = str(getattr(existing, "IPAddress", ""))
+        existing_prefix = int(getattr(existing, "PrefixLength", -1))
+        if not existing_address or existing_address == address.address:
+            continue
+        if existing_prefix < 0:
+            continue
+        addresses.append(existing_address)
+        masks.append(StaticIpv4Address(existing_address, existing_prefix, secondary=True).subnet_mask)
+
+    address_values = tuple(addresses)
+    mask_values = tuple(masks)
+    code = _call_wmi_instance_method(
+        adapter_config,
+        "EnableStatic",
+        address_values,
+        mask_values,
+        raise_on_error=False,
     )
-    _check_wmi_return(code, "MSFT_NetIPAddress.Create")
+    if code == 68:
+        code = _call_wmi_object_method(
+            service,
+            adapter_config,
+            "EnableStatic",
+            {"IPAddress": address_values, "SubnetMask": mask_values},
+            raise_on_error=False,
+        )
+    _check_wmi_return(code, "Win32_NetworkAdapterConfiguration.EnableStatic")
     return ""
 
 
@@ -233,8 +340,56 @@ def remove_windows_static_ipv4(
     service = _wmi_service(r"root\StandardCimv2")
     addresses = _wmi_manual_ipv4_addresses(service, interface, address)
     for ip_address in addresses:
-        _delete_wmi_instance(ip_address, "MSFT_NetIPAddress.Delete_")
+        static_address = StaticIpv4Address(
+            str(getattr(ip_address, "IPAddress", "")),
+            int(getattr(ip_address, "PrefixLength", -1)),
+        )
+        _delete_unicast_ipv4_address(interface, static_address)
     return ""
+
+
+def _create_unicast_ipv4_address(
+    interface: NetworkInterface,
+    address: StaticIpv4Address,
+) -> None:
+    iphlpapi = _iphlpapi()
+    row = _unicast_ipv4_row(interface, address)
+    result = iphlpapi.CreateUnicastIpAddressEntry(ctypes.byref(row))
+    if result == 5010:
+        return
+    _check_iphelper_result(result, "CreateUnicastIpAddressEntry")
+
+
+def _delete_unicast_ipv4_address(
+    interface: NetworkInterface,
+    address: StaticIpv4Address,
+) -> None:
+    if not address.address or address.prefix_length < 0:
+        return
+    iphlpapi = _iphlpapi()
+    row = _unicast_ipv4_row(interface, address)
+    result = iphlpapi.DeleteUnicastIpAddressEntry(ctypes.byref(row))
+    if result == ERROR_NOT_FOUND:
+        return
+    _check_iphelper_result(result, "DeleteUnicastIpAddressEntry")
+
+
+def _unicast_ipv4_row(
+    interface: NetworkInterface,
+    address: StaticIpv4Address,
+) -> MIB_UNICASTIPADDRESS_ROW:
+    iphlpapi = _iphlpapi()
+    row = MIB_UNICASTIPADDRESS_ROW()
+    iphlpapi.InitializeUnicastIpAddressEntry(ctypes.byref(row))
+    row.Address.Ipv4.sin_family = AF_INET
+    row.Address.Ipv4.sin_port = 0
+    row.Address.Ipv4.sin_addr.S_un_b[:] = ipaddress.IPv4Address(address.address).packed
+    row.InterfaceIndex = _require_windows_interface_index(interface)
+    row.PrefixOrigin = PREFIX_ORIGIN_MANUAL
+    row.SuffixOrigin = SUFFIX_ORIGIN_MANUAL
+    row.OnLinkPrefixLength = address.prefix_length
+    row.SkipAsSource = False
+    return row
 
 
 def _adapter_identity_for_interface(interface: NetworkInterface) -> dict[str, object]:
@@ -412,15 +567,15 @@ def _wmi_netip_interface_queries(interface: NetworkInterface) -> tuple[str, ...]
 
 def _wmi_adapter_configuration_queries(interface: NetworkInterface) -> tuple[str, ...]:
     queries: list[str] = []
-    if interface.index is not None:
-        queries.append(
-            "SELECT * FROM Win32_NetworkAdapterConfiguration "
-            f"WHERE InterfaceIndex = {int(interface.index)}"
-        )
     if interface.os_id:
         queries.append(
             "SELECT * FROM Win32_NetworkAdapterConfiguration "
             f"WHERE SettingID = {_wql_string(interface.os_id)}"
+        )
+    if interface.index is not None:
+        queries.append(
+            "SELECT * FROM Win32_NetworkAdapterConfiguration "
+            f"WHERE InterfaceIndex = {int(interface.index)}"
         )
     for name in _interface_identity_names(interface):
         queries.append(
@@ -487,17 +642,21 @@ def _wmi_service(namespace: str):
 def _call_wmi_instance_method(
     instance,
     method_name: str,
+    *args,
     raise_on_error: bool = True,
 ) -> int:
     try:
         result = getattr(instance, method_name)
         if callable(result):
-            result = result()
+            result = result(*args)
         code = _wmi_return_code(result)
     except Exception as exc:
         if _is_access_denied_exception(exc):
             raise PermissionError(f"{method_name}: access denied") from exc
-        raise OSError(f"{method_name}: WMI method failed: {exc}") from exc
+        detail = f"{method_name}: WMI method failed"
+        if args:
+            detail += f" with args {args!r}"
+        raise OSError(f"{detail}: {exc}") from exc
 
     if raise_on_error:
         _check_wmi_return(code, method_name)
@@ -521,7 +680,36 @@ def _call_wmi_class_method(
     except Exception as exc:
         if _is_access_denied_exception(exc):
             raise PermissionError(f"{method_name}: access denied") from exc
-        raise OSError(f"{method_name}: WMI class method failed: {exc}") from exc
+        raise OSError(
+            f"{method_name}: WMI class method failed with inputs {input_values!r}: {exc}"
+        ) from exc
+
+    if raise_on_error:
+        _check_wmi_return(code, method_name)
+    return code
+
+
+def _call_wmi_object_method(
+    service,
+    instance,
+    method_name: str,
+    input_values: dict[str, object],
+    raise_on_error: bool = True,
+) -> int:
+    try:
+        method = instance.Methods_(method_name)
+        in_params = method.InParameters.SpawnInstance_()
+        for key, value in input_values.items():
+            setattr(in_params, key, value)
+        path = getattr(getattr(instance, "Path_", None), "Path", "")
+        result = service.ExecMethod_(path, method_name, in_params)
+        code = _wmi_return_code(result)
+    except Exception as exc:
+        if _is_access_denied_exception(exc):
+            raise PermissionError(f"{method_name}: access denied") from exc
+        raise OSError(
+            f"{method_name}: WMI object method failed with inputs {input_values!r}: {exc}"
+        ) from exc
 
     if raise_on_error:
         _check_wmi_return(code, method_name)
@@ -568,6 +756,15 @@ def _wmi_success(code: int) -> bool:
 def _format_wmi_return(method_name: str, code: int) -> str:
     message = WMI_RETURN_MESSAGES.get(code, "unknown WMI return code")
     return f"{method_name}: WMI return code {code} ({message})"
+
+
+def _check_iphelper_result(result: int, function_name: str) -> None:
+    if result == ERROR_SUCCESS:
+        return
+    if result == ERROR_ACCESS_DENIED:
+        raise PermissionError(f"{function_name}: Administrator privileges are required")
+    message = IPHELPER_ERROR_MESSAGES.get(result, "Windows IP Helper API error")
+    raise OSError(f"{function_name}: Windows API error {result} ({message})")
 
 
 def _is_access_denied_exception(exc: Exception) -> bool:
@@ -859,6 +1056,18 @@ def _iphlpapi():
         ctypes.POINTER(wintypes.ULONG),
     ]
     library.GetAdaptersAddresses.restype = wintypes.ULONG
+    library.InitializeUnicastIpAddressEntry.argtypes = [
+        ctypes.POINTER(MIB_UNICASTIPADDRESS_ROW),
+    ]
+    library.InitializeUnicastIpAddressEntry.restype = None
+    library.CreateUnicastIpAddressEntry.argtypes = [
+        ctypes.POINTER(MIB_UNICASTIPADDRESS_ROW),
+    ]
+    library.CreateUnicastIpAddressEntry.restype = wintypes.DWORD
+    library.DeleteUnicastIpAddressEntry.argtypes = [
+        ctypes.POINTER(MIB_UNICASTIPADDRESS_ROW),
+    ]
+    library.DeleteUnicastIpAddressEntry.restype = wintypes.DWORD
     return library
 
 

@@ -6,7 +6,10 @@ from collections.abc import Sequence
 from VVRP.CCmd.models import CommandResult
 from VVRP.CCmd.registry import CommandRegistry
 from VVRP.CCmd.running_config import (
+    _format_cli_token,
+    render_host_interface_config,
     remove_interface_config_command,
+    render_interface_config,
     set_interface_config_command,
 )
 
@@ -21,7 +24,7 @@ from .state import is_admin_down, no_shutdown_interface, shutdown_interface
 
 DEFAULT_IFNET_COMMAND_MODES = ("hidden", "interface")
 VVRP_INTERFACE_SHOW_MODES = ("user", "privileged", "config", "hidden", "interface", "host-interface")
-VVRP_INTERFACE_CONFIG_MODES = ("config", "interface")
+VVRP_INTERFACE_CONFIG_MODES = ("config", "interface", "host-interface")
 INTERFACE_NAME_PATTERN = r".+"
 OS_ADMIN_VERIFY_ATTEMPTS = 10
 OS_ADMIN_VERIFY_DELAY_SECONDS = 0.5
@@ -104,7 +107,7 @@ def register_ifnet_commands(
     registry.parameter_values(("show", "interfaces", "brief"), "name", vvrp_interface_name_values)
 
     @registry.command(
-        "show host interfaces",
+        "show host interface",
         help_text="Show host system interfaces",
         modes=tuple(modes),
     )
@@ -115,7 +118,7 @@ def register_ifnet_commands(
         return CommandResult(message=_format_interfaces_detail(result, ctx.state))
 
     @registry.command(
-        "show host interfaces brief",
+        "show host interface brief",
         help_text="Show brief host system interface summary",
         modes=tuple(modes),
     )
@@ -126,7 +129,7 @@ def register_ifnet_commands(
         return CommandResult(message=_format_interface_brief(result, ctx.state))
 
     @registry.command(
-        f"show host interfaces <name:{INTERFACE_NAME_PATTERN}>",
+        f"show host interface <name:{INTERFACE_NAME_PATTERN}>",
         help_text="Show host system interface detail",
         modes=tuple(modes),
     )
@@ -213,6 +216,23 @@ def register_ifnet_commands(
         no_shutdown_interface(ctx.state, interface.name)
         config_error = remove_interface_config_command(ctx, interface.name, "shutdown")
         return CommandResult(ok=not config_error, message=config_error or result.message)
+
+    @registry.command(
+        "show this",
+        help_text="Show current interface configuration",
+        modes=("interface", "host-interface"),
+    )
+    def show_this(ctx, args):
+        if ctx.mode == "host-interface":
+            rendered = render_host_interface_config(ctx, ctx.mode_label)
+            if not rendered:
+                rendered = f"host interface {_format_cli_token(ctx.mode_label)}\n quit\n"
+            return CommandResult(message=rendered.rstrip())
+
+        rendered = render_interface_config(ctx, ctx.mode_label)
+        if not rendered:
+            rendered = f"interface {_format_cli_token(ctx.mode_label)}\n quit\n"
+        return CommandResult(message=rendered.rstrip())
 
     @registry.context_initializer
     def initialize_ifnet(ctx):

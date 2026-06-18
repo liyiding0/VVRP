@@ -8,7 +8,6 @@ from VVRP.CCmd.registry import CommandRegistry
 from VVRP.CCmd.running_config import (
     RUNNING_CONFIG_LOADING_STATE_KEY,
     remove_host_interface_config_command,
-    render_host_interface_config,
     set_host_interface_config_command,
 )
 from VVRP.DPlane.Windows.npcap import (
@@ -95,15 +94,18 @@ def register_dplane_commands(
         return CommandResult(message=_format_dplane_interfaces_brief(ctx.state, interfaces, devices))
 
     @registry.command(
-        f"host interfaces <name:{HOST_INTERFACE_NAME_PATTERN}>",
+        f"host interface <name:{HOST_INTERFACE_NAME_PATTERN}>",
         help_text="Enter host interface view",
-        modes=("hidden",),
+        modes=("hidden", "host-interface"),
     )
-    def host_interfaces(ctx, args):
+    def host_interface(ctx, args):
         interface = _get_host_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
         if isinstance(interface, CommandResult):
             return interface
-        ctx.push_mode("host-interface", interface.name)
+        if ctx.mode == "host-interface":
+            ctx.mode_stack[-1].label = interface.name
+        else:
+            ctx.push_mode("host-interface", interface.name)
         return CommandResult()
 
     def host_interface_name_values(ctx):
@@ -115,7 +117,7 @@ def register_dplane_commands(
         except InterfaceDiscoveryError:
             return ()
 
-    registry.parameter_values(("host", "interfaces"), "name", host_interface_name_values)
+    registry.parameter_values(("host", "interface"), "name", host_interface_name_values)
 
     @registry.command(
         "import",
@@ -173,18 +175,6 @@ def register_dplane_commands(
         if config_error:
             return CommandResult(ok=False, message=config_error)
         return CommandResult(message="Commit complete")
-
-    @registry.command(
-        "show this",
-        help_text="Show current host interface configuration",
-        modes=("host-interface",),
-    )
-    def show_this(ctx, args):
-        rendered = render_host_interface_config(ctx, ctx.mode_label)
-        if not rendered:
-            rendered = f"host interfaces {_format_cli_token(ctx.mode_label)}\n quit\n"
-        return CommandResult(message=rendered.rstrip())
-
 
 def _list_host_interfaces(
     ctx,

@@ -213,8 +213,20 @@ def render_host_interface_config(ctx: CliContext, interface_name: str) -> str:
     if not commands:
         return ""
 
-    lines = [f"host interfaces {_format_cli_token(interface_name)}"]
+    lines = [f"host interface {_format_cli_token(interface_name)}"]
     for key in _ordered_host_interface_command_keys(commands):
+        lines.append(f" {commands[key]}")
+    lines.append(" quit")
+    return "\n".join(lines) + "\n"
+
+
+def render_interface_config(ctx: CliContext, interface_name: str) -> str:
+    commands = interface_config_commands(ctx, interface_name)
+    if not commands:
+        return ""
+
+    lines = [f"interface {_format_cli_token(interface_name)}"]
+    for key in _ordered_interface_command_keys(commands):
         lines.append(f" {commands[key]}")
     lines.append(" quit")
     return "\n".join(lines) + "\n"
@@ -233,13 +245,9 @@ def render_running_configuration(ctx: CliContext) -> str:
             lines.extend(rendered.splitlines())
 
     for interface_name in _ordered_interface_names(store["interfaces"]):
-        commands = store["interfaces"][interface_name]
-        if not commands:
-            continue
-        lines.append(f"interface {_format_cli_token(interface_name)}")
-        for key in _ordered_interface_command_keys(commands):
-            lines.append(f" {commands[key]}")
-        lines.append(" quit")
+        rendered = render_interface_config(ctx, interface_name).rstrip()
+        if rendered:
+            lines.extend(rendered.splitlines())
 
     if not lines:
         return ""
@@ -280,14 +288,9 @@ def _dispatch_line_silently(ctx: CliContext, registry, line: str):
 
 def _is_interface_command(line: str) -> bool:
     return (
-        _is_host_interfaces_command(line)
-        or _is_host_interface_command(line)
+        _is_host_interface_command(line)
         or _is_legacy_interface_command(line)
     )
-
-
-def _is_host_interfaces_command(line: str) -> bool:
-    return line == "host interfaces" or line.startswith("host interfaces ")
 
 
 def _is_host_interface_command(line: str) -> bool:
@@ -376,9 +379,6 @@ def _enter_hidden_mode(ctx: CliContext) -> None:
 
 def _prepare_running_config_mode(ctx: CliContext, line: str, is_indented: bool) -> str:
     if is_indented:
-        return line
-    if _is_host_interfaces_command(line):
-        _enter_hidden_mode(ctx)
         return line
     if _is_host_interface_command(line):
         _enter_hidden_mode(ctx)

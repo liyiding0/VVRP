@@ -252,6 +252,22 @@ def register_ip_commands(
         return CommandResult(message=_format_one_ip_interface_detail(interface, ctx.state))
 
     @registry.command(
+        "ip",
+        help_text="Configure IP features",
+        modes=("interface", "host-interface"),
+    )
+    def ip_command_group(ctx, args):
+        return _format_command_group_help(registry, ctx, "ip ")
+
+    @registry.command(
+        "no",
+        help_text="Negate a command or set its defaults",
+        modes=("interface", "host-interface"),
+    )
+    def no_command_group(ctx, args):
+        return _format_command_group_help(registry, ctx, "no ")
+
+    @registry.command(
         "ip address dhcp-alloc",
         help_text="Obtain an IPv4 address with DHCP",
         modes=("host-interface",),
@@ -391,6 +407,20 @@ def _current_host_interface(
     ifnet_admin_provider: InterfaceAdminProvider | None,
 ) -> NetworkInterface | CommandResult:
     return _get_interface(ctx, ifnet_provider, ifnet_admin_provider, ctx.mode_label)
+
+
+def _format_command_group_help(
+    registry: CommandRegistry,
+    ctx,
+    prefix: str,
+) -> CommandResult:
+    from VVRP.CCmd.parser import CommandParser
+
+    candidates = CommandParser(registry).help_candidates(prefix, mode=ctx.mode, ctx=ctx)
+    lines = [f"Available {prefix.strip()} commands:"]
+    for candidate in candidates:
+        lines.append(f"  {candidate.display:<16} {candidate.help_text}".rstrip())
+    return CommandResult(message="\n".join(lines))
 
 
 def _current_vvrp_interface(

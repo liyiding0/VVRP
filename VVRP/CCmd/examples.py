@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from VVRP.ARP import ArpTable, register_arp_commands
 from VVRP.DPlane import register_dplane_commands
 from VVRP.DPlane.Windows.npcap import NpcapLibrary
 from VVRP.IFNET import register_ifnet_commands
@@ -31,6 +32,7 @@ def build_default_registry(
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
     ip_dhcp_provider: DhcpClientProvider | None = None,
     ip_static_ipv4_provider: StaticIpv4Provider | None = None,
+    arp_table: ArpTable | None = None,
     dplane_npcap_library: NpcapLibrary | None = None,
     enable_host_interface_config: bool = False,
 ) -> CommandRegistry:
@@ -72,7 +74,7 @@ def build_default_registry(
         provider=ifnet_provider,
         admin_provider=ifnet_admin_provider,
         modes=("hidden", "interface", "host-interface"),
-        register_interface_config_command=enable_host_interface_config,
+        register_interface_config_command=False,
     )
     register_dplane_commands(
         registry,
@@ -88,6 +90,11 @@ def build_default_registry(
         ifnet_admin_provider=ifnet_admin_provider,
         dhcp_provider=ip_dhcp_provider,
         static_ipv4_provider=ip_static_ipv4_provider,
+    )
+    register_arp_commands(
+        registry,
+        table=arp_table,
+        modes=SHOW_MODES,
     )
 
     @registry.command(
