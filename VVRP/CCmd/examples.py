@@ -21,7 +21,7 @@ from .running_config import (
 
 
 USER_MODES = ("user", "privileged")
-SHOW_MODES = ("user", "privileged", "config", "hidden", "host-interface")
+SHOW_MODES = ("user", "privileged", "config", "hidden", "interface", "host-interface")
 ALL_MODES = ("user", "privileged", "config", "interface", "hidden", "host-interface")
 HIDDEN_ENTRY_MODES = ("user", "privileged", "config", "interface", "host-interface")
 

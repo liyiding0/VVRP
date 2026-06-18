@@ -6,16 +6,21 @@ from collections.abc import Sequence
 from VVRP.CCmd.models import CommandResult
 from VVRP.CCmd.registry import CommandRegistry
 from VVRP.CCmd.running_config import (
+    host_interface_config_commands,
     interface_config_commands,
+    remove_host_interface_config_command,
+    remove_host_interface_config_prefix,
     remove_interface_config_command,
     remove_interface_config_prefix,
+    set_host_interface_config_command,
     set_interface_config_command,
 )
 from VVRP.IFNET.admin import InterfaceAdminProvider
 from VVRP.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
+from VVRP.IFNET.imports import imported_interfaces
 from VVRP.IFNET.inventory import get_ifnet_manager
 from VVRP.IFNET.models import InterfaceAddress, NetworkInterface
-from VVRP.IFNET.state import is_admin_down
+from VVRP.IFNET.state import is_admin_down, set_interface_addresses
 
 from .dhcp import DhcpClientProvider, OsDhcpClientProvider
 from .ping import PING_ARGUMENT_PATTERN, run_ping
@@ -249,10 +254,10 @@ def register_ip_commands(
     @registry.command(
         "ip address dhcp-alloc",
         help_text="Obtain an IPv4 address with DHCP",
-        modes=("interface",),
+        modes=("host-interface",),
     )
     def ip_address_dhcp_alloc(ctx, args):
-        interface = _current_interface(ctx, ifnet_provider, ifnet_admin_provider)
+        interface = _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(interface, CommandResult):
             return interface
         unsupported = _unsupported_dhcp_interface(interface)
@@ -265,10 +270,10 @@ def register_ip_commands(
         refresh_error = _refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
         if refresh_error is not None:
             return refresh_error
-        remove_error = remove_interface_config_prefix(ctx, interface.name, "ip-address:")
+        remove_error = remove_host_interface_config_prefix(ctx, interface.name, "ip-address:")
         if remove_error:
             return CommandResult(ok=False, message=remove_error)
-        config_error = set_interface_config_command(
+        config_error = set_host_interface_config_command(
             ctx,
             interface.name,
             "ip-address-dhcp",
@@ -279,10 +284,10 @@ def register_ip_commands(
     @registry.command(
         "no ip address dhcp-alloc",
         help_text="Disable DHCP address allocation",
-        modes=("interface",),
+        modes=("host-interface",),
     )
     def no_ip_address_dhcp_alloc(ctx, args):
-        interface = _current_interface(ctx, ifnet_provider, ifnet_admin_provider)
+        interface = _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(interface, CommandResult):
             return interface
         unsupported = _unsupported_dhcp_interface(interface)
@@ -295,7 +300,7 @@ def register_ip_commands(
         refresh_error = _refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
         if refresh_error is not None:
             return refresh_error
-        config_error = remove_interface_config_command(
+        config_error = remove_host_interface_config_command(
             ctx,
             interface.name,
             "ip-address-dhcp",
@@ -305,7 +310,7 @@ def register_ip_commands(
     @registry.command(
         f"ip address <ip_address:{IPV4_ADDRESS_PATTERN}> <mask:{IPV4_MASK_PATTERN}>",
         help_text="Configure a primary static IPv4 address",
-        modes=("interface",),
+        modes=("interface", "host-interface"),
     )
     def ip_address_static(ctx, args):
         return _set_static_ipv4(
@@ -321,7 +326,7 @@ def register_ip_commands(
     @registry.command(
         f"ip address <ip_address:{IPV4_ADDRESS_PATTERN}> <mask:{IPV4_MASK_PATTERN}> sub",
         help_text="Configure a secondary static IPv4 address",
-        modes=("interface",),
+        modes=("interface", "host-interface"),
     )
     def ip_address_static_sub(ctx, args):
         return _set_static_ipv4(
@@ -337,7 +342,7 @@ def register_ip_commands(
     @registry.command(
         "no ip address",
         help_text="Remove all static IPv4 addresses",
-        modes=("interface",),
+        modes=("interface", "host-interface"),
     )
     def no_ip_address_all(ctx, args):
         return _remove_static_ipv4(
@@ -350,7 +355,7 @@ def register_ip_commands(
     @registry.command(
         f"no ip address <ip_address:{IPV4_ADDRESS_PATTERN}> <mask:{IPV4_MASK_PATTERN}>",
         help_text="Remove a static IPv4 address",
-        modes=("interface",),
+        modes=("interface", "host-interface"),
     )
     def no_ip_address_static(ctx, args):
         return _remove_static_ipv4(
@@ -366,7 +371,7 @@ def register_ip_commands(
     @registry.command(
         f"no ip address <ip_address:{IPV4_ADDRESS_PATTERN}> <mask:{IPV4_MASK_PATTERN}> sub",
         help_text="Remove a secondary static IPv4 address",
-        modes=("interface",),
+        modes=("interface", "host-interface"),
     )
     def no_ip_address_static_sub(ctx, args):
         return _remove_static_ipv4(
@@ -380,23 +385,30 @@ def register_ip_commands(
         )
 
 
+def _current_host_interface(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+) -> NetworkInterface | CommandResult:
+    return _get_interface(ctx, ifnet_provider, ifnet_admin_provider, ctx.mode_label)
+
+
+def _current_vvrp_interface(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+) -> NetworkInterface | CommandResult:
+    return _get_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider, ctx.mode_label)
+
+
 def _current_interface(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
 ) -> NetworkInterface | CommandResult:
-    try:
-        interface = get_ifnet_manager(
-            ctx.state,
-            provider=ifnet_provider,
-            admin_provider=ifnet_admin_provider,
-        ).get_interface(ctx.mode_label)
-    except InterfaceDiscoveryError as exc:
-        return CommandResult(ok=False, message=f"% {exc}")
-
-    if interface is None:
-        return CommandResult(ok=False, message=f"% Interface not found: {ctx.mode_label}")
-    return interface
+    if ctx.mode == "host-interface":
+        return _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    return _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
 
 
 def _list_interfaces(
@@ -412,6 +424,17 @@ def _list_interfaces(
         ).list_interfaces()
     except InterfaceDiscoveryError as exc:
         return CommandResult(ok=False, message=f"% {exc}")
+
+
+def _list_vvrp_interfaces(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+) -> tuple[NetworkInterface, ...] | CommandResult:
+    interfaces = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    if isinstance(interfaces, CommandResult):
+        return interfaces
+    return imported_interfaces(ctx.state, interfaces)
 
 
 def _get_interface(
@@ -432,6 +455,21 @@ def _get_interface(
     if interface is None:
         return CommandResult(ok=False, message=f"% Interface not found: {name}")
     return interface
+
+
+def _get_vvrp_interface(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+    name: str,
+) -> NetworkInterface | CommandResult:
+    interfaces = _list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    if isinstance(interfaces, CommandResult):
+        return interfaces
+    for interface in interfaces:
+        if interface.name == name:
+            return interface
+    return CommandResult(ok=False, message=f"% Interface not found: {name}")
 
 
 def _unsupported_dhcp_interface(interface: NetworkInterface) -> CommandResult | None:
@@ -467,7 +505,36 @@ def _set_static_ipv4(
     mask: str,
     secondary: bool,
 ) -> CommandResult:
-    interface = _current_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    if ctx.mode == "host-interface":
+        return _set_host_static_ipv4(
+            ctx,
+            ifnet_provider,
+            ifnet_admin_provider,
+            static_ipv4_provider,
+            ip_address,
+            mask,
+            secondary,
+        )
+    return _set_vvrp_static_ipv4(
+        ctx,
+        ifnet_provider,
+        ifnet_admin_provider,
+        ip_address,
+        mask,
+        secondary,
+    )
+
+
+def _set_host_static_ipv4(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+    static_ipv4_provider: StaticIpv4Provider,
+    ip_address: str,
+    mask: str,
+    secondary: bool,
+) -> CommandResult:
+    interface = _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interface, CommandResult):
         return interface
     unsupported = _unsupported_static_ipv4_interface(interface)
@@ -496,6 +563,52 @@ def _set_static_ipv4(
     refresh_error = _refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
     if refresh_error is not None:
         return refresh_error
+    dhcp_error = remove_host_interface_config_command(ctx, interface.name, "ip-address-dhcp")
+    if dhcp_error:
+        return CommandResult(ok=False, message=dhcp_error)
+    line = f"ip address {address.address} {address.prefix_length}"
+    if address.secondary:
+        line += " sub"
+    config_error = set_host_interface_config_command(
+        ctx,
+        interface.name,
+        _static_ipv4_config_key(address),
+        line,
+    )
+    return CommandResult(ok=not config_error, message=config_error or result.message)
+
+
+def _set_vvrp_static_ipv4(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+    ip_address: str,
+    mask: str,
+    secondary: bool,
+) -> CommandResult:
+    interface = _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    if isinstance(interface, CommandResult):
+        return interface
+    unsupported = _unsupported_static_ipv4_interface(interface)
+    if unsupported is not None:
+        return unsupported
+    interfaces = _list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    if isinstance(interfaces, CommandResult):
+        return interfaces
+
+    try:
+        address = parse_static_ipv4_address(ip_address, mask, secondary=secondary)
+        validate_static_ipv4_address_for_interface(address, interface, interfaces)
+    except StaticIpv4ValidationError as exc:
+        return CommandResult(ok=False, message=str(exc))
+
+    current = list(static_ipv4_addresses_from_interface(interface))
+    if address.secondary:
+        current.append(address)
+    else:
+        current = [address, *[item for item in current if item.secondary]]
+    _apply_vvrp_static_ipv4_addresses(ctx, interface.name, tuple(current))
+
     dhcp_error = remove_interface_config_command(ctx, interface.name, "ip-address-dhcp")
     if dhcp_error:
         return CommandResult(ok=False, message=dhcp_error)
@@ -508,7 +621,7 @@ def _set_static_ipv4(
         _static_ipv4_config_key(address),
         line,
     )
-    return CommandResult(ok=not config_error, message=config_error or result.message)
+    return CommandResult(ok=not config_error, message=config_error)
 
 
 def _remove_static_ipv4(
@@ -520,7 +633,36 @@ def _remove_static_ipv4(
     mask: str | None = None,
     secondary: bool = False,
 ) -> CommandResult:
-    interface = _current_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    if ctx.mode == "host-interface":
+        return _remove_host_static_ipv4(
+            ctx,
+            ifnet_provider,
+            ifnet_admin_provider,
+            static_ipv4_provider,
+            ip_address,
+            mask,
+            secondary,
+        )
+    return _remove_vvrp_static_ipv4(
+        ctx,
+        ifnet_provider,
+        ifnet_admin_provider,
+        ip_address,
+        mask,
+        secondary,
+    )
+
+
+def _remove_host_static_ipv4(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+    static_ipv4_provider: StaticIpv4Provider,
+    ip_address: str | None = None,
+    mask: str | None = None,
+    secondary: bool = False,
+) -> CommandResult:
+    interface = _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interface, CommandResult):
         return interface
     unsupported = _unsupported_static_ipv4_interface(interface)
@@ -531,7 +673,11 @@ def _remove_static_ipv4(
     if ip_address is not None and mask is not None:
         try:
             address = parse_static_ipv4_address(ip_address, mask, secondary=secondary)
-            _validate_static_ipv4_removal_target(address, interface, ctx)
+            _validate_static_ipv4_removal_target(
+                address,
+                interface,
+                host_interface_config_commands(ctx, interface.name),
+            )
         except StaticIpv4ValidationError as exc:
             return CommandResult(ok=False, message=str(exc))
 
@@ -542,14 +688,84 @@ def _remove_static_ipv4(
     if refresh_error is not None:
         return refresh_error
     if address is None:
-        config_error = remove_interface_config_prefix(ctx, interface.name, "ip-address:")
+        config_error = remove_host_interface_config_prefix(ctx, interface.name, "ip-address:")
     else:
-        config_error = remove_interface_config_command(
+        config_error = remove_host_interface_config_command(
             ctx,
             interface.name,
             _static_ipv4_config_key(address),
         )
     return CommandResult(ok=not config_error, message=config_error or result.message)
+
+
+def _remove_vvrp_static_ipv4(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+    ip_address: str | None = None,
+    mask: str | None = None,
+    secondary: bool = False,
+) -> CommandResult:
+    interface = _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    if isinstance(interface, CommandResult):
+        return interface
+    unsupported = _unsupported_static_ipv4_interface(interface)
+    if unsupported is not None:
+        return unsupported
+
+    address = None
+    if ip_address is not None and mask is not None:
+        try:
+            address = parse_static_ipv4_address(ip_address, mask, secondary=secondary)
+            _validate_static_ipv4_removal_target(
+                address,
+                interface,
+                interface_config_commands(ctx, interface.name),
+            )
+        except StaticIpv4ValidationError as exc:
+            return CommandResult(ok=False, message=str(exc))
+
+    if address is None:
+        _apply_vvrp_static_ipv4_addresses(ctx, interface.name, ())
+        config_error = remove_interface_config_prefix(ctx, interface.name, "ip-address:")
+        return CommandResult(ok=not config_error, message=config_error)
+
+    current = tuple(
+        item
+        for item in static_ipv4_addresses_from_interface(interface)
+        if not (
+            item.address == address.address
+            and item.prefix_length == address.prefix_length
+            and item.secondary == address.secondary
+        )
+    )
+    _apply_vvrp_static_ipv4_addresses(ctx, interface.name, current)
+    config_error = remove_interface_config_command(
+        ctx,
+        interface.name,
+        _static_ipv4_config_key(address),
+    )
+    return CommandResult(ok=not config_error, message=config_error)
+
+
+def _apply_vvrp_static_ipv4_addresses(
+    ctx,
+    interface_name: str,
+    addresses: tuple[StaticIpv4Address, ...],
+) -> None:
+    set_interface_addresses(
+        ctx.state,
+        interface_name,
+        tuple(_interface_address_from_static(address) for address in addresses),
+    )
+
+
+def _interface_address_from_static(address: StaticIpv4Address) -> InterfaceAddress:
+    return InterfaceAddress(
+        family="ipv4",
+        address=address.address,
+        prefix_length=address.prefix_length,
+    )
 
 
 def _static_ipv4_config_key(address) -> str:
@@ -562,7 +778,7 @@ def _static_ipv4_config_key(address) -> str:
 def _validate_static_ipv4_removal_target(
     address: StaticIpv4Address,
     interface: NetworkInterface,
-    ctx,
+    commands: dict[str, str],
 ) -> None:
     validate_static_ipv4_interface_policy(address, interface)
     configured = static_ipv4_addresses_from_interface(interface)
@@ -578,7 +794,6 @@ def _validate_static_ipv4_removal_target(
     if address.secondary:
         return
 
-    commands = interface_config_commands(ctx, interface.name)
     configured_secondary = any(
         key.startswith("ip-address:") and key.endswith(":sub")
         for key in commands

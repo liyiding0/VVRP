@@ -182,6 +182,22 @@ def remove_host_interface_config_command(
     return _autosave(ctx)
 
 
+def remove_host_interface_config_prefix(
+    ctx: CliContext,
+    interface_name: str,
+    prefix: str,
+    autosave: bool = False,
+) -> str:
+    commands = _host_interface_commands(ctx, interface_name)
+    for key in tuple(commands):
+        if key.startswith(prefix):
+            commands.pop(key, None)
+    _drop_empty_host_interface(ctx, interface_name)
+    if not autosave:
+        return ""
+    return _autosave(ctx)
+
+
 def host_interface_config_commands(
     ctx: CliContext,
     interface_name: str,
@@ -220,7 +236,7 @@ def render_running_configuration(ctx: CliContext) -> str:
         commands = store["interfaces"][interface_name]
         if not commands:
             continue
-        lines.append(f"host interface {_format_cli_token(interface_name)}")
+        lines.append(f"interface {_format_cli_token(interface_name)}")
         for key in _ordered_interface_command_keys(commands):
             lines.append(f" {commands[key]}")
         lines.append(" quit")
@@ -368,8 +384,8 @@ def _prepare_running_config_mode(ctx: CliContext, line: str, is_indented: bool) 
         _enter_hidden_mode(ctx)
         return line
     if _is_legacy_interface_command(line):
-        _enter_hidden_mode(ctx)
-        return f"host {line}"
+        _enter_config_mode(ctx)
+        return line
     _enter_config_mode(ctx)
     return line
 
@@ -403,7 +419,15 @@ def _ordered_host_interface_command_keys(commands: dict[str, str]) -> tuple[str,
     def sort_key(key: str) -> tuple[int, str]:
         if key == "import":
             return (0, key)
-        return (1, key)
+        if key == "shutdown":
+            return (1, key)
+        if key == "ip-address-dhcp":
+            return (2, key)
+        if key == "ip-address:primary":
+            return (3, key)
+        if key.startswith("ip-address:"):
+            return (4, key)
+        return (5, key)
 
     return tuple(sorted(commands, key=sort_key))
 

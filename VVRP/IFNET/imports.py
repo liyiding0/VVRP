@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from .models import NetworkInterface
+from .state import apply_vvrp_interface_state
 
 
 IFNET_IMPORT_STATE_KEY = "ifnet.imports"
@@ -44,7 +45,11 @@ def imported_interfaces(
 ) -> tuple[NetworkInterface, ...]:
     imported = imported_interface_names(state)
     return assign_imported_ifnet_indices(
-        tuple(interface for interface in host_interfaces if interface.name in imported)
+        tuple(
+            apply_vvrp_interface_state(state, interface)
+            for interface in host_interfaces
+            if interface.name in imported
+        )
     )
 
 
