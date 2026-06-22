@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import time
 import unittest
 
 from VVRP.ETHERNET import (
@@ -23,6 +24,10 @@ from VVRP.ETHERNET import (
 )
 from VVRP.CCmd import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
 from VVRP.CCmd.examples import build_default_registry
+from VVRP.DPlane.frame_debug import DplaneEthernetFrameDebugService
+from VVRP.DPlane.Windows.npcap import NpcapDevice
+from VVRP.IFNET.imports import commit_imports, stage_import_interface
+from VVRP.IFNET import InterfaceAddress, NetworkInterface
 
 
 class FakePacketPort:
@@ -49,6 +54,39 @@ class FakePacketPort:
 
     def set_filter(self, expression: str) -> None:
         self.filters.append(expression)
+
+
+def fake_interface() -> NetworkInterface:
+    return NetworkInterface(
+        name="eth4",
+        ifnet_index=1,
+        index=7,
+        kind="ethernet",
+        is_up=True,
+        mac_address="00:11:22:33:44:55",
+        mtu=1500,
+        speed_mbps=1000,
+        addresses=(InterfaceAddress(family="ipv4", address="10.0.0.1", prefix_length=24),),
+        os_id="{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
+    )
+
+
+class FakeInterfaceProvider:
+    def list_interfaces(self) -> tuple[NetworkInterface, ...]:
+        return (fake_interface(),)
+
+
+class FakeNpcapLibrary:
+    def list_devices(self) -> tuple[NpcapDevice, ...]:
+        return (NpcapDevice(name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"),)
+
+
+class DebugPacketPort(FakePacketPort):
+    def recv_frame(self) -> bytes | None:
+        frame = super().recv_frame()
+        if frame is None:
+            time.sleep(0.01)
+        return frame
 
 
 class EthernetFrameTests(unittest.TestCase):
@@ -186,6 +224,51 @@ class EthernetDebugTests(unittest.TestCase):
         self.assertFalse(is_ethernet_frame_brief_debug_enabled(ctx))
         self.assertTrue(dispatch_line(ctx, registry, "show debugging ethernet").executed)
         self.assertIn("off", output.getvalue())
+
+    def test_debugging_ethernet_command_starts_dplane_listener(self):
+        raw = build_ethernet_ii_frame(
+            destination="ff:ff:ff:ff:ff:ff",
+            source="00:11:22:33:44:55",
+            ethertype=ETHERTYPE_ARP,
+            payload=b"arp",
+        )
+        ports: list[DebugPacketPort] = []
+
+        def port_factory(device_name):
+            port = DebugPacketPort(frames=(raw,))
+            ports.append(port)
+            return port
+
+        service = DplaneEthernetFrameDebugService(
+            ifnet_provider=FakeInterfaceProvider(),
+            npcap_library=FakeNpcapLibrary(),
+            port_factory=port_factory,
+            packet_filter="ether proto 0x0806",
+        )
+        registry = CommandRegistry()
+        register_ethernet_commands(
+            registry,
+            frame_debug_start=service.start,
+            frame_debug_stop=service.stop,
+            frame_debug_status=service.status,
+        )
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        ctx.push_mode("privileged")
+        stage_import_interface(ctx.state, "eth4")
+        commit_imports(ctx.state)
+
+        self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)
+
+        deadline = time.time() + 1
+        while "ETHERNET/FRAME: eth4 RX" not in output.getvalue() and time.time() < deadline:
+            time.sleep(0.01)
+
+        self.assertIn("1 listener(s) running", output.getvalue())
+        self.assertIn("ETHERNET/FRAME: eth4 RX", output.getvalue())
+        self.assertEqual(["ether proto 0x0806"], ports[0].filters)
+
+        self.assertTrue(dispatch_line(ctx, registry, "no debugging ethernet frame brief").executed)
 
         output.truncate(0)
         output.seek(0)

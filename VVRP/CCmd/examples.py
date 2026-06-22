@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from VVRP.ARP import ArpTable, register_arp_commands
 from VVRP.DPlane import register_dplane_commands
+from VVRP.DPlane.frame_debug import DplaneEthernetFrameDebugService
 from VVRP.DPlane.Windows.npcap import NpcapLibrary
 from VVRP.ETHERNET import register_ethernet_commands
 from VVRP.IFNET import register_ifnet_commands
@@ -38,6 +39,11 @@ def build_default_registry(
     enable_host_interface_config: bool = False,
 ) -> CommandRegistry:
     registry = CommandRegistry()
+    ethernet_frame_debug = DplaneEthernetFrameDebugService(
+        ifnet_provider=ifnet_provider,
+        ifnet_admin_provider=ifnet_admin_provider,
+        npcap_library=dplane_npcap_library,
+    )
 
     @registry.command("show", help_text="Show command group", modes=SHOW_MODES)
     def show(ctx, args):
@@ -100,6 +106,9 @@ def build_default_registry(
     register_ethernet_commands(
         registry,
         modes=("privileged", "config", "hidden", "interface", "host-interface"),
+        frame_debug_start=ethernet_frame_debug.start,
+        frame_debug_stop=ethernet_frame_debug.stop,
+        frame_debug_status=ethernet_frame_debug.status,
     )
 
     @registry.command(
