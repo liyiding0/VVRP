@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ccmd = "VVRP.CCmd.__main__:main"
+ccmd = "src.CCmd.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["VVRP*"]
+include = ["src*"]

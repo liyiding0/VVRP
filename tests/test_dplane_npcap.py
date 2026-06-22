@@ -3,8 +3,8 @@ from __future__ import annotations
 import ctypes
 import unittest
 
-from VVRP.DPlane import CapturedFrame
-from VVRP.DPlane.Windows.npcap import (
+from src.DPlane import CapturedFrame
+from src.DPlane.Windows.npcap import (
     NpcapDevice,
     NpcapError,
     NpcapLibrary,
@@ -13,7 +13,7 @@ from VVRP.DPlane.Windows.npcap import (
     _PcapIfPointer,
     find_npcap_device_for_interface,
 )
-from VVRP.IFNET import NetworkInterface
+from src.IFNET import NetworkInterface
 
 
 def fake_interface() -> NetworkInterface:

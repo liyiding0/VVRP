@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from VVRP.CCmd import (
+from src.CCmd import (
     CliContext,
     CommandParser,
     CommandRegistry,
@@ -18,10 +18,10 @@ from VVRP.CCmd import (
     TokenStyle,
     dispatch_line,
 )
-from VVRP.ARP import ARP_REPLY, ArpPacket
-from VVRP.CCmd.examples import build_default_registry
-from VVRP.CCmd.help import format_help
-from VVRP.CCmd.interactive import (
+from src.ARP import ARP_REPLY, ArpPacket
+from src.CCmd.examples import build_default_registry
+from src.CCmd.help import format_help
+from src.CCmd.interactive import (
     _PromptToolkitAnsiOutput,
     _format_colored_help_screen_update,
     _format_help_screen_update,
@@ -29,37 +29,37 @@ from VVRP.CCmd.interactive import (
     _render_input_with_token_styles,
     run_interactive_cli,
 )
-from VVRP.CCmd.models import TokenStatus
-from VVRP.CCmd.running_config import (
+from src.CCmd.models import TokenStatus
+from src.CCmd.running_config import (
     load_saved_configuration,
     render_running_configuration,
     set_interface_config_command,
     set_saved_configuration_path,
 )
-from VVRP.IFNET.Ethernet import is_ethernet_interface
-from VVRP.IFNET.Ethernet.admin import EthernetAdminProvider
-from VVRP.IFNET.Ethernet.dhcp import EthernetDhcpClientProvider
-from VVRP.IFNET.Ethernet.static import EthernetStaticIpv4Provider
-from VVRP.IFNET.Loopback import is_loopback_interface
-from VVRP.IFNET.Loopback.static import LoopbackStaticIpv4Provider
-from VVRP.DPlane.Windows.npcap import NpcapDevice
-from VVRP.IFNET import (
+from src.IFNET.Ethernet import is_ethernet_interface
+from src.IFNET.Ethernet.admin import EthernetAdminProvider
+from src.IFNET.Ethernet.dhcp import EthernetDhcpClientProvider
+from src.IFNET.Ethernet.static import EthernetStaticIpv4Provider
+from src.IFNET.Loopback import is_loopback_interface
+from src.IFNET.Loopback.static import LoopbackStaticIpv4Provider
+from src.DPlane.Windows.npcap import NpcapDevice
+from src.IFNET import (
     InterfaceAddress,
     InterfaceAdminResult,
     NetworkInterface,
     register_ifnet_commands,
 )
-from VVRP.IFNET.discovery import (
+from src.IFNET.discovery import (
     assign_ifnet_indices,
     _interface_index,
     _interface_index_map,
     _interface_metadata_map,
 )
-from VVRP.IFNET.imports import commit_imports, stage_import_interface
-from VVRP.IFNET.state import set_interface_addresses, set_interface_mac_address
-from VVRP.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
-from VVRP.IP.dhcp import IP_DhcpClientResult
-from VVRP.IP.ICMP.ping import (
+from src.IFNET.imports import commit_imports, stage_import_interface
+from src.IFNET.state import set_interface_addresses, set_interface_mac_address
+from src.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
+from src.IP.dhcp import IP_DhcpClientResult
+from src.IP.ICMP.ping import (
     ICMP_SocketPinger,
     ICMP_PingOptions,
     ICMP_PingReply,
@@ -73,8 +73,8 @@ from VVRP.IP.ICMP.ping import (
     ICMP_parse_ping_arguments,
     ICMP_run_ping,
 )
-from VVRP.IP.ICMP.packet import g_ICMP_CODE, g_ICMP_ECHO_REPLY, ICMP_checksum
-from VVRP.IP.static import (
+from src.IP.ICMP.packet import g_ICMP_CODE, g_ICMP_ECHO_REPLY, ICMP_checksum
+from src.IP.static import (
     IP_StaticIpv4Address,
     IP_StaticIpv4Result,
     IP_StaticIpv4ValidationError,
@@ -492,10 +492,10 @@ class InteractiveTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with (
-                patch("VVRP.CCmd.interactive.sys.stdin.isatty", return_value=False),
-                patch("VVRP.CCmd.interactive.sys.stdout.isatty", return_value=False),
+                patch("src.CCmd.interactive.sys.stdin.isatty", return_value=False),
+                patch("src.CCmd.interactive.sys.stdout.isatty", return_value=False),
                 patch("builtins.input", side_effect=["show version", EOFError]),
-                patch("VVRP.CCmd.models.sys.stdout", output),
+                patch("src.CCmd.models.sys.stdout", output),
             ):
                 result = run_interactive_cli(
                     build_default_registry(),
@@ -519,10 +519,10 @@ class InteractiveTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with (
-                patch("VVRP.CCmd.interactive.sys.stdin.isatty", return_value=False),
-                patch("VVRP.CCmd.interactive.sys.stdout.isatty", return_value=False),
+                patch("src.CCmd.interactive.sys.stdin.isatty", return_value=False),
+                patch("src.CCmd.interactive.sys.stdout.isatty", return_value=False),
                 patch("builtins.input", side_effect=fake_input),
-                patch("VVRP.CCmd.models.sys.stdout", output),
+                patch("src.CCmd.models.sys.stdout", output),
             ):
                 result = run_interactive_cli(
                     build_default_registry(),
@@ -537,13 +537,13 @@ class InteractiveTests(unittest.TestCase):
 
 class ModuleBoundaryTests(unittest.TestCase):
     def test_ping_module_lives_in_ip_not_ccmd(self):
-        self.assertIsNone(importlib.util.find_spec("VVRP.CCmd.ping"))
-        self.assertIsNotNone(importlib.util.find_spec("VVRP.IP.ICMP.ping"))
-        self.assertIsNotNone(importlib.util.find_spec("VVRP.IFNET"))
-        self.assertIsNotNone(importlib.util.find_spec("VVRP.ETHERNET"))
-        self.assertIsNotNone(importlib.util.find_spec("VVRP.ARP"))
-        self.assertIsNotNone(importlib.util.find_spec("VVRP.IFNET.Ethernet"))
-        self.assertIsNotNone(importlib.util.find_spec("VVRP.IFNET.Loopback"))
+        self.assertIsNone(importlib.util.find_spec("src.CCmd.ping"))
+        self.assertIsNotNone(importlib.util.find_spec("src.IP.ICMP.ping"))
+        self.assertIsNotNone(importlib.util.find_spec("src.IFNET"))
+        self.assertIsNotNone(importlib.util.find_spec("src.ETHERNET"))
+        self.assertIsNotNone(importlib.util.find_spec("src.ARP"))
+        self.assertIsNotNone(importlib.util.find_spec("src.IFNET.Ethernet"))
+        self.assertIsNotNone(importlib.util.find_spec("src.IFNET.Loopback"))
 
     def test_ifnet_type_specific_classifiers_live_in_subpackages(self):
         self.assertTrue(is_ethernet_interface("eth3", "AA:BB:CC:DD:EE:FF"))
@@ -823,9 +823,9 @@ class IFNETCommandTests(unittest.TestCase):
         }
 
         with (
-            patch("VVRP.IFNET.discovery.platform.system", return_value="Windows"),
+            patch("src.IFNET.discovery.platform.system", return_value="Windows"),
             patch(
-                "VVRP.IFNET.discovery._windows_interface_index_map",
+                "src.IFNET.discovery._windows_interface_index_map",
                 return_value={
                     "eth4": {
                         "index": 40,
@@ -852,9 +852,9 @@ class IFNETCommandTests(unittest.TestCase):
         }
 
         with (
-            patch("VVRP.IFNET.discovery.platform.system", return_value="Windows"),
+            patch("src.IFNET.discovery.platform.system", return_value="Windows"),
             patch(
-                "VVRP.IFNET.discovery._windows_interface_index_map",
+                "src.IFNET.discovery._windows_interface_index_map",
                 return_value={
                     "eth4": {
                         "index": 70,
@@ -1726,7 +1726,7 @@ class IFNETCommandTests(unittest.TestCase):
         ctx = CliContext(output=output)
         ctx.push_mode("interface", "eth3")
 
-        with patch("VVRP.IFNET.commands.time.sleep", return_value=None):
+        with patch("src.IFNET.commands.time.sleep", return_value=None):
             outcome = dispatch_line(ctx, registry, "shutdown")
 
         self.assertTrue(outcome.executed)
@@ -1776,7 +1776,7 @@ class IFNETCommandTests(unittest.TestCase):
         ctx.push_mode("hidden")
 
         with patch(
-            "VVRP.IFNET.discovery.importlib.import_module",
+            "src.IFNET.discovery.importlib.import_module",
             side_effect=ImportError("No module named psutil"),
         ):
             outcome = dispatch_line(ctx, registry, "show host interface")
@@ -1788,13 +1788,13 @@ class IFNETCommandTests(unittest.TestCase):
     def test_ethernet_admin_backend_dispatches_to_windows_api(self):
         interface = fake_interfaces()[0]
 
-        with patch("VVRP.IFNET.Ethernet.admin._set_windows_interface_enabled") as api:
+        with patch("src.IFNET.Ethernet.admin._set_windows_interface_enabled") as api:
             result = EthernetAdminProvider(system="Windows").shutdown(interface)
 
         self.assertTrue(result.ok)
         api.assert_called_once_with(interface, False)
 
-        with patch("VVRP.IFNET.Ethernet.admin._set_windows_interface_enabled") as api:
+        with patch("src.IFNET.Ethernet.admin._set_windows_interface_enabled") as api:
             result = EthernetAdminProvider(system="Windows").no_shutdown(interface)
 
         self.assertTrue(result.ok)
@@ -1804,16 +1804,16 @@ class IFNETCommandTests(unittest.TestCase):
         interface = fake_interfaces()[0]
 
         with patch(
-            "VVRP.IFNET.Ethernet.windows.set_windows_network_adapter_enabled"
+            "src.IFNET.Ethernet.windows.set_windows_network_adapter_enabled"
         ) as api:
-            from VVRP.IFNET.Ethernet.admin import _set_windows_interface_enabled
+            from src.IFNET.Ethernet.admin import _set_windows_interface_enabled
 
             _set_windows_interface_enabled(interface, False)
 
         api.assert_called_once_with(interface, False)
 
     def test_windows_identity_prefers_cached_os_id_when_ifindex_is_unavailable(self):
-        from VVRP.IFNET.Ethernet.windows import _adapter_identity_for_interface
+        from src.IFNET.Ethernet.windows import _adapter_identity_for_interface
 
         interface = replace(
             fake_interfaces()[0],
@@ -1833,7 +1833,7 @@ class IFNETCommandTests(unittest.TestCase):
     def test_ethernet_admin_backend_dispatches_to_linux_api(self):
         interface = fake_interfaces()[0]
 
-        with patch("VVRP.IFNET.Ethernet.admin._set_linux_interface_enabled") as api:
+        with patch("src.IFNET.Ethernet.admin._set_linux_interface_enabled") as api:
             result = EthernetAdminProvider(system="Linux").shutdown(interface)
 
         self.assertTrue(result.ok)
@@ -1847,7 +1847,7 @@ class IFNETCommandTests(unittest.TestCase):
 
     def test_ethernet_admin_backend_reports_permission_errors(self):
         with patch(
-            "VVRP.IFNET.Ethernet.admin._set_windows_interface_enabled",
+            "src.IFNET.Ethernet.admin._set_windows_interface_enabled",
             side_effect=PermissionError("Administrator privileges are required"),
         ):
             result = EthernetAdminProvider(system="Windows").shutdown(fake_interfaces()[0])
@@ -2174,7 +2174,7 @@ class DhcpClientCommandTests(unittest.TestCase):
         interface = fake_interfaces()[0]
 
         with patch(
-            "VVRP.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp",
+            "src.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp",
             return_value="% DHCP client enabled; lease renewal pending",
         ) as api:
             result = EthernetDhcpClientProvider(system="Windows").IP_enable_dhcp(interface)
@@ -2183,7 +2183,7 @@ class DhcpClientCommandTests(unittest.TestCase):
         self.assertIn("lease renewal pending", result.message)
         api.assert_called_once_with(interface, True)
 
-        with patch("VVRP.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp") as api:
+        with patch("src.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp") as api:
             result = EthernetDhcpClientProvider(system="Windows").IP_disable_dhcp(interface)
 
         self.assertTrue(result.ok)
@@ -2196,7 +2196,7 @@ class DhcpClientCommandTests(unittest.TestCase):
         self.assertIn("unsupported OS API backend for DHCP client: linux", result.message)
 
     def test_windows_dhcp_updates_msft_netipinterface_with_put(self):
-        from VVRP.IFNET.Ethernet.windows import _set_msft_netipinterface_dhcp
+        from src.IFNET.Ethernet.windows import _set_msft_netipinterface_dhcp
 
         class FakeIpInterface:
             def __init__(self):
@@ -2217,7 +2217,7 @@ class DhcpClientCommandTests(unittest.TestCase):
         self.assertEqual(2, ip_interface.put_calls)
 
     def test_windows_dhcp_invokes_wmi_instance_method_directly(self):
-        from VVRP.IFNET.Ethernet.windows import _call_wmi_instance_method
+        from src.IFNET.Ethernet.windows import _call_wmi_instance_method
 
         class FakeAdapterConfiguration:
             def __init__(self):
@@ -2235,7 +2235,7 @@ class DhcpClientCommandTests(unittest.TestCase):
         self.assertEqual(["EnableDHCP"], adapter_config.calls)
 
     def test_windows_dhcp_accepts_eager_wmi_method_return_value(self):
-        from VVRP.IFNET.Ethernet.windows import _call_wmi_instance_method
+        from src.IFNET.Ethernet.windows import _call_wmi_instance_method
 
         class FakeAdapterConfiguration:
             EnableDHCP = 0
@@ -2570,7 +2570,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         interface = fake_interfaces()[0]
         address = IP_StaticIpv4Address("1.1.1.1", 8)
 
-        with patch("VVRP.IFNET.Ethernet.static._set_windows_ethernet_static_ipv4") as api:
+        with patch("src.IFNET.Ethernet.static._set_windows_ethernet_static_ipv4") as api:
             result = EthernetStaticIpv4Provider(system="Windows").IP_set_static_ipv4(
                 interface,
                 address,
@@ -2579,7 +2579,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertTrue(result.ok)
         api.assert_called_once_with(interface, address)
 
-        with patch("VVRP.IFNET.Ethernet.static._remove_windows_ethernet_static_ipv4") as api:
+        with patch("src.IFNET.Ethernet.static._remove_windows_ethernet_static_ipv4") as api:
             result = EthernetStaticIpv4Provider(system="Windows").IP_remove_static_ipv4(
                 interface,
                 address,
@@ -2601,7 +2601,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         interface = fake_interfaces()[1]
         address = IP_StaticIpv4Address("10.10.10.1", 32)
 
-        with patch("VVRP.IFNET.Loopback.static._set_windows_loopback_static_ipv4") as api:
+        with patch("src.IFNET.Loopback.static._set_windows_loopback_static_ipv4") as api:
             result = LoopbackStaticIpv4Provider(system="Windows").IP_set_static_ipv4(
                 interface,
                 address,
@@ -2610,7 +2610,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertTrue(result.ok)
         api.assert_called_once_with(interface, address)
 
-        with patch("VVRP.IFNET.Loopback.static._remove_windows_loopback_static_ipv4") as api:
+        with patch("src.IFNET.Loopback.static._remove_windows_loopback_static_ipv4") as api:
             result = LoopbackStaticIpv4Provider(system="Windows").IP_remove_static_ipv4(
                 interface,
                 address,
@@ -2620,7 +2620,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         api.assert_called_once_with(interface, address)
 
     def test_windows_static_ipv4_class_method_helper_passes_inputs(self):
-        from VVRP.IFNET.Ethernet.windows import _call_wmi_class_method
+        from src.IFNET.Ethernet.windows import _call_wmi_class_method
 
         class FakeInParameters:
             def SpawnInstance_(self):
@@ -2657,7 +2657,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertEqual(8, service.call[2].PrefixLength)
 
     def test_windows_static_ipv4_builds_unicast_iphelper_row(self):
-        from VVRP.IFNET.Ethernet.windows import AF_INET, _unicast_ipv4_row
+        from src.IFNET.Ethernet.windows import AF_INET, _unicast_ipv4_row
 
         row = _unicast_ipv4_row(fake_ethernet("eth3"), IP_StaticIpv4Address("1.1.1.1", 24))
 
@@ -2667,7 +2667,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertEqual(24, row.OnLinkPrefixLength)
 
     def test_windows_static_ipv4_uses_iphelper_create(self):
-        from VVRP.IFNET.Ethernet.windows import _create_unicast_ipv4_address
+        from src.IFNET.Ethernet.windows import _create_unicast_ipv4_address
 
         class FakeIphlpapi:
             def InitializeUnicastIpAddressEntry(self, row):
@@ -2680,14 +2680,14 @@ class StaticIpv4CommandTests(unittest.TestCase):
         iphlpapi = FakeIphlpapi()
         interface = fake_ethernet("eth3")
 
-        with patch("VVRP.IFNET.Ethernet.windows._iphlpapi", return_value=iphlpapi):
+        with patch("src.IFNET.Ethernet.windows._iphlpapi", return_value=iphlpapi):
             _create_unicast_ipv4_address(interface, IP_StaticIpv4Address("1.1.1.1", 24))
 
         self.assertEqual([1, 1, 1, 1], list(iphlpapi.row.Address.Ipv4.sin_addr.S_un_b))
         self.assertEqual(24, iphlpapi.row.OnLinkPrefixLength)
 
     def test_windows_adapter_configuration_queries_prefer_setting_id(self):
-        from VVRP.IFNET.Ethernet.windows import _wmi_adapter_configuration_queries
+        from src.IFNET.Ethernet.windows import _wmi_adapter_configuration_queries
 
         interface = replace(fake_ethernet("eth3"), os_id="{GUID}")
 
@@ -2697,7 +2697,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertIn("WHERE InterfaceIndex = 2", queries[1])
 
     def test_windows_secondary_static_ipv4_uses_iphelper_create(self):
-        from VVRP.IFNET.Ethernet.windows import set_windows_static_ipv4
+        from src.IFNET.Ethernet.windows import set_windows_static_ipv4
 
         class FakeIphlpapi:
             def InitializeUnicastIpAddressEntry(self, row):
@@ -2713,16 +2713,16 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
         with (
             patch(
-                "VVRP.IFNET.Ethernet.windows._wmi_ipv4_interface_for_interface",
+                "src.IFNET.Ethernet.windows._wmi_ipv4_interface_for_interface",
                 return_value=(object(), object()),
             ),
-            patch("VVRP.IFNET.Ethernet.windows._set_msft_netipinterface_dhcp"),
+            patch("src.IFNET.Ethernet.windows._set_msft_netipinterface_dhcp"),
             patch(
-                "VVRP.IFNET.Ethernet.windows._wmi_manual_ipv4_addresses",
+                "src.IFNET.Ethernet.windows._wmi_manual_ipv4_addresses",
                 return_value=(),
             ),
-            patch("VVRP.IFNET.Ethernet.windows._wmi_service", return_value=object()),
-            patch("VVRP.IFNET.Ethernet.windows._iphlpapi", return_value=iphlpapi),
+            patch("src.IFNET.Ethernet.windows._wmi_service", return_value=object()),
+            patch("src.IFNET.Ethernet.windows._iphlpapi", return_value=iphlpapi),
         ):
             set_windows_static_ipv4(interface, address)
 
@@ -2730,7 +2730,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertEqual(24, iphlpapi.row.OnLinkPrefixLength)
 
     def test_windows_static_ipv4_delete_helper_accepts_eager_return_value(self):
-        from VVRP.IFNET.Ethernet.windows import _delete_wmi_instance
+        from src.IFNET.Ethernet.windows import _delete_wmi_instance
 
         class FakeAddress:
             Delete_ = 0
@@ -2738,7 +2738,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         _delete_wmi_instance(FakeAddress(), "MSFT_NetIPAddress.Delete_")
 
     def test_windows_static_ipv4_manual_match_helpers(self):
-        from VVRP.IFNET.Ethernet.windows import (
+        from src.IFNET.Ethernet.windows import (
             _wmi_ipv4_address_is_manual,
             _wmi_ipv4_address_matches,
         )
@@ -3155,7 +3155,7 @@ class PingTests(unittest.TestCase):
                 return ICMP_PingResult(ICMP_ok=True)
 
         output = io.StringIO()
-        with patch("VVRP.IP.ICMP.ping.ICMP_resolve_ipv4_target", return_value="192.0.2.10"):
+        with patch("src.IP.ICMP.ping.ICMP_resolve_ipv4_target", return_value="192.0.2.10"):
             result = ICMP_run_ping(
                 "-c 1 192.0.2.10",
                 ICMP_output=output,
@@ -3251,7 +3251,7 @@ class PingTests(unittest.TestCase):
         ctx = CliContext(output=io.StringIO())
 
         with patch(
-            "VVRP.IP.commands.ICMP_run_ping",
+            "src.IP.commands.ICMP_run_ping",
             return_value=ICMP_PingResult(ICMP_ok=True, ICMP_message="pong"),
         ) as run_ping_mock:
             outcome = dispatch_line(ctx, registry, "ping -c 1 192.0.2.10")

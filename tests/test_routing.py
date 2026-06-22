@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from VVRP.DPlane.Windows.npcap import NpcapDevice
-from VVRP.FIB import FIB_resolve_forwarding
-from VVRP.IFNET import InterfaceAddress, NetworkInterface
-from VVRP.IFNET.imports import commit_imports, stage_import_interface
-from VVRP.IFNET.state import set_interface_addresses
-from VVRP.RM import RM_connected_routes, RM_lookup_route
+from src.DPlane.Windows.npcap import NpcapDevice
+from src.FIB import FIB_resolve_forwarding
+from src.IFNET import InterfaceAddress, NetworkInterface
+from src.IFNET.imports import commit_imports, stage_import_interface
+from src.IFNET.state import set_interface_addresses
+from src.RM import RM_connected_routes, RM_lookup_route
 
 
 class RoutingModuleTests(unittest.TestCase):

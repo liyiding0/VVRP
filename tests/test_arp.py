@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import unittest
 
-from VVRP.ARP import (
+from src.ARP import (
     ARP_REPLY,
     ARP_REQUEST,
     ZERO_MAC,
@@ -14,10 +14,10 @@ from VVRP.ARP import (
     parse_arp_packet,
     register_arp_commands,
 )
-from VVRP.CCmd import CliContext, CommandParser, CommandRegistry, dispatch_line
-from VVRP.CCmd.examples import build_default_registry
-from VVRP.ETHERNET import BROADCAST_MAC, ETHERTYPE_ARP, ETHERTYPE_IPV4, EthernetFrame
-from VVRP.IFNET import InterfaceAddress, NetworkInterface
+from src.CCmd import CliContext, CommandParser, CommandRegistry, dispatch_line
+from src.CCmd.examples import build_default_registry
+from src.ETHERNET import BROADCAST_MAC, ETHERTYPE_ARP, ETHERTYPE_IPV4, EthernetFrame
+from src.IFNET import InterfaceAddress, NetworkInterface
 
 
 def fake_interface() -> NetworkInterface:

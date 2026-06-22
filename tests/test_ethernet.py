@@ -4,7 +4,7 @@ import io
 import time
 import unittest
 
-from VVRP.ETHERNET import (
+from src.ETHERNET import (
     ETHERNET_MIN_FRAME_LENGTH,
     ETHERTYPE_ARP,
     ETHERTYPE_IPV4,
@@ -22,14 +22,14 @@ from VVRP.ETHERNET import (
     parse_mac_address,
     register_ethernet_commands,
 )
-from VVRP.CCmd import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
-from VVRP.CCmd.examples import build_default_registry
-from VVRP.ARP import ARP_REPLY, ArpPacket, get_arp_table
-from VVRP.DPlane.frame_debug import DplaneEthernetFrameDebugService
-from VVRP.DPlane.Windows.npcap import NpcapDevice
-from VVRP.IFNET.imports import commit_imports, stage_import_interface
-from VVRP.IFNET.state import set_interface_mac_address
-from VVRP.IFNET import InterfaceAddress, NetworkInterface
+from src.CCmd import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
+from src.CCmd.examples import build_default_registry
+from src.ARP import ARP_REPLY, ArpPacket, get_arp_table
+from src.DPlane.frame_debug import DplaneEthernetFrameDebugService
+from src.DPlane.Windows.npcap import NpcapDevice
+from src.IFNET.imports import commit_imports, stage_import_interface
+from src.IFNET.state import set_interface_mac_address
+from src.IFNET import InterfaceAddress, NetworkInterface
 
 
 class FakePacketPort:
@@ -294,23 +294,23 @@ class EthernetDebugTests(unittest.TestCase):
         self.assertFalse(is_ethernet_frame_brief_debug_enabled(ctx))
         self.assertIn("off", output.getvalue())
 
-    def test_debugging_ethernet_filters_host_mac_after_vvrp_mac_override(self):
+    def test_debugging_ethernet_filters_host_mac_after_VVRP_mac_override(self):
         host_raw = build_ethernet_ii_frame(
             destination="66:77:88:99:aa:bb",
             source="00:11:22:33:44:55",
             ethertype=ETHERTYPE_IPV4,
             payload=b"host",
         )
-        vvrp_raw = build_ethernet_ii_frame(
+        VVRP_raw = build_ethernet_ii_frame(
             destination="02:00:00:00:00:01",
             source="66:77:88:99:aa:bb",
             ethertype=ETHERTYPE_IPV4,
-            payload=b"vvrp",
+            payload=b"VVRP",
         )
         ports: list[DebugPacketPort] = []
 
         def port_factory(device_name):
-            port = DebugPacketPort(frames=(host_raw, vvrp_raw))
+            port = DebugPacketPort(frames=(host_raw, VVRP_raw))
             ports.append(port)
             return port
 

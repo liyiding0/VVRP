@@ -5,16 +5,16 @@ import time
 import unittest
 from dataclasses import replace
 
-from VVRP.ARP import ARP_REQUEST, ArpPacket
-from VVRP.CCmd import CliContext
-from VVRP.DPlane.Windows.npcap import NpcapDevice
-from VVRP.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
-from VVRP.IFNET import InterfaceAddress, NetworkInterface
-from VVRP.IFNET.imports import commit_imports, stage_import_interface
-from VVRP.IFNET.state import set_interface_addresses, set_interface_mac_address
-from VVRP.IP.ICMP.packet import ICMP_build_echo_request, ICMP_parse_echo
-from VVRP.IP.ICMP.responder import ICMP_ResponderService
-from VVRP.IP.ICMP.ping import g_ICMP_IPV4_PROTOCOL_ICMP, ICMP_build_ipv4_packet, ICMP_parse_ipv4_packet
+from src.ARP import ARP_REQUEST, ArpPacket
+from src.CCmd import CliContext
+from src.DPlane.Windows.npcap import NpcapDevice
+from src.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
+from src.IFNET import InterfaceAddress, NetworkInterface
+from src.IFNET.imports import commit_imports, stage_import_interface
+from src.IFNET.state import set_interface_addresses, set_interface_mac_address
+from src.IP.ICMP.packet import ICMP_build_echo_request, ICMP_parse_echo
+from src.IP.ICMP.responder import ICMP_ResponderService
+from src.IP.ICMP.ping import g_ICMP_IPV4_PROTOCOL_ICMP, ICMP_build_ipv4_packet, ICMP_parse_ipv4_packet
 
 
 class FakeInterfaceProvider:
