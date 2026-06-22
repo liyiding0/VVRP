@@ -8,10 +8,10 @@ from VVRP.ETHERNET import register_ethernet_commands
 from VVRP.IFNET import register_ifnet_commands
 from VVRP.IFNET.admin import InterfaceAdminProvider
 from VVRP.IFNET.discovery import InterfaceProvider
-from VVRP.IP.ICMP.responder import IcmpResponderService
-from VVRP.IP import register_ip_commands
-from VVRP.IP.dhcp import DhcpClientProvider
-from VVRP.IP.static import StaticIpv4Provider
+from VVRP.IP.ICMP.responder import ICMP_ResponderService
+from VVRP.IP import IP_register_commands
+from VVRP.IP.dhcp import IP_DhcpClientProvider
+from VVRP.IP.static import IP_StaticIpv4Provider
 
 from .models import CommandResult
 from .parser import CommandParser
@@ -33,8 +33,8 @@ HIDDEN_ENTRY_MODES = ("user", "privileged", "config", "interface", "host-interfa
 def build_default_registry(
     ifnet_provider: InterfaceProvider | None = None,
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
-    ip_dhcp_provider: DhcpClientProvider | None = None,
-    ip_static_ipv4_provider: StaticIpv4Provider | None = None,
+    ip_dhcp_provider: IP_DhcpClientProvider | None = None,
+    ip_static_ipv4_provider: IP_StaticIpv4Provider | None = None,
     arp_table: ArpTable | None = None,
     dplane_npcap_library: NpcapLibrary | None = None,
     enable_host_interface_config: bool = False,
@@ -45,10 +45,10 @@ def build_default_registry(
         ifnet_admin_provider=ifnet_admin_provider,
         npcap_library=dplane_npcap_library,
     )
-    icmp_responder = IcmpResponderService(
-        ifnet_provider=ifnet_provider,
-        ifnet_admin_provider=ifnet_admin_provider,
-        npcap_library=dplane_npcap_library,
+    icmp_responder = ICMP_ResponderService(
+        ICMP_ifnet_provider=ifnet_provider,
+        ICMP_ifnet_admin_provider=ifnet_admin_provider,
+        ICMP_npcap_library=dplane_npcap_library,
     )
 
     @registry.command("show", help_text="Show command group", modes=SHOW_MODES)
@@ -95,9 +95,9 @@ def build_default_registry(
         ifnet_admin_provider=ifnet_admin_provider,
         npcap_library=dplane_npcap_library,
         modes=("hidden", "host-interface"),
-        after_import_commit=icmp_responder.refresh,
+        after_import_commit=icmp_responder.ICMP_refresh,
     )
-    register_ip_commands(
+    IP_register_commands(
         registry,
         modes=ALL_MODES,
         ifnet_provider=ifnet_provider,
@@ -105,7 +105,7 @@ def build_default_registry(
         npcap_library=dplane_npcap_library,
         dhcp_provider=ip_dhcp_provider,
         static_ipv4_provider=ip_static_ipv4_provider,
-        after_vvrp_ipv4_change=icmp_responder.refresh,
+        after_vvrp_ipv4_change=icmp_responder.ICMP_refresh,
     )
     register_arp_commands(
         registry,
@@ -193,3 +193,4 @@ def build_default_registry(
         return CommandResult(message="Bye.", exit_requested=True)
 
     return registry
+

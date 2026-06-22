@@ -8,7 +8,7 @@ from typing import Protocol
 from VVRP.IFNET.models import InterfaceAddress, NetworkInterface
 
 
-_UNUSABLE_INTERFACE_NETWORKS = tuple(
+g_IP_UNUSABLE_INTERFACE_NETWORKS = tuple(
     ipaddress.IPv4Network(network)
     for network in (
         "0.0.0.0/8",
@@ -26,7 +26,7 @@ _UNUSABLE_INTERFACE_NETWORKS = tuple(
 
 
 @dataclass(frozen=True)
-class StaticIpv4Address:
+class IP_StaticIpv4Address:
     address: str
     prefix_length: int
     secondary: bool = False
@@ -37,84 +37,84 @@ class StaticIpv4Address:
 
 
 @dataclass(frozen=True)
-class StaticIpv4Result:
+class IP_StaticIpv4Result:
     ok: bool
     message: str = ""
 
 
-class StaticIpv4Provider(Protocol):
-    def set_static_ipv4(
+class IP_StaticIpv4Provider(Protocol):
+    def IP_set_static_ipv4(
         self,
         interface: NetworkInterface,
-        address: StaticIpv4Address,
-    ) -> StaticIpv4Result:
+        address: IP_StaticIpv4Address,
+    ) -> IP_StaticIpv4Result:
         """Configure a static IPv4 address on an interface."""
 
-    def remove_static_ipv4(
+    def IP_remove_static_ipv4(
         self,
         interface: NetworkInterface,
-        address: StaticIpv4Address | None = None,
-    ) -> StaticIpv4Result:
+        address: IP_StaticIpv4Address | None = None,
+    ) -> IP_StaticIpv4Result:
         """Remove one or all static IPv4 addresses from an interface."""
 
 
-class StaticIpv4ValidationError(ValueError):
+class IP_StaticIpv4ValidationError(ValueError):
     pass
 
 
-class OsStaticIpv4Provider:
+class IP_OsStaticIpv4Provider:
     def __init__(self, system: str | None = None) -> None:
         self.system = (system or platform.system()).lower()
         self._ethernet = None
         self._loopback = None
 
-    def set_static_ipv4(
+    def IP_set_static_ipv4(
         self,
         interface: NetworkInterface,
-        address: StaticIpv4Address,
-    ) -> StaticIpv4Result:
-        return self._apply(interface, address)
+        address: IP_StaticIpv4Address,
+    ) -> IP_StaticIpv4Result:
+        return self._IP_apply(interface, address)
 
-    def remove_static_ipv4(
+    def IP_remove_static_ipv4(
         self,
         interface: NetworkInterface,
-        address: StaticIpv4Address | None = None,
-    ) -> StaticIpv4Result:
-        return self._apply(interface, address, remove=True)
+        address: IP_StaticIpv4Address | None = None,
+    ) -> IP_StaticIpv4Result:
+        return self._IP_apply(interface, address, remove=True)
 
-    def _apply(
+    def _IP_apply(
         self,
         interface: NetworkInterface,
-        address: StaticIpv4Address | None,
+        address: IP_StaticIpv4Address | None,
         remove: bool = False,
-    ) -> StaticIpv4Result:
+    ) -> IP_StaticIpv4Result:
         if interface.kind == "ethernet":
-            provider = self._ethernet_provider()
+            provider = self._IP_ethernet_provider()
             if remove:
-                return provider.remove_static_ipv4(interface, address)
+                return provider.IP_remove_static_ipv4(interface, address)
             assert address is not None
-            return provider.set_static_ipv4(interface, address)
+            return provider.IP_set_static_ipv4(interface, address)
 
         if interface.kind == "loopback":
-            provider = self._loopback_provider()
+            provider = self._IP_loopback_provider()
             if remove:
-                return provider.remove_static_ipv4(interface, address)
+                return provider.IP_remove_static_ipv4(interface, address)
             assert address is not None
-            return provider.set_static_ipv4(interface, address)
+            return provider.IP_set_static_ipv4(interface, address)
 
-        return StaticIpv4Result(
+        return IP_StaticIpv4Result(
             ok=False,
             message=f"% Unsupported interface type for static IPv4: {interface.kind}",
         )
 
-    def _ethernet_provider(self):
+    def _IP_ethernet_provider(self):
         if self._ethernet is None:
             from VVRP.IFNET.Ethernet.static import EthernetStaticIpv4Provider
 
             self._ethernet = EthernetStaticIpv4Provider(system=self.system)
         return self._ethernet
 
-    def _loopback_provider(self):
+    def _IP_loopback_provider(self):
         if self._loopback is None:
             from VVRP.IFNET.Loopback.static import LoopbackStaticIpv4Provider
 
@@ -122,104 +122,104 @@ class OsStaticIpv4Provider:
         return self._loopback
 
 
-def parse_static_ipv4_address(
+def IP_parse_static_ipv4_address(
     address_text: str,
     mask_text: str,
     secondary: bool = False,
-) -> StaticIpv4Address:
-    address = _parse_ipv4_address(address_text)
-    prefix_length = parse_ipv4_mask(mask_text)
+) -> IP_StaticIpv4Address:
+    address = _IP_parse_ipv4_address(address_text)
+    prefix_length = IP_parse_ipv4_mask(mask_text)
     network = ipaddress.IPv4Network(f"{address}/{prefix_length}", strict=False)
 
     if prefix_length <= 30 and address == network.network_address:
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             f"% Invalid IPv4 address: {address_text} is the network address for /{prefix_length}"
         )
     if prefix_length <= 30 and address == network.broadcast_address:
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             f"% Invalid IPv4 address: {address_text} is the broadcast address for /{prefix_length}"
         )
 
-    return StaticIpv4Address(
+    return IP_StaticIpv4Address(
         address=str(address),
         prefix_length=prefix_length,
         secondary=secondary,
     )
 
 
-def validate_static_ipv4_address_for_interface(
-    address: StaticIpv4Address,
+def IP_validate_static_ipv4_address_for_interface(
+    address: IP_StaticIpv4Address,
     interface: NetworkInterface,
     interfaces: tuple[NetworkInterface, ...],
 ) -> None:
-    validate_static_ipv4_interface_policy(address, interface)
+    IP_validate_static_ipv4_interface_policy(address, interface)
 
-    current_interface_addresses = static_ipv4_addresses_from_interface(interface)
+    current_interface_addresses = IP_static_ipv4_addresses_from_interface(interface)
     for existing in current_interface_addresses:
         if existing.address != address.address:
             continue
         if not address.secondary and existing.prefix_length == address.prefix_length:
             continue
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             f"% Invalid IPv4 address: duplicate address on interface {interface.name}"
         )
 
-    if address.secondary and _secondary_static_ipv4_count(current_interface_addresses) >= 255:
-        raise StaticIpv4ValidationError(
+    if address.secondary and _IP_secondary_static_ipv4_count(current_interface_addresses) >= 255:
+        raise IP_StaticIpv4ValidationError(
             f"% Too many secondary IPv4 addresses on interface {interface.name}"
         )
 
-    new_entry = _AddressEntry(interface.name, address)
+    new_entry = _IP_AddressEntry(interface.name, address)
     for other_interface in interfaces:
         if other_interface.name == interface.name:
             continue
-        for existing in static_ipv4_addresses_from_interface(other_interface):
-            existing_entry = _AddressEntry(other_interface.name, existing)
-            _validate_no_cross_interface_conflict(new_entry, existing_entry)
+        for existing in IP_static_ipv4_addresses_from_interface(other_interface):
+            existing_entry = _IP_AddressEntry(other_interface.name, existing)
+            _IP_validate_no_cross_interface_conflict(new_entry, existing_entry)
 
 
-def validate_static_ipv4_interface_policy(
-    address: StaticIpv4Address,
+def IP_validate_static_ipv4_interface_policy(
+    address: IP_StaticIpv4Address,
     interface: NetworkInterface,
 ) -> None:
     if interface.kind == "ethernet":
         if address.prefix_length == 32:
-            raise StaticIpv4ValidationError(
+            raise IP_StaticIpv4ValidationError(
                 "% Invalid IPv4 mask length: /32 is supported only on Loopback interfaces"
             )
     elif interface.kind == "loopback":
         if address.prefix_length != 32:
-            raise StaticIpv4ValidationError(
+            raise IP_StaticIpv4ValidationError(
                 "% Invalid IPv4 mask length: Loopback interfaces support only /32"
             )
     else:
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             f"% Unsupported interface type for static IPv4: {interface.kind}"
         )
 
 
-def primary_static_ipv4_from_interface(
+def IP_primary_static_ipv4_from_interface(
     interface: NetworkInterface,
-) -> StaticIpv4Address | None:
-    addresses = static_ipv4_addresses_from_interface(interface)
+) -> IP_StaticIpv4Address | None:
+    addresses = IP_static_ipv4_addresses_from_interface(interface)
     if not addresses:
         return None
     return addresses[0]
 
 
-def has_secondary_static_ipv4(interface: NetworkInterface) -> bool:
-    return _secondary_static_ipv4_count(static_ipv4_addresses_from_interface(interface)) > 0
+def IP_has_secondary_static_ipv4(interface: NetworkInterface) -> bool:
+    return _IP_secondary_static_ipv4_count(IP_static_ipv4_addresses_from_interface(interface)) > 0
 
 
-def static_ipv4_addresses_from_interface(
+def IP_static_ipv4_addresses_from_interface(
     interface: NetworkInterface,
-) -> tuple[StaticIpv4Address, ...]:
-    addresses: list[StaticIpv4Address] = []
+) -> tuple[IP_StaticIpv4Address, ...]:
+    addresses: list[IP_StaticIpv4Address] = []
     for item in interface.addresses_by_family("ipv4"):
-        address = _static_ipv4_from_interface_address(item)
+        address = _IP_static_ipv4_from_interface_address(item)
         if address is not None:
             addresses.append(
-                StaticIpv4Address(
+                IP_StaticIpv4Address(
                     address=address.address,
                     prefix_length=address.prefix_length,
                     secondary=bool(addresses),
@@ -229,9 +229,9 @@ def static_ipv4_addresses_from_interface(
 
 
 @dataclass(frozen=True)
-class _AddressEntry:
+class _IP_AddressEntry:
     interface_name: str
-    address: StaticIpv4Address
+    address: IP_StaticIpv4Address
 
     @property
     def ip(self) -> ipaddress.IPv4Address:
@@ -251,44 +251,44 @@ class _AddressEntry:
         return self.network.broadcast_address
 
 
-def _static_ipv4_from_interface_address(
+def _IP_static_ipv4_from_interface_address(
     address: InterfaceAddress,
-) -> StaticIpv4Address | None:
+) -> IP_StaticIpv4Address | None:
     if address.prefix_length is None:
         return None
     try:
-        parsed = parse_static_ipv4_address(address.address, str(address.prefix_length))
-    except StaticIpv4ValidationError:
+        parsed = IP_parse_static_ipv4_address(address.address, str(address.prefix_length))
+    except IP_StaticIpv4ValidationError:
         return None
     return parsed
 
 
-def _secondary_static_ipv4_count(addresses: tuple[StaticIpv4Address, ...]) -> int:
+def _IP_secondary_static_ipv4_count(addresses: tuple[IP_StaticIpv4Address, ...]) -> int:
     if not addresses:
         return 0
     return max(0, len(addresses) - 1)
 
 
-def _validate_no_cross_interface_conflict(
-    new_entry: _AddressEntry,
-    existing_entry: _AddressEntry,
+def _IP_validate_no_cross_interface_conflict(
+    new_entry: _IP_AddressEntry,
+    existing_entry: _IP_AddressEntry,
 ) -> None:
     if new_entry.ip == existing_entry.ip:
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             "% Invalid IPv4 address: duplicate address on another interface "
             f"({existing_entry.interface_name})"
         )
 
     existing_broadcast = existing_entry.broadcast
     if existing_broadcast is not None and new_entry.ip == existing_broadcast:
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             "% Invalid IPv4 address: address conflicts with broadcast address on "
             f"{existing_entry.interface_name}"
         )
 
     new_broadcast = new_entry.broadcast
     if new_broadcast is not None and new_broadcast == existing_entry.ip:
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             "% Invalid IPv4 address: broadcast address conflicts with address on "
             f"{existing_entry.interface_name}"
         )
@@ -298,74 +298,74 @@ def _validate_no_cross_interface_conflict(
         and existing_broadcast is not None
         and new_broadcast == existing_broadcast
     ):
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             "% Invalid IPv4 address: broadcast address conflicts with interface "
             f"{existing_entry.interface_name}"
         )
 
     if new_entry.network.overlaps(existing_entry.network):
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             "% Invalid IPv4 address: subnet overlaps with interface "
             f"{existing_entry.interface_name}"
         )
 
 
-def parse_ipv4_mask(mask_text: str) -> int:
+def IP_parse_ipv4_mask(mask_text: str) -> int:
     if mask_text.isdigit():
         prefix_length = int(mask_text)
         if 0 <= prefix_length <= 32:
             return prefix_length
-        raise StaticIpv4ValidationError("% Invalid IPv4 mask length: expected 0-32")
+        raise IP_StaticIpv4ValidationError("% Invalid IPv4 mask length: expected 0-32")
 
-    if not _looks_dotted_decimal(mask_text):
-        raise StaticIpv4ValidationError(
+    if not _IP_looks_dotted_decimal(mask_text):
+        raise IP_StaticIpv4ValidationError(
             "% Invalid IPv4 mask: expected dotted decimal mask or mask length"
         )
 
     try:
         mask = ipaddress.IPv4Address(mask_text)
     except ValueError as exc:
-        raise StaticIpv4ValidationError("% Invalid IPv4 mask") from exc
+        raise IP_StaticIpv4ValidationError("% Invalid IPv4 mask") from exc
 
     mask_int = int(mask)
     inverted = (~mask_int) & 0xFFFFFFFF
     if inverted & (inverted + 1):
-        raise StaticIpv4ValidationError("% Invalid IPv4 mask: mask must be contiguous")
+        raise IP_StaticIpv4ValidationError("% Invalid IPv4 mask: mask must be contiguous")
 
     return int(mask).bit_count()
 
 
-def _parse_ipv4_address(address_text: str) -> ipaddress.IPv4Address:
-    if not _looks_dotted_decimal(address_text):
-        raise StaticIpv4ValidationError(
+def _IP_parse_ipv4_address(address_text: str) -> ipaddress.IPv4Address:
+    if not _IP_looks_dotted_decimal(address_text):
+        raise IP_StaticIpv4ValidationError(
             "% Invalid IPv4 address: expected dotted decimal format"
         )
 
     try:
         address = ipaddress.IPv4Address(address_text)
     except ValueError as exc:
-        raise StaticIpv4ValidationError("% Invalid IPv4 address") from exc
+        raise IP_StaticIpv4ValidationError("% Invalid IPv4 address") from exc
 
     first_octet = int(address_text.split(".", 1)[0])
     if first_octet < 1 or first_octet > 223:
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             "% Invalid IPv4 address: expected class A, B, or C unicast address"
         )
-    if _is_unusable_interface_address(address):
-        raise StaticIpv4ValidationError(
+    if _IP_is_unusable_interface_address(address):
+        raise IP_StaticIpv4ValidationError(
             "% Invalid IPv4 address: address is not usable as an interface unicast address"
         )
 
     return address
 
 
-def _is_unusable_interface_address(address: ipaddress.IPv4Address) -> bool:
+def _IP_is_unusable_interface_address(address: ipaddress.IPv4Address) -> bool:
     if address == ipaddress.IPv4Address("255.255.255.255"):
         return True
-    return any(address in network for network in _UNUSABLE_INTERFACE_NETWORKS)
+    return any(address in network for network in g_IP_UNUSABLE_INTERFACE_NETWORKS)
 
 
-def _looks_dotted_decimal(value: str) -> bool:
+def _IP_looks_dotted_decimal(value: str) -> bool:
     parts = value.split(".")
     if len(parts) != 4:
         return False
@@ -377,3 +377,5 @@ def _looks_dotted_decimal(value: str) -> bool:
         if not 0 <= int(part) <= 255:
             return False
     return True
+
+

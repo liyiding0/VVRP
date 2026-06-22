@@ -8,45 +8,47 @@ from VVRP.IFNET.models import NetworkInterface
 
 
 @dataclass(frozen=True)
-class DhcpClientResult:
+class IP_DhcpClientResult:
     ok: bool
     message: str = ""
 
 
-class DhcpClientProvider(Protocol):
-    def enable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
+class IP_DhcpClientProvider(Protocol):
+    def IP_enable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
         """Enable DHCP client address allocation on an interface."""
 
-    def disable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
+    def IP_disable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
         """Disable DHCP client address allocation on an interface."""
 
 
-class OsDhcpClientProvider:
+class IP_OsDhcpClientProvider:
     def __init__(self, system: str | None = None) -> None:
         self.system = (system or platform.system()).lower()
         self._ethernet = None
 
-    def enable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
-        return self._apply(interface, enable=True)
+    def IP_enable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
+        return self._IP_apply(interface, enable=True)
 
-    def disable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
-        return self._apply(interface, enable=False)
+    def IP_disable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
+        return self._IP_apply(interface, enable=False)
 
-    def _apply(self, interface: NetworkInterface, enable: bool) -> DhcpClientResult:
+    def _IP_apply(self, interface: NetworkInterface, enable: bool) -> IP_DhcpClientResult:
         if interface.kind == "ethernet":
-            provider = self._ethernet_provider()
+            provider = self._IP_ethernet_provider()
             if enable:
-                return provider.enable_dhcp(interface)
-            return provider.disable_dhcp(interface)
+                return provider.IP_enable_dhcp(interface)
+            return provider.IP_disable_dhcp(interface)
 
-        return DhcpClientResult(
+        return IP_DhcpClientResult(
             ok=False,
             message=f"% Unsupported interface type for DHCP client: {interface.kind}",
         )
 
-    def _ethernet_provider(self):
+    def _IP_ethernet_provider(self):
         if self._ethernet is None:
             from VVRP.IFNET.Ethernet.dhcp import EthernetDhcpClientProvider
 
             self._ethernet = EthernetDhcpClientProvider(system=self.system)
         return self._ethernet
+
+

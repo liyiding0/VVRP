@@ -6,7 +6,7 @@ import socket
 from ctypes import wintypes
 
 from VVRP.IFNET.models import NetworkInterface
-from VVRP.IP.static import StaticIpv4Address
+from VVRP.IP.static import IP_StaticIpv4Address
 
 
 ERROR_ACCESS_DENIED = 5
@@ -286,7 +286,7 @@ def set_windows_network_adapter_dhcp(
 
 def set_windows_static_ipv4(
     interface: NetworkInterface,
-    address: StaticIpv4Address,
+    address: IP_StaticIpv4Address,
 ) -> str:
     _create_unicast_ipv4_address(interface, address)
     return ""
@@ -294,7 +294,7 @@ def set_windows_static_ipv4(
 
 def _set_windows_primary_static_ipv4(
     interface: NetworkInterface,
-    address: StaticIpv4Address,
+    address: IP_StaticIpv4Address,
 ) -> str:
     service, adapter_config = _wmi_adapter_configuration_for_interface(interface)
     if adapter_config is None:
@@ -310,7 +310,7 @@ def _set_windows_primary_static_ipv4(
         if existing_prefix < 0:
             continue
         addresses.append(existing_address)
-        masks.append(StaticIpv4Address(existing_address, existing_prefix, secondary=True).subnet_mask)
+        masks.append(IP_StaticIpv4Address(existing_address, existing_prefix, secondary=True).subnet_mask)
 
     address_values = tuple(addresses)
     mask_values = tuple(masks)
@@ -335,12 +335,12 @@ def _set_windows_primary_static_ipv4(
 
 def remove_windows_static_ipv4(
     interface: NetworkInterface,
-    address: StaticIpv4Address | None = None,
+    address: IP_StaticIpv4Address | None = None,
 ) -> str:
     service = _wmi_service(r"root\StandardCimv2")
     addresses = _wmi_manual_ipv4_addresses(service, interface, address)
     for ip_address in addresses:
-        static_address = StaticIpv4Address(
+        static_address = IP_StaticIpv4Address(
             str(getattr(ip_address, "IPAddress", "")),
             int(getattr(ip_address, "PrefixLength", -1)),
         )
@@ -350,7 +350,7 @@ def remove_windows_static_ipv4(
 
 def _create_unicast_ipv4_address(
     interface: NetworkInterface,
-    address: StaticIpv4Address,
+    address: IP_StaticIpv4Address,
 ) -> None:
     iphlpapi = _iphlpapi()
     row = _unicast_ipv4_row(interface, address)
@@ -362,7 +362,7 @@ def _create_unicast_ipv4_address(
 
 def _delete_unicast_ipv4_address(
     interface: NetworkInterface,
-    address: StaticIpv4Address,
+    address: IP_StaticIpv4Address,
 ) -> None:
     if not address.address or address.prefix_length < 0:
         return
@@ -376,7 +376,7 @@ def _delete_unicast_ipv4_address(
 
 def _unicast_ipv4_row(
     interface: NetworkInterface,
-    address: StaticIpv4Address,
+    address: IP_StaticIpv4Address,
 ) -> MIB_UNICASTIPADDRESS_ROW:
     iphlpapi = _iphlpapi()
     row = MIB_UNICASTIPADDRESS_ROW()
@@ -490,7 +490,7 @@ def _wmi_adapter_configuration_for_interface(interface: NetworkInterface):
 def _wmi_manual_ipv4_addresses(
     service,
     interface: NetworkInterface,
-    address: StaticIpv4Address | None = None,
+    address: IP_StaticIpv4Address | None = None,
 ):
     queries: list[str] = [
         "SELECT * FROM MSFT_NetIPAddress "
@@ -531,7 +531,7 @@ def _wmi_ipv4_address_is_manual(row) -> bool:
     return prefix_origin == PREFIX_ORIGIN_MANUAL or suffix_origin == PREFIX_ORIGIN_MANUAL
 
 
-def _wmi_ipv4_address_matches(row, address: StaticIpv4Address) -> bool:
+def _wmi_ipv4_address_matches(row, address: IP_StaticIpv4Address) -> bool:
     return (
         str(getattr(row, "IPAddress", "")) == address.address
         and int(getattr(row, "PrefixLength", -1)) == address.prefix_length
@@ -1084,3 +1084,4 @@ def _raise_windows_error(error: int, function_name: str) -> None:
 def validate_windows_imports_for_tests() -> None:
     # Keeps static import checks explicit without touching the OS.
     _ = socket.AF_UNSPEC
+

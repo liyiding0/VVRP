@@ -23,277 +23,277 @@ from VVRP.IFNET.inventory import get_ifnet_manager
 from VVRP.IFNET.models import InterfaceAddress, NetworkInterface
 from VVRP.IFNET.state import is_admin_down, set_interface_addresses
 
-from .dhcp import DhcpClientProvider, OsDhcpClientProvider
-from .ICMP.ping import PING_ARGUMENT_PATTERN, run_ping
+from .dhcp import IP_DhcpClientProvider, IP_OsDhcpClientProvider
+from .ICMP.ping import g_ICMP_PING_ARGUMENT_PATTERN, ICMP_run_ping
 from .static import (
-    OsStaticIpv4Provider,
-    StaticIpv4Address,
-    StaticIpv4Provider,
-    StaticIpv4ValidationError,
-    has_secondary_static_ipv4,
-    parse_static_ipv4_address,
-    primary_static_ipv4_from_interface,
-    static_ipv4_addresses_from_interface,
-    validate_static_ipv4_address_for_interface,
-    validate_static_ipv4_interface_policy,
+    IP_OsStaticIpv4Provider,
+    IP_StaticIpv4Address,
+    IP_StaticIpv4Provider,
+    IP_StaticIpv4ValidationError,
+    IP_has_secondary_static_ipv4,
+    IP_parse_static_ipv4_address,
+    IP_primary_static_ipv4_from_interface,
+    IP_static_ipv4_addresses_from_interface,
+    IP_validate_static_ipv4_address_for_interface,
+    IP_validate_static_ipv4_interface_policy,
 )
 
 
-DEFAULT_IP_COMMAND_MODES = ("user", "privileged", "config", "interface", "hidden")
-HOST_SHOW_COMMAND_MODES = ("hidden", "interface", "host-interface")
-IPV4_ADDRESS_PATTERN = r"(?:\d{1,3}\.){3}\d{1,3}"
-IPV4_MASK_PATTERN = r"(?:(?:\d{1,3}\.){3}\d{1,3}|\d{1,2})"
-INTERFACE_NAME_PATTERN = r".+"
+g_IP_DEFAULT_COMMAND_MODES = ("user", "privileged", "config", "interface", "hidden")
+g_IP_HOST_SHOW_COMMAND_MODES = ("hidden", "interface", "host-interface")
+g_IP_IPV4_ADDRESS_PATTERN = r"(?:\d{1,3}\.){3}\d{1,3}"
+g_IP_IPV4_MASK_PATTERN = r"(?:(?:\d{1,3}\.){3}\d{1,3}|\d{1,2})"
+g_IP_INTERFACE_NAME_PATTERN = r".+"
 
 
-def register_ip_commands(
+def IP_register_commands(
     registry: CommandRegistry,
-    modes: Sequence[str] = DEFAULT_IP_COMMAND_MODES,
+    modes: Sequence[str] = g_IP_DEFAULT_COMMAND_MODES,
     ifnet_provider: InterfaceProvider | None = None,
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
     npcap_library: NpcapLibrary | None = None,
-    dhcp_provider: DhcpClientProvider | None = None,
-    static_ipv4_provider: StaticIpv4Provider | None = None,
+    dhcp_provider: IP_DhcpClientProvider | None = None,
+    static_ipv4_provider: IP_StaticIpv4Provider | None = None,
     after_vvrp_ipv4_change: Callable | None = None,
 ) -> None:
-    active_dhcp_provider = dhcp_provider or OsDhcpClientProvider()
-    active_static_ipv4_provider = static_ipv4_provider or OsStaticIpv4Provider()
+    active_dhcp_provider = dhcp_provider or IP_OsDhcpClientProvider()
+    active_static_ipv4_provider = static_ipv4_provider or IP_OsStaticIpv4Provider()
 
     @registry.command(
-        f"ping <arguments...:{PING_ARGUMENT_PATTERN}>",
+        f"ping <arguments...:{g_ICMP_PING_ARGUMENT_PATTERN}>",
         help_text="Ping an IPv4 address or hostname",
         modes=tuple(modes),
     )
-    def ping(ctx, args):
-        result = run_ping(
+    def IP_ping_command(ctx, args):
+        result = ICMP_run_ping(
             args["arguments"],
-            output=ctx.output,
-            ctx=ctx,
-            ifnet_provider=ifnet_provider,
-            ifnet_admin_provider=ifnet_admin_provider,
-            npcap_library=npcap_library,
+            ICMP_output=ctx.output,
+            ICMP_ctx=ctx,
+            ICMP_ifnet_provider=ifnet_provider,
+            ICMP_ifnet_admin_provider=ifnet_admin_provider,
+            ICMP_npcap_library=npcap_library,
         )
-        return CommandResult(ok=result.ok, message=result.message)
+        return CommandResult(ok=result.ICMP_ok, message=result.ICMP_message)
 
     @registry.command(
         "show host ip interface",
         help_text="Show IPv4 interface information",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        return CommandResult(message=_format_ip_interface_detail(result, ctx.state))
+        return CommandResult(message=_IP_format_ip_interface_detail(result, ctx.state))
 
     @registry.command(
         "show host ip interface brief",
         help_text="Show brief IPv4 interface summary",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_brief(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_brief(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
+        return CommandResult(message=_IP_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
         "show host ip interface brief ethernet",
         help_text="Show brief IPv4 summary for Ethernet interfaces",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_brief_ethernet(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_brief_ethernet(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _filter_interface_kind(result, "ethernet")
-        return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
+        result = _IP_filter_interface_kind(result, "ethernet")
+        return CommandResult(message=_IP_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
         "show host ip interface brief loopback",
         help_text="Show brief IPv4 summary for loopback interfaces",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_brief_loopback(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_brief_loopback(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _filter_interface_kind(result, "loopback")
-        return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
+        result = _IP_filter_interface_kind(result, "loopback")
+        return CommandResult(message=_IP_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
         "show host ip interface brief ip-configured",
         help_text="Show brief IPv4 summary for interfaces with IPv4 configured",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_brief_ip_configured(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_brief_ip_configured(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _filter_ip_configured(result)
-        return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
+        result = _IP_filter_ip_configured(result)
+        return CommandResult(message=_IP_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
         "show host ip interface brief ip-configured except ethernet",
         help_text="Show IPv4-configured interfaces except Ethernet",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_brief_ip_configured_except_ethernet(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_brief_ip_configured_except_ethernet(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _exclude_interface_kind(_filter_ip_configured(result), "ethernet")
-        return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
+        result = _IP_exclude_interface_kind(_IP_filter_ip_configured(result), "ethernet")
+        return CommandResult(message=_IP_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
         "show host ip interface brief ip-configured except loopback",
         help_text="Show IPv4-configured interfaces except loopback",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_brief_ip_configured_except_loopback(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_brief_ip_configured_except_loopback(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _exclude_interface_kind(_filter_ip_configured(result), "loopback")
-        return CommandResult(message=_format_ip_interface_brief(result, ctx.state))
+        result = _IP_exclude_interface_kind(_IP_filter_ip_configured(result), "loopback")
+        return CommandResult(message=_IP_format_ip_interface_brief(result, ctx.state))
 
     @registry.command(
-        f"show host ip interface brief <name:{INTERFACE_NAME_PATTERN}>",
+        f"show host ip interface brief <name:{g_IP_INTERFACE_NAME_PATTERN}>",
         help_text="Show brief IPv4 summary for an interface",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_brief_name(ctx, args):
-        interface = _get_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
+    def IP_show_ip_interface_brief_name(ctx, args):
+        interface = _IP_get_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
         if isinstance(interface, CommandResult):
             return interface
-        return CommandResult(message=_format_ip_interface_brief((interface,), ctx.state))
+        return CommandResult(message=_IP_format_ip_interface_brief((interface,), ctx.state))
 
     @registry.command(
         "show host ip interface description",
         help_text="Show IPv4 interface descriptions",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_description(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_description(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        return CommandResult(message=_format_ip_interface_description(result, ctx.state))
+        return CommandResult(message=_IP_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
         "show host ip interface description ethernet",
         help_text="Show IPv4 descriptions for Ethernet interfaces",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_description_ethernet(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_description_ethernet(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _filter_interface_kind(result, "ethernet")
-        return CommandResult(message=_format_ip_interface_description(result, ctx.state))
+        result = _IP_filter_interface_kind(result, "ethernet")
+        return CommandResult(message=_IP_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
         "show host ip interface description loopback",
         help_text="Show IPv4 descriptions for loopback interfaces",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_description_loopback(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_description_loopback(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _filter_interface_kind(result, "loopback")
-        return CommandResult(message=_format_ip_interface_description(result, ctx.state))
+        result = _IP_filter_interface_kind(result, "loopback")
+        return CommandResult(message=_IP_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
         "show host ip interface description ip-configured",
         help_text="Show IPv4 descriptions for interfaces with IPv4 configured",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_description_ip_configured(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_description_ip_configured(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _filter_ip_configured(result)
-        return CommandResult(message=_format_ip_interface_description(result, ctx.state))
+        result = _IP_filter_ip_configured(result)
+        return CommandResult(message=_IP_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
         "show host ip interface description ip-configured except ethernet",
         help_text="Show IPv4-configured descriptions except Ethernet",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_description_ip_configured_except_ethernet(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_description_ip_configured_except_ethernet(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _exclude_interface_kind(_filter_ip_configured(result), "ethernet")
-        return CommandResult(message=_format_ip_interface_description(result, ctx.state))
+        result = _IP_exclude_interface_kind(_IP_filter_ip_configured(result), "ethernet")
+        return CommandResult(message=_IP_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
         "show host ip interface description ip-configured except loopback",
         help_text="Show IPv4-configured descriptions except loopback",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_description_ip_configured_except_loopback(ctx, args):
-        result = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_show_ip_interface_description_ip_configured_except_loopback(ctx, args):
+        result = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(result, CommandResult):
             return result
-        result = _exclude_interface_kind(_filter_ip_configured(result), "loopback")
-        return CommandResult(message=_format_ip_interface_description(result, ctx.state))
+        result = _IP_exclude_interface_kind(_IP_filter_ip_configured(result), "loopback")
+        return CommandResult(message=_IP_format_ip_interface_description(result, ctx.state))
 
     @registry.command(
-        f"show host ip interface description <name:{INTERFACE_NAME_PATTERN}>",
+        f"show host ip interface description <name:{g_IP_INTERFACE_NAME_PATTERN}>",
         help_text="Show IPv4 description for an interface",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_description_name(ctx, args):
-        interface = _get_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
+    def IP_show_ip_interface_description_name(ctx, args):
+        interface = _IP_get_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
         if isinstance(interface, CommandResult):
             return interface
-        return CommandResult(message=_format_ip_interface_description((interface,), ctx.state))
+        return CommandResult(message=_IP_format_ip_interface_description((interface,), ctx.state))
 
     @registry.command(
-        f"show host ip interface <name:{INTERFACE_NAME_PATTERN}>",
+        f"show host ip interface <name:{g_IP_INTERFACE_NAME_PATTERN}>",
         help_text="Show IPv4 information for an interface",
-        modes=HOST_SHOW_COMMAND_MODES,
+        modes=g_IP_HOST_SHOW_COMMAND_MODES,
     )
-    def show_ip_interface_name(ctx, args):
-        interface = _get_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
+    def IP_show_ip_interface_name(ctx, args):
+        interface = _IP_get_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
         if isinstance(interface, CommandResult):
             return interface
-        return CommandResult(message=_format_one_ip_interface_detail(interface, ctx.state))
+        return CommandResult(message=_IP_format_one_ip_interface_detail(interface, ctx.state))
 
     @registry.command(
         "ip",
         help_text="Configure IP features",
         modes=("interface", "host-interface"),
     )
-    def ip_command_group(ctx, args):
-        return _format_command_group_help(registry, ctx, "ip ")
+    def IP_command_group(ctx, args):
+        return _IP_format_command_group_help(registry, ctx, "ip ")
 
     @registry.command(
         "no",
         help_text="Negate a command or set its defaults",
         modes=("interface", "host-interface"),
     )
-    def no_command_group(ctx, args):
-        return _format_command_group_help(registry, ctx, "no ")
+    def IP_no_command_group(ctx, args):
+        return _IP_format_command_group_help(registry, ctx, "no ")
 
     @registry.command(
         "ip address dhcp-alloc",
         help_text="Obtain an IPv4 address with DHCP",
         modes=("host-interface",),
     )
-    def ip_address_dhcp_alloc(ctx, args):
-        interface = _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_address_dhcp_alloc(ctx, args):
+        interface = _IP_current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(interface, CommandResult):
             return interface
-        unsupported = _unsupported_dhcp_interface(interface)
+        unsupported = _IP_unsupported_dhcp_interface(interface)
         if unsupported is not None:
             return unsupported
 
-        result = active_dhcp_provider.enable_dhcp(interface)
+        result = active_dhcp_provider.IP_enable_dhcp(interface)
         if not result.ok:
             return CommandResult(ok=False, message=result.message)
-        refresh_error = _refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
+        refresh_error = _IP_refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
         if refresh_error is not None:
             return refresh_error
         remove_error = remove_host_interface_config_prefix(ctx, interface.name, "ip-address:")
@@ -312,18 +312,18 @@ def register_ip_commands(
         help_text="Disable DHCP address allocation",
         modes=("host-interface",),
     )
-    def no_ip_address_dhcp_alloc(ctx, args):
-        interface = _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    def IP_no_address_dhcp_alloc(ctx, args):
+        interface = _IP_current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(interface, CommandResult):
             return interface
-        unsupported = _unsupported_dhcp_interface(interface)
+        unsupported = _IP_unsupported_dhcp_interface(interface)
         if unsupported is not None:
             return unsupported
 
-        result = active_dhcp_provider.disable_dhcp(interface)
+        result = active_dhcp_provider.IP_disable_dhcp(interface)
         if not result.ok:
             return CommandResult(ok=False, message=result.message)
-        refresh_error = _refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
+        refresh_error = _IP_refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
         if refresh_error is not None:
             return refresh_error
         config_error = remove_host_interface_config_command(
@@ -334,12 +334,12 @@ def register_ip_commands(
         return CommandResult(ok=not config_error, message=config_error or result.message)
 
     @registry.command(
-        f"ip address <ip_address:{IPV4_ADDRESS_PATTERN}> <mask:{IPV4_MASK_PATTERN}>",
+        f"ip address <ip_address:{g_IP_IPV4_ADDRESS_PATTERN}> <mask:{g_IP_IPV4_MASK_PATTERN}>",
         help_text="Configure a primary static IPv4 address",
         modes=("interface", "host-interface"),
     )
-    def ip_address_static(ctx, args):
-        return _set_static_ipv4(
+    def IP_address_static(ctx, args):
+        return _IP_set_static_ipv4(
             ctx,
             ifnet_provider,
             ifnet_admin_provider,
@@ -351,12 +351,12 @@ def register_ip_commands(
         )
 
     @registry.command(
-        f"ip address <ip_address:{IPV4_ADDRESS_PATTERN}> <mask:{IPV4_MASK_PATTERN}> sub",
+        f"ip address <ip_address:{g_IP_IPV4_ADDRESS_PATTERN}> <mask:{g_IP_IPV4_MASK_PATTERN}> sub",
         help_text="Configure a secondary static IPv4 address",
         modes=("interface", "host-interface"),
     )
-    def ip_address_static_sub(ctx, args):
-        return _set_static_ipv4(
+    def IP_address_static_sub(ctx, args):
+        return _IP_set_static_ipv4(
             ctx,
             ifnet_provider,
             ifnet_admin_provider,
@@ -372,8 +372,8 @@ def register_ip_commands(
         help_text="Remove all static IPv4 addresses",
         modes=("interface", "host-interface"),
     )
-    def no_ip_address_all(ctx, args):
-        return _remove_static_ipv4(
+    def IP_no_address_all(ctx, args):
+        return _IP_remove_static_ipv4(
             ctx,
             ifnet_provider,
             ifnet_admin_provider,
@@ -382,12 +382,12 @@ def register_ip_commands(
         )
 
     @registry.command(
-        f"no ip address <ip_address:{IPV4_ADDRESS_PATTERN}> <mask:{IPV4_MASK_PATTERN}>",
+        f"no ip address <ip_address:{g_IP_IPV4_ADDRESS_PATTERN}> <mask:{g_IP_IPV4_MASK_PATTERN}>",
         help_text="Remove a static IPv4 address",
         modes=("interface", "host-interface"),
     )
-    def no_ip_address_static(ctx, args):
-        return _remove_static_ipv4(
+    def IP_no_address_static(ctx, args):
+        return _IP_remove_static_ipv4(
             ctx,
             ifnet_provider,
             ifnet_admin_provider,
@@ -399,12 +399,12 @@ def register_ip_commands(
         )
 
     @registry.command(
-        f"no ip address <ip_address:{IPV4_ADDRESS_PATTERN}> <mask:{IPV4_MASK_PATTERN}> sub",
+        f"no ip address <ip_address:{g_IP_IPV4_ADDRESS_PATTERN}> <mask:{g_IP_IPV4_MASK_PATTERN}> sub",
         help_text="Remove a secondary static IPv4 address",
         modes=("interface", "host-interface"),
     )
-    def no_ip_address_static_sub(ctx, args):
-        return _remove_static_ipv4(
+    def IP_no_address_static_sub(ctx, args):
+        return _IP_remove_static_ipv4(
             ctx,
             ifnet_provider,
             ifnet_admin_provider,
@@ -416,15 +416,15 @@ def register_ip_commands(
         )
 
 
-def _current_host_interface(
+def _IP_current_host_interface(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
 ) -> NetworkInterface | CommandResult:
-    return _get_interface(ctx, ifnet_provider, ifnet_admin_provider, ctx.mode_label)
+    return _IP_get_interface(ctx, ifnet_provider, ifnet_admin_provider, ctx.mode_label)
 
 
-def _format_command_group_help(
+def _IP_format_command_group_help(
     registry: CommandRegistry,
     ctx,
     prefix: str,
@@ -438,25 +438,25 @@ def _format_command_group_help(
     return CommandResult(message="\n".join(lines))
 
 
-def _current_vvrp_interface(
+def _IP_current_vvrp_interface(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
 ) -> NetworkInterface | CommandResult:
-    return _get_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider, ctx.mode_label)
+    return _IP_get_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider, ctx.mode_label)
 
 
-def _current_interface(
+def _IP_current_interface(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
 ) -> NetworkInterface | CommandResult:
     if ctx.mode == "host-interface":
-        return _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
-    return _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
+        return _IP_current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    return _IP_current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
 
 
-def _list_interfaces(
+def _IP_list_interfaces(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
@@ -471,18 +471,18 @@ def _list_interfaces(
         return CommandResult(ok=False, message=f"% {exc}")
 
 
-def _list_vvrp_interfaces(
+def _IP_list_vvrp_interfaces(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
 ) -> tuple[NetworkInterface, ...] | CommandResult:
-    interfaces = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    interfaces = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interfaces, CommandResult):
         return interfaces
     return imported_interfaces(ctx.state, interfaces)
 
 
-def _get_interface(
+def _IP_get_interface(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
@@ -502,13 +502,13 @@ def _get_interface(
     return interface
 
 
-def _get_vvrp_interface(
+def _IP_get_vvrp_interface(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
     name: str,
 ) -> NetworkInterface | CommandResult:
-    interfaces = _list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    interfaces = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interfaces, CommandResult):
         return interfaces
     for interface in interfaces:
@@ -517,7 +517,7 @@ def _get_vvrp_interface(
     return CommandResult(ok=False, message=f"% Interface not found: {name}")
 
 
-def _unsupported_dhcp_interface(interface: NetworkInterface) -> CommandResult | None:
+def _IP_unsupported_dhcp_interface(interface: NetworkInterface) -> CommandResult | None:
     if interface.kind == "ethernet":
         return None
     return CommandResult(
@@ -529,7 +529,7 @@ def _unsupported_dhcp_interface(interface: NetworkInterface) -> CommandResult | 
     )
 
 
-def _unsupported_static_ipv4_interface(interface: NetworkInterface) -> CommandResult | None:
+def _IP_unsupported_static_ipv4_interface(interface: NetworkInterface) -> CommandResult | None:
     if interface.kind in ("ethernet", "loopback"):
         return None
     return CommandResult(
@@ -541,18 +541,18 @@ def _unsupported_static_ipv4_interface(interface: NetworkInterface) -> CommandRe
     )
 
 
-def _set_static_ipv4(
+def _IP_set_static_ipv4(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
-    static_ipv4_provider: StaticIpv4Provider,
+    static_ipv4_provider: IP_StaticIpv4Provider,
     after_vvrp_ipv4_change: Callable | None,
     ip_address: str,
     mask: str,
     secondary: bool,
 ) -> CommandResult:
     if ctx.mode == "host-interface":
-        return _set_host_static_ipv4(
+        return _IP_set_host_static_ipv4(
             ctx,
             ifnet_provider,
             ifnet_admin_provider,
@@ -561,7 +561,7 @@ def _set_static_ipv4(
             mask,
             secondary,
         )
-    return _set_vvrp_static_ipv4(
+    return _IP_set_vvrp_static_ipv4(
         ctx,
         ifnet_provider,
             ifnet_admin_provider,
@@ -572,42 +572,42 @@ def _set_static_ipv4(
     )
 
 
-def _set_host_static_ipv4(
+def _IP_set_host_static_ipv4(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
-    static_ipv4_provider: StaticIpv4Provider,
+    static_ipv4_provider: IP_StaticIpv4Provider,
     ip_address: str,
     mask: str,
     secondary: bool,
 ) -> CommandResult:
-    interface = _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    interface = _IP_current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interface, CommandResult):
         return interface
-    unsupported = _unsupported_static_ipv4_interface(interface)
+    unsupported = _IP_unsupported_static_ipv4_interface(interface)
     if unsupported is not None:
         return unsupported
-    interfaces = _list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    interfaces = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interfaces, CommandResult):
         return interfaces
 
     try:
-        address = parse_static_ipv4_address(ip_address, mask, secondary=secondary)
-        validate_static_ipv4_address_for_interface(address, interface, interfaces)
-    except StaticIpv4ValidationError as exc:
+        address = IP_parse_static_ipv4_address(ip_address, mask, secondary=secondary)
+        IP_validate_static_ipv4_address_for_interface(address, interface, interfaces)
+    except IP_StaticIpv4ValidationError as exc:
         return CommandResult(ok=False, message=str(exc))
 
     if not address.secondary:
-        current_primary = primary_static_ipv4_from_interface(interface)
+        current_primary = IP_primary_static_ipv4_from_interface(interface)
         if current_primary is not None and current_primary != address:
-            remove_result = static_ipv4_provider.remove_static_ipv4(interface, current_primary)
+            remove_result = static_ipv4_provider.IP_remove_static_ipv4(interface, current_primary)
             if not remove_result.ok:
                 return CommandResult(ok=False, message=remove_result.message)
 
-    result = static_ipv4_provider.set_static_ipv4(interface, address)
+    result = static_ipv4_provider.IP_set_static_ipv4(interface, address)
     if not result.ok:
         return CommandResult(ok=False, message=result.message)
-    refresh_error = _refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
+    refresh_error = _IP_refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
     if refresh_error is not None:
         return refresh_error
     dhcp_error = remove_host_interface_config_command(ctx, interface.name, "ip-address-dhcp")
@@ -619,13 +619,13 @@ def _set_host_static_ipv4(
     config_error = set_host_interface_config_command(
         ctx,
         interface.name,
-        _static_ipv4_config_key(address),
+        _IP_static_ipv4_config_key(address),
         line,
     )
     return CommandResult(ok=not config_error, message=config_error or result.message)
 
 
-def _set_vvrp_static_ipv4(
+def _IP_set_vvrp_static_ipv4(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
@@ -634,29 +634,29 @@ def _set_vvrp_static_ipv4(
     mask: str,
     secondary: bool,
 ) -> CommandResult:
-    interface = _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    interface = _IP_current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interface, CommandResult):
         return interface
-    unsupported = _unsupported_static_ipv4_interface(interface)
+    unsupported = _IP_unsupported_static_ipv4_interface(interface)
     if unsupported is not None:
         return unsupported
-    interfaces = _list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    interfaces = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interfaces, CommandResult):
         return interfaces
 
     try:
-        address = parse_static_ipv4_address(ip_address, mask, secondary=secondary)
-        validate_static_ipv4_address_for_interface(address, interface, interfaces)
-    except StaticIpv4ValidationError as exc:
+        address = IP_parse_static_ipv4_address(ip_address, mask, secondary=secondary)
+        IP_validate_static_ipv4_address_for_interface(address, interface, interfaces)
+    except IP_StaticIpv4ValidationError as exc:
         return CommandResult(ok=False, message=str(exc))
 
-    current = list(static_ipv4_addresses_from_interface(interface))
+    current = list(IP_static_ipv4_addresses_from_interface(interface))
     if address.secondary:
         current.append(address)
     else:
         current = [address, *[item for item in current if item.secondary]]
-    _apply_vvrp_static_ipv4_addresses(ctx, interface.name, tuple(current))
-    _call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
+    _IP_apply_vvrp_static_ipv4_addresses(ctx, interface.name, tuple(current))
+    _IP_call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
 
     dhcp_error = remove_interface_config_command(ctx, interface.name, "ip-address-dhcp")
     if dhcp_error:
@@ -667,24 +667,24 @@ def _set_vvrp_static_ipv4(
     config_error = set_interface_config_command(
         ctx,
         interface.name,
-        _static_ipv4_config_key(address),
+        _IP_static_ipv4_config_key(address),
         line,
     )
     return CommandResult(ok=not config_error, message=config_error)
 
 
-def _remove_static_ipv4(
+def _IP_remove_static_ipv4(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
-    static_ipv4_provider: StaticIpv4Provider,
+    static_ipv4_provider: IP_StaticIpv4Provider,
     after_vvrp_ipv4_change: Callable | None,
     ip_address: str | None = None,
     mask: str | None = None,
     secondary: bool = False,
 ) -> CommandResult:
     if ctx.mode == "host-interface":
-        return _remove_host_static_ipv4(
+        return _IP_remove_host_static_ipv4(
             ctx,
             ifnet_provider,
             ifnet_admin_provider,
@@ -693,7 +693,7 @@ def _remove_static_ipv4(
             mask,
             secondary,
         )
-    return _remove_vvrp_static_ipv4(
+    return _IP_remove_vvrp_static_ipv4(
         ctx,
         ifnet_provider,
             ifnet_admin_provider,
@@ -704,38 +704,38 @@ def _remove_static_ipv4(
     )
 
 
-def _remove_host_static_ipv4(
+def _IP_remove_host_static_ipv4(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
-    static_ipv4_provider: StaticIpv4Provider,
+    static_ipv4_provider: IP_StaticIpv4Provider,
     ip_address: str | None = None,
     mask: str | None = None,
     secondary: bool = False,
 ) -> CommandResult:
-    interface = _current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    interface = _IP_current_host_interface(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interface, CommandResult):
         return interface
-    unsupported = _unsupported_static_ipv4_interface(interface)
+    unsupported = _IP_unsupported_static_ipv4_interface(interface)
     if unsupported is not None:
         return unsupported
 
     address = None
     if ip_address is not None and mask is not None:
         try:
-            address = parse_static_ipv4_address(ip_address, mask, secondary=secondary)
-            _validate_static_ipv4_removal_target(
+            address = IP_parse_static_ipv4_address(ip_address, mask, secondary=secondary)
+            _IP_validate_static_ipv4_removal_target(
                 address,
                 interface,
                 host_interface_config_commands(ctx, interface.name),
             )
-        except StaticIpv4ValidationError as exc:
+        except IP_StaticIpv4ValidationError as exc:
             return CommandResult(ok=False, message=str(exc))
 
-    result = static_ipv4_provider.remove_static_ipv4(interface, address)
+    result = static_ipv4_provider.IP_remove_static_ipv4(interface, address)
     if not result.ok:
         return CommandResult(ok=False, message=result.message)
-    refresh_error = _refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
+    refresh_error = _IP_refresh_ifnet(ctx, ifnet_provider, ifnet_admin_provider)
     if refresh_error is not None:
         return refresh_error
     if address is None:
@@ -744,12 +744,12 @@ def _remove_host_static_ipv4(
         config_error = remove_host_interface_config_command(
             ctx,
             interface.name,
-            _static_ipv4_config_key(address),
+            _IP_static_ipv4_config_key(address),
         )
     return CommandResult(ok=not config_error, message=config_error or result.message)
 
 
-def _remove_vvrp_static_ipv4(
+def _IP_remove_vvrp_static_ipv4(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
@@ -758,69 +758,69 @@ def _remove_vvrp_static_ipv4(
     mask: str | None = None,
     secondary: bool = False,
 ) -> CommandResult:
-    interface = _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
+    interface = _IP_current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interface, CommandResult):
         return interface
-    unsupported = _unsupported_static_ipv4_interface(interface)
+    unsupported = _IP_unsupported_static_ipv4_interface(interface)
     if unsupported is not None:
         return unsupported
 
     address = None
     if ip_address is not None and mask is not None:
         try:
-            address = parse_static_ipv4_address(ip_address, mask, secondary=secondary)
-            _validate_static_ipv4_removal_target(
+            address = IP_parse_static_ipv4_address(ip_address, mask, secondary=secondary)
+            _IP_validate_static_ipv4_removal_target(
                 address,
                 interface,
                 interface_config_commands(ctx, interface.name),
             )
-        except StaticIpv4ValidationError as exc:
+        except IP_StaticIpv4ValidationError as exc:
             return CommandResult(ok=False, message=str(exc))
 
     if address is None:
-        _apply_vvrp_static_ipv4_addresses(ctx, interface.name, ())
-        _call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
+        _IP_apply_vvrp_static_ipv4_addresses(ctx, interface.name, ())
+        _IP_call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
         config_error = remove_interface_config_prefix(ctx, interface.name, "ip-address:")
         return CommandResult(ok=not config_error, message=config_error)
 
     current = tuple(
         item
-        for item in static_ipv4_addresses_from_interface(interface)
+        for item in IP_static_ipv4_addresses_from_interface(interface)
         if not (
             item.address == address.address
             and item.prefix_length == address.prefix_length
             and item.secondary == address.secondary
         )
     )
-    _apply_vvrp_static_ipv4_addresses(ctx, interface.name, current)
-    _call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
+    _IP_apply_vvrp_static_ipv4_addresses(ctx, interface.name, current)
+    _IP_call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
     config_error = remove_interface_config_command(
         ctx,
         interface.name,
-        _static_ipv4_config_key(address),
+        _IP_static_ipv4_config_key(address),
     )
     return CommandResult(ok=not config_error, message=config_error)
 
 
-def _apply_vvrp_static_ipv4_addresses(
+def _IP_apply_vvrp_static_ipv4_addresses(
     ctx,
     interface_name: str,
-    addresses: tuple[StaticIpv4Address, ...],
+    addresses: tuple[IP_StaticIpv4Address, ...],
 ) -> None:
     set_interface_addresses(
         ctx.state,
         interface_name,
-        tuple(_interface_address_from_static(address) for address in addresses),
+        tuple(_IP_interface_address_from_static(address) for address in addresses),
     )
 
 
-def _call_after_vvrp_ipv4_change(ctx, callback: Callable | None) -> None:
+def _IP_call_after_vvrp_ipv4_change(ctx, callback: Callable | None) -> None:
     if callback is None:
         return
     callback(ctx)
 
 
-def _interface_address_from_static(address: StaticIpv4Address) -> InterfaceAddress:
+def _IP_interface_address_from_static(address: IP_StaticIpv4Address) -> InterfaceAddress:
     return InterfaceAddress(
         family="ipv4",
         address=address.address,
@@ -828,25 +828,25 @@ def _interface_address_from_static(address: StaticIpv4Address) -> InterfaceAddre
     )
 
 
-def _static_ipv4_config_key(address) -> str:
+def _IP_static_ipv4_config_key(address) -> str:
     if not address.secondary:
         return "ip-address:primary"
     suffix = ":sub" if address.secondary else ""
     return f"ip-address:{address.address}/{address.prefix_length}{suffix}"
 
 
-def _validate_static_ipv4_removal_target(
-    address: StaticIpv4Address,
+def _IP_validate_static_ipv4_removal_target(
+    address: IP_StaticIpv4Address,
     interface: NetworkInterface,
     commands: dict[str, str],
 ) -> None:
-    validate_static_ipv4_interface_policy(address, interface)
-    configured = static_ipv4_addresses_from_interface(interface)
+    IP_validate_static_ipv4_interface_policy(address, interface)
+    configured = IP_static_ipv4_addresses_from_interface(interface)
     if configured and not any(
         item.address == address.address and item.prefix_length == address.prefix_length
         for item in configured
     ):
-        raise StaticIpv4ValidationError(
+        raise IP_StaticIpv4ValidationError(
             f"% IPv4 address not found on interface {interface.name}: "
             f"{address.address}/{address.prefix_length}"
         )
@@ -858,13 +858,13 @@ def _validate_static_ipv4_removal_target(
         key.startswith("ip-address:") and key.endswith(":sub")
         for key in commands
     )
-    if configured_secondary or has_secondary_static_ipv4(interface):
-        raise StaticIpv4ValidationError(
+    if configured_secondary or IP_has_secondary_static_ipv4(interface):
+        raise IP_StaticIpv4ValidationError(
             "% Please delete all secondary IPv4 addresses before deleting the primary address"
         )
 
 
-def _refresh_ifnet(
+def _IP_refresh_ifnet(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
@@ -880,33 +880,33 @@ def _refresh_ifnet(
     return None
 
 
-def _filter_interface_kind(
+def _IP_filter_interface_kind(
     interfaces: tuple[NetworkInterface, ...],
     kind: str,
 ) -> tuple[NetworkInterface, ...]:
     return tuple(interface for interface in interfaces if interface.kind == kind)
 
 
-def _exclude_interface_kind(
+def _IP_exclude_interface_kind(
     interfaces: tuple[NetworkInterface, ...],
     kind: str,
 ) -> tuple[NetworkInterface, ...]:
     return tuple(interface for interface in interfaces if interface.kind != kind)
 
 
-def _filter_ip_configured(
+def _IP_filter_ip_configured(
     interfaces: tuple[NetworkInterface, ...],
 ) -> tuple[NetworkInterface, ...]:
-    return tuple(interface for interface in interfaces if _has_ipv4_address(interface))
+    return tuple(interface for interface in interfaces if _IP_has_ipv4_address(interface))
 
 
-def _format_ip_interface_brief(
+def _IP_format_ip_interface_brief(
     interfaces: tuple[NetworkInterface, ...],
     state: dict,
 ) -> str:
     physical_up = sum(1 for interface in interfaces if interface.is_up and not is_admin_down(state, interface.name))
     physical_down = len(interfaces) - physical_up
-    protocol_up = sum(1 for interface in interfaces if _protocol_is_up(interface, state))
+    protocol_up = sum(1 for interface in interfaces if _IP_protocol_is_up(interface, state))
     protocol_down = len(interfaces) - protocol_up
     lines = [
         "*down: administratively down",
@@ -927,20 +927,20 @@ def _format_ip_interface_brief(
     for interface in interfaces:
         lines.append(
             f"{interface.name:<32} "
-            f"{_brief_ipv4_address(interface):<20} "
-            f"{_display_physical(interface, state):<10} "
-            f"{_display_protocol(interface, state):<10}"
+            f"{_IP_brief_ipv4_address(interface):<20} "
+            f"{_IP_display_physical(interface, state):<10} "
+            f"{_IP_display_protocol(interface, state):<10}"
         )
     return "\n".join(lines)
 
 
-def _format_ip_interface_description(
+def _IP_format_ip_interface_description(
     interfaces: tuple[NetworkInterface, ...],
     state: dict,
 ) -> str:
     physical_up = sum(1 for interface in interfaces if interface.is_up and not is_admin_down(state, interface.name))
     physical_down = len(interfaces) - physical_up
-    protocol_up = sum(1 for interface in interfaces if _protocol_is_up(interface, state))
+    protocol_up = sum(1 for interface in interfaces if _IP_protocol_is_up(interface, state))
     protocol_down = len(interfaces) - protocol_up
     lines = [
         "Codes:",
@@ -959,28 +959,28 @@ def _format_ip_interface_description(
     for interface in interfaces:
         lines.append(
             f"{interface.name:<30} "
-            f"{_brief_ipv4_address(interface):<18} "
-            f"{_display_short_physical(interface, state):<4} "
-            f"{_display_short_protocol(interface, state):<5}"
+            f"{_IP_brief_ipv4_address(interface):<18} "
+            f"{_IP_display_short_physical(interface, state):<4} "
+            f"{_IP_display_short_protocol(interface, state):<5}"
         )
     return "\n".join(lines)
 
 
-def _format_ip_interface_detail(
+def _IP_format_ip_interface_detail(
     interfaces: tuple[NetworkInterface, ...],
     state: dict,
 ) -> str:
     if not interfaces:
         return "No interfaces found"
-    return "\n\n".join(_format_one_ip_interface_detail(interface, state) for interface in interfaces)
+    return "\n\n".join(_IP_format_one_ip_interface_detail(interface, state) for interface in interfaces)
 
 
-def _format_one_ip_interface_detail(interface: NetworkInterface, state: dict) -> str:
+def _IP_format_one_ip_interface_detail(interface: NetworkInterface, state: dict) -> str:
     ipv4_addresses = interface.addresses_by_family("ipv4")
     lines = [
-        f"{interface.name} current state : {_display_detail_state(interface, state)}",
-        f"Line protocol current state : {_display_detail_protocol(interface, state)}",
-        f"The Maximum Transmit Unit : {_display_mtu(interface.mtu)}",
+        f"{interface.name} current state : {_IP_display_detail_state(interface, state)}",
+        f"Line protocol current state : {_IP_display_detail_protocol(interface, state)}",
+        f"The Maximum Transmit Unit : {_IP_display_mtu(interface.mtu)}",
     ]
     if not ipv4_addresses:
         lines.extend(
@@ -1000,24 +1000,24 @@ def _format_one_ip_interface_detail(interface: NetworkInterface, state: dict) ->
     for index, address in enumerate(ipv4_addresses):
         role = "Primary" if index == 0 else "Sub"
         lines.append(f"Internet Address is {address.display} {role}")
-        broadcast = _broadcast_address(address)
+        broadcast = _IP_broadcast_address(address)
         if broadcast:
             lines.append(f"Broadcast address : {broadcast}")
     return "\n".join(lines)
 
 
-def _brief_ipv4_address(interface: NetworkInterface) -> str:
+def _IP_brief_ipv4_address(interface: NetworkInterface) -> str:
     addresses = interface.addresses_by_family("ipv4")
     if not addresses:
         return "unassigned"
     return addresses[0].display
 
 
-def _has_ipv4_address(interface: NetworkInterface) -> bool:
+def _IP_has_ipv4_address(interface: NetworkInterface) -> bool:
     return bool(interface.addresses_by_family("ipv4"))
 
 
-def _broadcast_address(address: InterfaceAddress) -> str:
+def _IP_broadcast_address(address: InterfaceAddress) -> str:
     if address.prefix_length is None:
         return "-"
     try:
@@ -1026,56 +1026,59 @@ def _broadcast_address(address: InterfaceAddress) -> str:
         return "-"
 
 
-def _display_physical(interface: NetworkInterface, state: dict) -> str:
+def _IP_display_physical(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "*down"
     if interface.kind == "loopback":
-        return f"{_display_state(interface)}(l)"
-    return _display_state(interface)
+        return f"{_IP_display_state(interface)}(l)"
+    return _IP_display_state(interface)
 
 
-def _display_protocol(interface: NetworkInterface, state: dict) -> str:
+def _IP_display_protocol(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "down"
     if interface.kind == "loopback" and interface.is_up:
         return "up(s)"
-    if not _has_ipv4_address(interface):
+    if not _IP_has_ipv4_address(interface):
         return "down"
-    return _display_state(interface)
+    return _IP_display_state(interface)
 
 
-def _display_detail_protocol(interface: NetworkInterface, state: dict) -> str:
-    protocol = _display_protocol(interface, state)
+def _IP_display_detail_protocol(interface: NetworkInterface, state: dict) -> str:
+    protocol = _IP_display_protocol(interface, state)
     if protocol == "up(s)":
         return "UP (spoofing)"
     return protocol.upper()
 
 
-def _display_detail_state(interface: NetworkInterface, state: dict) -> str:
+def _IP_display_detail_state(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "Administratively DOWN"
     return "UP" if interface.is_up else "DOWN"
 
 
-def _display_state(interface: NetworkInterface) -> str:
+def _IP_display_state(interface: NetworkInterface) -> str:
     return "up" if interface.is_up else "down"
 
 
-def _protocol_is_up(interface: NetworkInterface, state: dict) -> bool:
-    return _display_protocol(interface, state).startswith("up")
+def _IP_protocol_is_up(interface: NetworkInterface, state: dict) -> bool:
+    return _IP_display_protocol(interface, state).startswith("up")
 
 
-def _display_short_physical(interface: NetworkInterface, state: dict) -> str:
+def _IP_display_short_physical(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "*D"
     return "U" if interface.is_up else "D"
 
 
-def _display_short_protocol(interface: NetworkInterface, state: dict) -> str:
-    return "U" if _protocol_is_up(interface, state) else "D"
+def _IP_display_short_protocol(interface: NetworkInterface, state: dict) -> str:
+    return "U" if _IP_protocol_is_up(interface, state) else "D"
 
 
-def _display_mtu(mtu: int | None) -> str:
+def _IP_display_mtu(mtu: int | None) -> str:
     if mtu is None:
         return "-"
     return f"{mtu} bytes"
+
+
+

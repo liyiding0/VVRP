@@ -12,9 +12,9 @@ from VVRP.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame
 from VVRP.IFNET import InterfaceAddress, NetworkInterface
 from VVRP.IFNET.imports import commit_imports, stage_import_interface
 from VVRP.IFNET.state import set_interface_addresses, set_interface_mac_address
-from VVRP.IP.ICMP.packet import build_icmp_echo_request, parse_icmp_echo
-from VVRP.IP.ICMP.responder import IcmpResponderService
-from VVRP.IP.ICMP.ping import IPV4_PROTOCOL_ICMP, build_ipv4_packet, parse_ipv4_packet
+from VVRP.IP.ICMP.packet import ICMP_build_echo_request, ICMP_parse_echo
+from VVRP.IP.ICMP.responder import ICMP_ResponderService
+from VVRP.IP.ICMP.ping import g_ICMP_IPV4_PROTOCOL_ICMP, ICMP_build_ipv4_packet, ICMP_parse_ipv4_packet
 
 
 class FakeInterfaceProvider:
@@ -84,14 +84,14 @@ class IcmpResponderTests(unittest.TestCase):
             ethertype=ETHERTYPE_ARP,
             payload=arp_request.to_bytes(),
         )
-        echo_request = build_icmp_echo_request(0x1234, 7, b"hello")
-        ip_request = build_ipv4_packet(
+        echo_request = ICMP_build_echo_request(0x1234, 7, b"hello")
+        ip_request = ICMP_build_ipv4_packet(
             remote_ip,
             "192.168.211.100",
-            IPV4_PROTOCOL_ICMP,
+            g_ICMP_IPV4_PROTOCOL_ICMP,
             echo_request,
-            ttl=64,
-            identification=0x4567,
+            ICMP_ttl=64,
+            ICMP_identification=0x4567,
         )
         icmp_frame = build_ethernet_ii_frame(
             destination="00:E0:4C:11:22:33",
@@ -100,17 +100,17 @@ class IcmpResponderTests(unittest.TestCase):
             payload=ip_request,
         )
         port = FakeResponderPort((arp_frame, icmp_frame))
-        service = IcmpResponderService(
-            ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth4"),)),
-            npcap_library=FakeNpcapLibrary(),
-            port_factory=lambda device_name: port,
+        service = ICMP_ResponderService(
+            ICMP_ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth4"),)),
+            ICMP_npcap_library=FakeNpcapLibrary(),
+            ICMP_port_factory=lambda device_name: port,
         )
 
-        self.assertIn("1 listener", service.refresh(ctx))
+        self.assertIn("1 listener", service.ICMP_refresh(ctx))
         deadline = time.time() + 1
         while len(port.sent) < 2 and time.time() < deadline:
             time.sleep(0.01)
-        service.stop()
+        service.ICMP_stop()
 
         self.assertEqual(["ether proto 0x0806 or ether proto 0x0800"], port.filters)
         self.assertEqual(2, len(port.sent))
@@ -123,15 +123,15 @@ class IcmpResponderTests(unittest.TestCase):
         self.assertEqual(ETHERTYPE_IPV4, echo_reply.ethertype)
         self.assertEqual("00:e0:4c:11:22:33", echo_reply.source)
         self.assertEqual(remote_mac, echo_reply.destination)
-        ip_reply = parse_ipv4_packet(echo_reply.payload)
-        self.assertEqual("192.168.211.100", ip_reply.source)
-        self.assertEqual(remote_ip, ip_reply.destination)
-        echo = parse_icmp_echo(ip_reply.payload)
+        ip_reply = ICMP_parse_ipv4_packet(echo_reply.payload)
+        self.assertEqual("192.168.211.100", ip_reply.ICMP_source)
+        self.assertEqual(remote_ip, ip_reply.ICMP_destination)
+        echo = ICMP_parse_echo(ip_reply.ICMP_payload)
         self.assertIsNotNone(echo)
-        self.assertTrue(echo.is_echo_reply)
-        self.assertEqual(0x1234, echo.identifier)
-        self.assertEqual(7, echo.sequence)
-        self.assertEqual(b"hello", echo.payload)
+        self.assertTrue(echo.ICMP_is_echo_reply)
+        self.assertEqual(0x1234, echo.ICMP_identifier)
+        self.assertEqual(7, echo.ICMP_sequence)
+        self.assertEqual(b"hello", echo.ICMP_payload)
 
 
 def fake_ethernet(name: str) -> NetworkInterface:
@@ -153,3 +153,4 @@ def fake_ethernet(name: str) -> NetworkInterface:
 
 if __name__ == "__main__":
     unittest.main()
+

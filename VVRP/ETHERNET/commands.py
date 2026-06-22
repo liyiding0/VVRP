@@ -10,13 +10,20 @@ from VVRP.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from VVRP.IFNET.imports import imported_interfaces
 from VVRP.IFNET.inventory import get_ifnet_manager
 from VVRP.IFNET.models import NetworkInterface
-from VVRP.IFNET.state import remove_interface_mac_address, set_interface_mac_address
+from VVRP.IFNET.state import (
+    IFNET_remove_interface_mtu,
+    IFNET_set_interface_mtu,
+    remove_interface_mac_address,
+    set_interface_mac_address,
+)
 
 from .debug import is_ethernet_frame_brief_debug_enabled, set_ethernet_frame_brief_debug
 
 
 ETHERNET_DEBUG_MODES = ("privileged", "config", "hidden")
 MAC_ADDRESS_PATTERN = r"(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|(?:[0-9A-Fa-f]{4}[.:-]){2}[0-9A-Fa-f]{4}|[0-9A-Fa-f]{12}"
+ETH_MTU_MIN = 68
+ETH_MTU_MAX = 9216
 
 
 def register_ethernet_commands(
@@ -71,6 +78,46 @@ def register_ethernet_commands(
             return interface
         remove_interface_mac_address(ctx.state, interface.name)
         config_error = remove_interface_config_command(ctx, interface.name, "mac-address")
+        return CommandResult(ok=not config_error, message=config_error)
+
+    @registry.command(
+        "mtu <value:[0-9]+>",
+        help_text="Configure current VVRP Ethernet MTU",
+        modes=("interface",),
+    )
+    def ETH_mtu(ctx, args):
+        interface = _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(interface, CommandResult):
+            return interface
+        if interface.kind != "ethernet":
+            return CommandResult(
+                ok=False,
+                message=f"% Unsupported interface type for mtu: {interface.kind}",
+            )
+        mtu = int(args["value"])
+        validation_error = ETH_validate_mtu(mtu)
+        if validation_error:
+            return CommandResult(ok=False, message=validation_error)
+        IFNET_set_interface_mtu(ctx.state, interface.name, mtu)
+        config_error = set_interface_config_command(
+            ctx,
+            interface.name,
+            "mtu",
+            f"mtu {mtu}",
+        )
+        return CommandResult(ok=not config_error, message=config_error)
+
+    @registry.command(
+        "no mtu",
+        help_text="Restore original imported Ethernet MTU",
+        modes=("interface",),
+    )
+    def ETH_no_mtu(ctx, args):
+        interface = _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(interface, CommandResult):
+            return interface
+        IFNET_remove_interface_mtu(ctx.state, interface.name)
+        config_error = remove_interface_config_command(ctx, interface.name, "mtu")
         return CommandResult(ok=not config_error, message=config_error)
 
     @registry.command(
@@ -195,4 +242,10 @@ def _validate_configured_mac_address(mac_address: str, imported_interface: Netwo
     original = _normalize_configured_mac_address(imported_interface.mac_address)
     if original == mac_address:
         return "% Invalid MAC address: configured MAC must differ from imported host MAC"
+    return ""
+
+
+def ETH_validate_mtu(mtu: int) -> str:
+    if not ETH_MTU_MIN <= mtu <= ETH_MTU_MAX:
+        return f"% Invalid MTU: value must be between {ETH_MTU_MIN} and {ETH_MTU_MAX}"
     return ""

@@ -58,31 +58,29 @@ from VVRP.IFNET.discovery import (
 from VVRP.IFNET.imports import commit_imports, stage_import_interface
 from VVRP.IFNET.state import set_interface_addresses, set_interface_mac_address
 from VVRP.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
-from VVRP.IP.dhcp import DhcpClientResult
+from VVRP.IP.dhcp import IP_DhcpClientResult
 from VVRP.IP.ICMP.ping import (
-    ICMP_CODE,
-    ICMP_ECHO_REPLY,
-    IcmpSocketPinger,
-    PingOptions,
-    PingReply,
-    PingResult,
-    VvrpPacketPinger,
-    build_icmp_echo_packet,
-    build_ipv4_packet,
-    classify_ping_target,
-    format_ping_reply,
-    format_ping_statistics,
-    icmp_checksum,
-    parse_ping_arguments,
-    run_ping,
+    ICMP_SocketPinger,
+    ICMP_PingOptions,
+    ICMP_PingReply,
+    ICMP_PingResult,
+    ICMP_VvrpPacketPinger,
+    ICMP_build_echo_packet,
+    ICMP_build_ipv4_packet,
+    ICMP_classify_ping_target,
+    ICMP_format_ping_reply,
+    ICMP_format_ping_statistics,
+    ICMP_parse_ping_arguments,
+    ICMP_run_ping,
 )
+from VVRP.IP.ICMP.packet import g_ICMP_CODE, g_ICMP_ECHO_REPLY, ICMP_checksum
 from VVRP.IP.static import (
-    StaticIpv4Address,
-    StaticIpv4Result,
-    StaticIpv4ValidationError,
-    parse_ipv4_mask,
-    parse_static_ipv4_address,
-    validate_static_ipv4_address_for_interface,
+    IP_StaticIpv4Address,
+    IP_StaticIpv4Result,
+    IP_StaticIpv4ValidationError,
+    IP_parse_ipv4_mask,
+    IP_parse_static_ipv4_address,
+    IP_validate_static_ipv4_address_for_interface,
 )
 
 
@@ -630,23 +628,23 @@ class FakeAdminProvider:
 class FakeDhcpProvider:
     def __init__(self):
         self.calls: list[tuple[str, str]] = []
-        self.fail_next: DhcpClientResult | None = None
+        self.fail_next: IP_DhcpClientResult | None = None
 
-    def enable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
+    def IP_enable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
         self.calls.append(("enable dhcp", interface.name))
         if self.fail_next is not None:
             result = self.fail_next
             self.fail_next = None
             return result
-        return DhcpClientResult(ok=True)
+        return IP_DhcpClientResult(ok=True)
 
-    def disable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
+    def IP_disable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
         self.calls.append(("disable dhcp", interface.name))
         if self.fail_next is not None:
             result = self.fail_next
             self.fail_next = None
             return result
-        return DhcpClientResult(ok=True)
+        return IP_DhcpClientResult(ok=True)
 
 
 class FakeNpcapLibrary:
@@ -704,32 +702,32 @@ class FakeClock:
 
 class FakeStaticIpv4Provider:
     def __init__(self):
-        self.calls: list[tuple[str, str, StaticIpv4Address | None]] = []
-        self.fail_next: StaticIpv4Result | None = None
+        self.calls: list[tuple[str, str, IP_StaticIpv4Address | None]] = []
+        self.fail_next: IP_StaticIpv4Result | None = None
 
-    def set_static_ipv4(
+    def IP_set_static_ipv4(
         self,
         interface: NetworkInterface,
-        address: StaticIpv4Address,
-    ) -> StaticIpv4Result:
+        address: IP_StaticIpv4Address,
+    ) -> IP_StaticIpv4Result:
         self.calls.append(("set static ipv4", interface.name, address))
         if self.fail_next is not None:
             result = self.fail_next
             self.fail_next = None
             return result
-        return StaticIpv4Result(ok=True)
+        return IP_StaticIpv4Result(ok=True)
 
-    def remove_static_ipv4(
+    def IP_remove_static_ipv4(
         self,
         interface: NetworkInterface,
-        address: StaticIpv4Address | None = None,
-    ) -> StaticIpv4Result:
+        address: IP_StaticIpv4Address | None = None,
+    ) -> IP_StaticIpv4Result:
         self.calls.append(("remove static ipv4", interface.name, address))
         if self.fail_next is not None:
             result = self.fail_next
             self.fail_next = None
             return result
-        return StaticIpv4Result(ok=True)
+        return IP_StaticIpv4Result(ok=True)
 
 
 def fake_interfaces() -> tuple[NetworkInterface, ...]:
@@ -790,9 +788,9 @@ def with_ipv4(
 
 
 def _build_icmp_echo_reply(identifier: int, sequence: int, payload: bytes) -> bytes:
-    header = struct.pack("!BBHHH", ICMP_ECHO_REPLY, ICMP_CODE, 0, identifier, sequence)
-    checksum = icmp_checksum(header + payload)
-    return struct.pack("!BBHHH", ICMP_ECHO_REPLY, ICMP_CODE, checksum, identifier, sequence) + payload
+    header = struct.pack("!BBHHH", g_ICMP_ECHO_REPLY, g_ICMP_CODE, 0, identifier, sequence)
+    checksum = ICMP_checksum(header + payload)
+    return struct.pack("!BBHHH", g_ICMP_ECHO_REPLY, g_ICMP_CODE, checksum, identifier, sequence) + payload
 
 
 def fake_interface_with_spaces() -> NetworkInterface:
@@ -1094,9 +1092,12 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertTrue(parser.parse("no shutdown", mode="interface").executable)
         self.assertTrue(parser.parse("mac-address 02:00:00:00:00:01", mode="interface").executable)
         self.assertTrue(parser.parse("no mac-address", mode="interface").executable)
+        self.assertTrue(parser.parse("mtu 1600", mode="interface").executable)
+        self.assertTrue(parser.parse("no mtu", mode="interface").executable)
         self.assertEqual(ParseStatus.INVALID, parser.parse("shutdown", mode="privileged").status)
         self.assertEqual(ParseStatus.INVALID, parser.parse("no shutdown", mode="config").status)
         self.assertEqual(ParseStatus.INVALID, parser.parse("mac-address 02:00:00:00:00:01", mode="config").status)
+        self.assertEqual(ParseStatus.INVALID, parser.parse("mtu 1600", mode="config").status)
 
         hidden_candidates = parser.help_candidates("", mode="hidden")
         self.assertIn(
@@ -1318,6 +1319,65 @@ class IFNETCommandTests(unittest.TestCase):
                 outcome = dispatch_line(ctx, registry, command)
                 self.assertTrue(outcome.executed)
                 self.assertIn(message, outcome.message)
+
+    def test_vvrp_interface_mtu_overrides_and_restores_imported_mtu(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth2"), fake_ethernet("eth3")))
+        )
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        registry.initialize_context(ctx)
+        stage_import_interface(ctx.state, "eth2")
+        commit_imports(ctx.state)
+        ctx.push_mode("config")
+        self.assertTrue(dispatch_line(ctx, registry, "interface eth2").executed)
+
+        self.assertTrue(dispatch_line(ctx, registry, "mtu 1600").executed)
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth2").executed)
+        self.assertIn("Route Port,The Maximum Transmit Unit is 1600", output.getvalue())
+
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show host interface eth2").executed)
+        self.assertIn("MTU 1500 bytes", output.getvalue())
+
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
+        self.assertEqual("interface eth2\n mtu 1600\n quit\n", output.getvalue())
+
+        self.assertTrue(dispatch_line(ctx, registry, "no mtu").executed)
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth2").executed)
+        self.assertIn("Route Port,The Maximum Transmit Unit is 1500", output.getvalue())
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
+        self.assertEqual("interface eth2\n quit\n", output.getvalue())
+
+    def test_vvrp_interface_mtu_rejects_bad_values_and_loopback(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider(fake_interfaces())
+        )
+        ctx = CliContext(output=io.StringIO())
+        registry.initialize_context(ctx)
+        stage_import_interface(ctx.state, "eth3")
+        stage_import_interface(ctx.state, "loopback_0")
+        commit_imports(ctx.state)
+        ctx.push_mode("config")
+        dispatch_line(ctx, registry, "interface eth3")
+
+        outcome = dispatch_line(ctx, registry, "mtu 67")
+        self.assertTrue(outcome.executed)
+        self.assertIn("between 68 and 9216", outcome.message)
+
+        self.assertTrue(dispatch_line(ctx, registry, "interface loopback_0").executed)
+        outcome = dispatch_line(ctx, registry, "mtu 1600")
+        self.assertTrue(outcome.executed)
+        self.assertEqual("% Unsupported interface type for mtu: loopback", outcome.message)
 
     def test_host_interface_import_requires_match_and_commit(self):
         registry = build_default_registry(
@@ -2094,7 +2154,7 @@ class DhcpClientCommandTests(unittest.TestCase):
 
     def test_dhcp_provider_failure_is_reported(self):
         dhcp_provider = FakeDhcpProvider()
-        dhcp_provider.fail_next = DhcpClientResult(
+        dhcp_provider.fail_next = IP_DhcpClientResult(
             ok=False,
             message="% OS interface API failed: DHCP backend failed",
         )
@@ -2117,20 +2177,20 @@ class DhcpClientCommandTests(unittest.TestCase):
             "VVRP.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp",
             return_value="% DHCP client enabled; lease renewal pending",
         ) as api:
-            result = EthernetDhcpClientProvider(system="Windows").enable_dhcp(interface)
+            result = EthernetDhcpClientProvider(system="Windows").IP_enable_dhcp(interface)
 
         self.assertTrue(result.ok)
         self.assertIn("lease renewal pending", result.message)
         api.assert_called_once_with(interface, True)
 
         with patch("VVRP.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp") as api:
-            result = EthernetDhcpClientProvider(system="Windows").disable_dhcp(interface)
+            result = EthernetDhcpClientProvider(system="Windows").IP_disable_dhcp(interface)
 
         self.assertTrue(result.ok)
         api.assert_called_once_with(interface, False)
 
     def test_ethernet_dhcp_backend_reports_unsupported_linux(self):
-        result = EthernetDhcpClientProvider(system="Linux").enable_dhcp(fake_interfaces()[0])
+        result = EthernetDhcpClientProvider(system="Linux").IP_enable_dhcp(fake_interfaces()[0])
 
         self.assertFalse(result.ok)
         self.assertIn("unsupported OS API backend for DHCP client: linux", result.message)
@@ -2212,8 +2272,8 @@ class StaticIpv4CommandTests(unittest.TestCase):
         )
 
     def test_parse_static_ipv4_accepts_mask_length_and_dotted_mask(self):
-        primary = parse_static_ipv4_address("1.1.1.1", "8")
-        secondary = parse_static_ipv4_address("10.0.0.10", "255.255.255.0", secondary=True)
+        primary = IP_parse_static_ipv4_address("1.1.1.1", "8")
+        secondary = IP_parse_static_ipv4_address("10.0.0.10", "255.255.255.0", secondary=True)
 
         self.assertEqual(8, primary.prefix_length)
         self.assertEqual("255.0.0.0", primary.subnet_mask)
@@ -2222,8 +2282,8 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertTrue(secondary.secondary)
 
     def test_parse_static_ipv4_rejects_non_contiguous_mask(self):
-        with self.assertRaises(StaticIpv4ValidationError):
-            parse_static_ipv4_address("192.0.2.10", "255.252.0.255")
+        with self.assertRaises(IP_StaticIpv4ValidationError):
+            IP_parse_static_ipv4_address("192.0.2.10", "255.252.0.255")
 
     def test_parse_static_ipv4_rejects_multicast_reserved_network_and_broadcast(self):
         for address, mask in (
@@ -2236,18 +2296,18 @@ class StaticIpv4CommandTests(unittest.TestCase):
             ("1.1.1.255", "24"),
         ):
             with self.subTest(address=address, mask=mask):
-                with self.assertRaises(StaticIpv4ValidationError):
-                    parse_static_ipv4_address(address, mask)
+                with self.assertRaises(IP_StaticIpv4ValidationError):
+                    IP_parse_static_ipv4_address(address, mask)
 
     def test_parse_static_ipv4_accepts_31_and_32_host_prefixes(self):
-        self.assertEqual(31, parse_static_ipv4_address("1.1.1.0", "31").prefix_length)
-        self.assertEqual(32, parse_static_ipv4_address("1.1.1.1", "32").prefix_length)
+        self.assertEqual(31, IP_parse_static_ipv4_address("1.1.1.0", "31").prefix_length)
+        self.assertEqual(32, IP_parse_static_ipv4_address("1.1.1.1", "32").prefix_length)
 
     def test_parse_ipv4_mask_rejects_bad_lengths_and_formats(self):
         for mask in ("33", "-1", "255.0.255.0", "255.255.255.256", "255.025.0.0"):
             with self.subTest(mask=mask):
-                with self.assertRaises(StaticIpv4ValidationError):
-                    parse_ipv4_mask(mask)
+                with self.assertRaises(IP_StaticIpv4ValidationError):
+                    IP_parse_ipv4_mask(mask)
 
     def test_host_ip_address_static_calls_provider(self):
         ifnet_provider = FakeInterfaceProvider(fake_interfaces())
@@ -2266,7 +2326,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         action, interface_name, address = static_provider.calls[0]
         self.assertEqual("set static ipv4", action)
         self.assertEqual("eth3", interface_name)
-        self.assertEqual(StaticIpv4Address("1.1.1.1", 8), address)
+        self.assertEqual(IP_StaticIpv4Address("1.1.1.1", 8), address)
 
     def test_vvrp_ip_address_static_updates_interface_state_without_provider(self):
         ifnet_provider = FakeInterfaceProvider(fake_interfaces())
@@ -2309,7 +2369,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
         self.assertTrue(outcome.executed)
         _, _, address = static_provider.calls[0]
-        self.assertEqual(StaticIpv4Address("1.1.1.2", 8, secondary=True), address)
+        self.assertEqual(IP_StaticIpv4Address("1.1.1.2", 8, secondary=True), address)
 
     def test_host_no_ip_address_without_arguments_removes_all_static_ipv4(self):
         static_provider = FakeStaticIpv4Provider()
@@ -2338,7 +2398,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
         self.assertTrue(outcome.executed)
         self.assertEqual(
-            [("remove static ipv4", "eth3", StaticIpv4Address("1.1.1.2", 8, secondary=True))],
+            [("remove static ipv4", "eth3", IP_StaticIpv4Address("1.1.1.2", 8, secondary=True))],
             static_provider.calls,
         )
 
@@ -2373,7 +2433,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
         self.assertTrue(outcome.executed)
         self.assertEqual(
-            [("set static ipv4", "loopback_0", StaticIpv4Address("10.10.10.1", 32))],
+            [("set static ipv4", "loopback_0", IP_StaticIpv4Address("10.10.10.1", 32))],
             static_provider.calls,
         )
 
@@ -2427,16 +2487,16 @@ class StaticIpv4CommandTests(unittest.TestCase):
         eth4 = fake_ethernet_without_ipv4("eth4", index=4)
         interfaces = (eth3, eth4)
 
-        with self.assertRaisesRegex(StaticIpv4ValidationError, "duplicate address"):
-            validate_static_ipv4_address_for_interface(
-                StaticIpv4Address("10.1.1.1", 24),
+        with self.assertRaisesRegex(IP_StaticIpv4ValidationError, "duplicate address"):
+            IP_validate_static_ipv4_address_for_interface(
+                IP_StaticIpv4Address("10.1.1.1", 24),
                 eth4,
                 interfaces,
             )
 
-        with self.assertRaisesRegex(StaticIpv4ValidationError, "subnet overlaps"):
-            validate_static_ipv4_address_for_interface(
-                StaticIpv4Address("10.1.1.2", 25),
+        with self.assertRaisesRegex(IP_StaticIpv4ValidationError, "subnet overlaps"):
+            IP_validate_static_ipv4_address_for_interface(
+                IP_StaticIpv4Address("10.1.1.2", 25),
                 eth4,
                 interfaces,
             )
@@ -2446,16 +2506,16 @@ class StaticIpv4CommandTests(unittest.TestCase):
         eth4 = fake_ethernet_without_ipv4("eth4", index=4)
         interfaces = (eth3, eth4)
 
-        with self.assertRaisesRegex(StaticIpv4ValidationError, "broadcast address"):
-            validate_static_ipv4_address_for_interface(
-                StaticIpv4Address("10.1.1.255", 25),
+        with self.assertRaisesRegex(IP_StaticIpv4ValidationError, "broadcast address"):
+            IP_validate_static_ipv4_address_for_interface(
+                IP_StaticIpv4Address("10.1.1.255", 25),
                 eth4,
                 interfaces,
             )
 
-        with self.assertRaisesRegex(StaticIpv4ValidationError, "broadcast address"):
-            validate_static_ipv4_address_for_interface(
-                StaticIpv4Address("10.1.1.128", 25),
+        with self.assertRaisesRegex(IP_StaticIpv4ValidationError, "broadcast address"):
+            IP_validate_static_ipv4_address_for_interface(
+                IP_StaticIpv4Address("10.1.1.128", 25),
                 eth4,
                 interfaces,
             )
@@ -2490,7 +2550,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
     def test_static_ipv4_provider_failure_is_reported(self):
         static_provider = FakeStaticIpv4Provider()
-        static_provider.fail_next = StaticIpv4Result(
+        static_provider.fail_next = IP_StaticIpv4Result(
             ok=False,
             message="% OS interface API failed: static backend failed",
         )
@@ -2508,10 +2568,10 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
     def test_ethernet_static_backend_dispatches_to_windows_api(self):
         interface = fake_interfaces()[0]
-        address = StaticIpv4Address("1.1.1.1", 8)
+        address = IP_StaticIpv4Address("1.1.1.1", 8)
 
         with patch("VVRP.IFNET.Ethernet.static._set_windows_ethernet_static_ipv4") as api:
-            result = EthernetStaticIpv4Provider(system="Windows").set_static_ipv4(
+            result = EthernetStaticIpv4Provider(system="Windows").IP_set_static_ipv4(
                 interface,
                 address,
             )
@@ -2520,7 +2580,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         api.assert_called_once_with(interface, address)
 
         with patch("VVRP.IFNET.Ethernet.static._remove_windows_ethernet_static_ipv4") as api:
-            result = EthernetStaticIpv4Provider(system="Windows").remove_static_ipv4(
+            result = EthernetStaticIpv4Provider(system="Windows").IP_remove_static_ipv4(
                 interface,
                 address,
             )
@@ -2529,9 +2589,9 @@ class StaticIpv4CommandTests(unittest.TestCase):
         api.assert_called_once_with(interface, address)
 
     def test_ethernet_static_backend_reports_unsupported_linux(self):
-        result = EthernetStaticIpv4Provider(system="Linux").set_static_ipv4(
+        result = EthernetStaticIpv4Provider(system="Linux").IP_set_static_ipv4(
             fake_interfaces()[0],
-            StaticIpv4Address("1.1.1.1", 8),
+            IP_StaticIpv4Address("1.1.1.1", 8),
         )
 
         self.assertFalse(result.ok)
@@ -2539,10 +2599,10 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
     def test_loopback_static_backend_dispatches_to_windows_api(self):
         interface = fake_interfaces()[1]
-        address = StaticIpv4Address("10.10.10.1", 32)
+        address = IP_StaticIpv4Address("10.10.10.1", 32)
 
         with patch("VVRP.IFNET.Loopback.static._set_windows_loopback_static_ipv4") as api:
-            result = LoopbackStaticIpv4Provider(system="Windows").set_static_ipv4(
+            result = LoopbackStaticIpv4Provider(system="Windows").IP_set_static_ipv4(
                 interface,
                 address,
             )
@@ -2551,7 +2611,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         api.assert_called_once_with(interface, address)
 
         with patch("VVRP.IFNET.Loopback.static._remove_windows_loopback_static_ipv4") as api:
-            result = LoopbackStaticIpv4Provider(system="Windows").remove_static_ipv4(
+            result = LoopbackStaticIpv4Provider(system="Windows").IP_remove_static_ipv4(
                 interface,
                 address,
             )
@@ -2599,7 +2659,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
     def test_windows_static_ipv4_builds_unicast_iphelper_row(self):
         from VVRP.IFNET.Ethernet.windows import AF_INET, _unicast_ipv4_row
 
-        row = _unicast_ipv4_row(fake_ethernet("eth3"), StaticIpv4Address("1.1.1.1", 24))
+        row = _unicast_ipv4_row(fake_ethernet("eth3"), IP_StaticIpv4Address("1.1.1.1", 24))
 
         self.assertEqual(AF_INET, row.Address.Ipv4.sin_family)
         self.assertEqual([1, 1, 1, 1], list(row.Address.Ipv4.sin_addr.S_un_b))
@@ -2621,7 +2681,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         interface = fake_ethernet("eth3")
 
         with patch("VVRP.IFNET.Ethernet.windows._iphlpapi", return_value=iphlpapi):
-            _create_unicast_ipv4_address(interface, StaticIpv4Address("1.1.1.1", 24))
+            _create_unicast_ipv4_address(interface, IP_StaticIpv4Address("1.1.1.1", 24))
 
         self.assertEqual([1, 1, 1, 1], list(iphlpapi.row.Address.Ipv4.sin_addr.S_un_b))
         self.assertEqual(24, iphlpapi.row.OnLinkPrefixLength)
@@ -2648,7 +2708,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
                 return 0
 
         interface = fake_ethernet("eth3")
-        address = StaticIpv4Address("1.1.1.2", 24, secondary=True)
+        address = IP_StaticIpv4Address("1.1.1.2", 24, secondary=True)
         iphlpapi = FakeIphlpapi()
 
         with (
@@ -2695,8 +2755,8 @@ class StaticIpv4CommandTests(unittest.TestCase):
         )()
 
         self.assertTrue(_wmi_ipv4_address_is_manual(row))
-        self.assertTrue(_wmi_ipv4_address_matches(row, StaticIpv4Address("1.1.1.1", 8)))
-        self.assertFalse(_wmi_ipv4_address_matches(row, StaticIpv4Address("1.1.1.2", 8)))
+        self.assertTrue(_wmi_ipv4_address_matches(row, IP_StaticIpv4Address("1.1.1.1", 8)))
+        self.assertFalse(_wmi_ipv4_address_matches(row, IP_StaticIpv4Address("1.1.1.2", 8)))
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -2866,8 +2926,8 @@ class ConfigurationTests(unittest.TestCase):
             self.assertEqual("user", ctx.mode)
             self.assertEqual(
                 [
-                    ("set static ipv4", "eth3", StaticIpv4Address("1.1.1.1", 8)),
-                    ("set static ipv4", "eth3", StaticIpv4Address("1.1.1.2", 8, secondary=True)),
+                    ("set static ipv4", "eth3", IP_StaticIpv4Address("1.1.1.1", 8)),
+                    ("set static ipv4", "eth3", IP_StaticIpv4Address("1.1.1.2", 8, secondary=True)),
                 ],
                 static_provider.calls,
             )
@@ -2932,6 +2992,55 @@ class ConfigurationTests(unittest.TestCase):
             self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth3").executed)
             self.assertIn("Internet Address is 1.1.1.1/8 Primary", output.getvalue())
 
+    def test_load_saved_vvrp_interface_mtu_restores_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "saved-configuration"
+            config_path.write_text(
+                "\n".join(
+                    (
+                        "host interface eth3",
+                        " import",
+                        " quit",
+                        "interface eth3",
+                        " mtu 1600",
+                        " quit",
+                        "",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            registry = build_default_registry(
+                ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
+                dplane_npcap_library=FakeNpcapLibrary(
+                    (
+                        NpcapDevice(
+                            name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
+                            description="eth3",
+                        ),
+                    )
+                ),
+            )
+            output = io.StringIO()
+            ctx = CliContext(output=output)
+            registry.initialize_context(ctx)
+
+            errors = load_saved_configuration(ctx, registry, config_path)
+
+            self.assertEqual([], errors)
+            self.assertEqual(
+                "host interface eth3\n"
+                " import\n"
+                " quit\n"
+                "interface eth3\n"
+                " mtu 1600\n"
+                " quit\n",
+                render_running_configuration(ctx),
+            )
+
+            ctx.push_mode("privileged")
+            self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth3").executed)
+            self.assertIn("Route Port,The Maximum Transmit Unit is 1600", output.getvalue())
+
     def test_load_saved_configuration_skips_children_after_missing_interface(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "saved-configuration"
@@ -2969,38 +3078,38 @@ class ConfigurationTests(unittest.TestCase):
 
 class PingTests(unittest.TestCase):
     def test_ping_target_classification_accepts_ip_and_names(self):
-        self.assertEqual("ipv4", classify_ping_target("192.168.1.1"))
-        self.assertEqual("ipv6", classify_ping_target("2001:db8::1"))
-        self.assertEqual("ipv6", classify_ping_target("::1"))
-        self.assertEqual("hostname", classify_ping_target("router"))
-        self.assertEqual("hostname", classify_ping_target("example.com"))
+        self.assertEqual("ipv4", ICMP_classify_ping_target("192.168.1.1"))
+        self.assertEqual("ipv6", ICMP_classify_ping_target("2001:db8::1"))
+        self.assertEqual("ipv6", ICMP_classify_ping_target("::1"))
+        self.assertEqual("hostname", ICMP_classify_ping_target("router"))
+        self.assertEqual("hostname", ICMP_classify_ping_target("example.com"))
 
     def test_ping_target_classification_rejects_options_and_bad_names(self):
         with self.assertRaises(ValueError):
-            classify_ping_target("-n")
+            ICMP_classify_ping_target("-n")
         with self.assertRaises(ValueError):
-            classify_ping_target("bad_name")
+            ICMP_classify_ping_target("bad_name")
 
     def test_ping_argument_parser_accepts_huawei_style_options(self):
         self.assertEqual(
-            PingOptions(
-                target="192.0.2.10",
-                count=8,
-                packet_size=300,
-                timeout_seconds=3,
-                interval_seconds=0,
-                ttl=64,
-                brief=True,
+            ICMP_PingOptions(
+                ICMP_target="192.0.2.10",
+                ICMP_count=8,
+                ICMP_packet_size=300,
+                ICMP_timeout_seconds=3,
+                ICMP_interval_seconds=0,
+                ICMP_ttl=64,
+                ICMP_brief=True,
             ),
-            parse_ping_arguments("ip -c 8 -s 300 -t 3 -m 0 -h 64 -brief 192.0.2.10"),
+            ICMP_parse_ping_arguments("ip -c 8 -s 300 -t 3 -m 0 -h 64 -brief 192.0.2.10"),
         )
 
     def test_ping_argument_parser_rejects_unsupported_source_address(self):
         with self.assertRaisesRegex(ValueError, "not supported"):
-            parse_ping_arguments("-a 1.1.1.1 192.0.2.10")
+            ICMP_parse_ping_arguments("-a 1.1.1.1 192.0.2.10")
 
     def test_ping_packet_builder_creates_icmp_echo_request(self):
-        packet = build_icmp_echo_packet(0x1234, 7, b"abcd")
+        packet = ICMP_build_echo_packet(0x1234, 7, b"abcd")
 
         self.assertEqual(12, len(packet))
         self.assertEqual(8, packet[0])
@@ -3013,37 +3122,47 @@ class PingTests(unittest.TestCase):
     def test_ping_reply_and_statistics_format_match_vrp_style(self):
         self.assertEqual(
             "    Reply from 192.0.2.10: bytes=56 Sequence=2 ttl=255 time=3 ms",
-            format_ping_reply(
-                PingReply(
-                    ok=True,
-                    sequence=2,
-                    address="192.0.2.10",
-                    bytes_received=56,
-                    ttl=255,
-                    rtt_ms=3,
+            ICMP_format_ping_reply(
+                ICMP_PingReply(
+                    ICMP_ok=True,
+                    ICMP_sequence=2,
+                    ICMP_address="192.0.2.10",
+                    ICMP_bytes_received=56,
+                    ICMP_ttl=255,
+                    ICMP_rtt_ms=3,
                 )
             ),
         )
-        self.assertEqual(".", format_ping_reply(PingReply(ok=False, sequence=1), brief=True))
+        self.assertEqual(
+            ".",
+            ICMP_format_ping_reply(
+                ICMP_PingReply(ICMP_ok=False, ICMP_sequence=1),
+                ICMP_brief=True,
+            ),
+        )
         self.assertIn(
             "round-trip min/avg/max = 1/2/4 ms",
-            format_ping_statistics("192.0.2.10", 3, 3, [1, 2, 4]),
+            ICMP_format_ping_statistics("192.0.2.10", 3, 3, [1, 2, 4]),
         )
 
     def test_run_ping_streams_to_output_with_injected_pinger(self):
         class FakePinger:
-            def ping(self, options, resolved_address, output):
+            def ICMP_ping(self, options, resolved_address, output):
                 output.write("    Reply from 192.0.2.10: bytes=56 Sequence=1 ttl=255 time=1 ms\n")
                 output.flush()
-                output.write(format_ping_statistics(options.target, 1, 1, [1]) + "\n")
+                output.write(ICMP_format_ping_statistics(options.ICMP_target, 1, 1, [1]) + "\n")
                 output.flush()
-                return PingResult(ok=True)
+                return ICMP_PingResult(ICMP_ok=True)
 
         output = io.StringIO()
-        with patch("VVRP.IP.ICMP.ping.resolve_ipv4_target", return_value="192.0.2.10"):
-            result = run_ping("-c 1 192.0.2.10", output=output, pinger=FakePinger())
+        with patch("VVRP.IP.ICMP.ping.ICMP_resolve_ipv4_target", return_value="192.0.2.10"):
+            result = ICMP_run_ping(
+                "-c 1 192.0.2.10",
+                ICMP_output=output,
+                ICMP_pinger=FakePinger(),
+            )
 
-        self.assertTrue(result.ok)
+        self.assertTrue(result.ICMP_ok)
         text = output.getvalue()
         self.assertIn("PING 192.0.2.10: 56 data bytes", text)
         self.assertIn("Reply from 192.0.2.10", text)
@@ -3079,13 +3198,13 @@ class PingTests(unittest.TestCase):
             payload=arp_reply.to_bytes(),
         )
         icmp_reply = _build_icmp_echo_reply(0x1234, 1, payload)
-        ipv4_reply = build_ipv4_packet(
+        ipv4_reply = ICMP_build_ipv4_packet(
             target_ip,
             "192.0.2.10",
             1,
             icmp_reply,
-            ttl=64,
-            identification=0x4321,
+            ICMP_ttl=64,
+            ICMP_identification=0x4321,
         )
         icmp_reply_frame = build_ethernet_ii_frame(
             destination="02:00:00:00:00:01",
@@ -3094,20 +3213,20 @@ class PingTests(unittest.TestCase):
             payload=ipv4_reply,
         )
         port = FakePingPacketPort((arp_reply_frame, icmp_reply_frame))
-        pinger = VvrpPacketPinger(
+        pinger = ICMP_VvrpPacketPinger(
             ctx,
-            ifnet_provider=provider,
-            npcap_library=FakeNpcapLibrary((NpcapDevice(name=r"\Device\NPF_eth3", description="eth3"),)),
-            port_factory=lambda device_name: port,
-            monotonic=clock.monotonic,
-            sleep=clock.sleep,
-            identifier=0x1234,
+            ICMP_ifnet_provider=provider,
+            ICMP_npcap_library=FakeNpcapLibrary((NpcapDevice(name=r"\Device\NPF_eth3", description="eth3"),)),
+            ICMP_port_factory=lambda device_name: port,
+            ICMP_monotonic=clock.monotonic,
+            ICMP_sleep=clock.sleep,
+            ICMP_identifier=0x1234,
         )
         output = io.StringIO()
 
-        result = run_ping("-c 1 -m 0 192.0.2.1", output=output, pinger=pinger)
+        result = ICMP_run_ping("-c 1 -m 0 192.0.2.1", ICMP_output=output, ICMP_pinger=pinger)
 
-        self.assertTrue(result.ok)
+        self.assertTrue(result.ICMP_ok)
         self.assertEqual(["ether proto 0x0806 or ether proto 0x0800"], port.filters)
         self.assertEqual(2, len(port.sent))
         arp_request = parse_ethernet_ii_frame(port.sent[0])
@@ -3132,18 +3251,18 @@ class PingTests(unittest.TestCase):
         ctx = CliContext(output=io.StringIO())
 
         with patch(
-            "VVRP.IP.commands.run_ping",
-            return_value=PingResult(ok=True, message="pong"),
+            "VVRP.IP.commands.ICMP_run_ping",
+            return_value=ICMP_PingResult(ICMP_ok=True, ICMP_message="pong"),
         ) as run_ping_mock:
             outcome = dispatch_line(ctx, registry, "ping -c 1 192.0.2.10")
 
         self.assertTrue(outcome.executed)
         _, kwargs = run_ping_mock.call_args
         self.assertEqual("-c 1 192.0.2.10", run_ping_mock.call_args.args[0])
-        self.assertIs(ctx.output, kwargs["output"])
-        self.assertIs(ctx, kwargs["ctx"])
-        self.assertIn("ifnet_provider", kwargs)
-        self.assertIn("npcap_library", kwargs)
+        self.assertIs(ctx.output, kwargs["ICMP_output"])
+        self.assertIs(ctx, kwargs["ICMP_ctx"])
+        self.assertIn("ICMP_ifnet_provider", kwargs)
+        self.assertIn("ICMP_npcap_library", kwargs)
         self.assertIn("pong", ctx.output.getvalue())
 
 
@@ -3363,3 +3482,5 @@ class ModeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

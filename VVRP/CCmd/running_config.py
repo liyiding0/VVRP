@@ -404,15 +404,17 @@ def _ordered_interface_command_keys(commands: dict[str, str]) -> tuple[str, ...]
     def sort_key(key: str) -> tuple[int, str]:
         if key == "shutdown":
             return (0, key)
-        if key == "mac-address":
+        if key == "mtu":
             return (1, key)
-        if key == "ip-address-dhcp":
+        if key == "mac-address":
             return (2, key)
-        if key == "ip-address:primary":
+        if key == "ip-address-dhcp":
             return (3, key)
-        if key.startswith("ip-address:"):
+        if key == "ip-address:primary":
             return (4, key)
-        return (5, key)
+        if key.startswith("ip-address:"):
+            return (5, key)
+        return (6, key)
 
     return tuple(sorted(commands, key=sort_key))
 

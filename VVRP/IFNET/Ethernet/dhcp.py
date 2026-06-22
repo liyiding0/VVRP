@@ -3,17 +3,17 @@ from __future__ import annotations
 import platform
 
 from VVRP.IFNET.models import NetworkInterface
-from VVRP.IP.dhcp import DhcpClientResult
+from VVRP.IP.dhcp import IP_DhcpClientResult
 
 
 class EthernetDhcpClientProvider:
     def __init__(self, system: str | None = None) -> None:
         self.system = (system or platform.system()).lower()
 
-    def enable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
+    def IP_enable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
         return _set_ethernet_dhcp(interface, enabled=True, system=self.system)
 
-    def disable_dhcp(self, interface: NetworkInterface) -> DhcpClientResult:
+    def IP_disable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
         return _set_ethernet_dhcp(interface, enabled=False, system=self.system)
 
 
@@ -21,12 +21,12 @@ def _set_ethernet_dhcp(
     interface: NetworkInterface,
     enabled: bool,
     system: str,
-) -> DhcpClientResult:
+) -> IP_DhcpClientResult:
     try:
         if system == "windows":
             message = _set_windows_ethernet_dhcp(interface, enabled)
         elif system == "linux":
-            return DhcpClientResult(
+            return IP_DhcpClientResult(
                 ok=False,
                 message=(
                     "% unsupported OS API backend for DHCP client: linux "
@@ -34,16 +34,16 @@ def _set_ethernet_dhcp(
                 ),
             )
         else:
-            return DhcpClientResult(
+            return IP_DhcpClientResult(
                 ok=False,
                 message=f"% unsupported OS API backend for DHCP client: {system}",
             )
     except PermissionError as exc:
-        return DhcpClientResult(ok=False, message=f"% permission denied: {exc}")
+        return IP_DhcpClientResult(ok=False, message=f"% permission denied: {exc}")
     except OSError as exc:
-        return DhcpClientResult(ok=False, message=f"% OS interface API failed: {exc}")
+        return IP_DhcpClientResult(ok=False, message=f"% OS interface API failed: {exc}")
 
-    return DhcpClientResult(ok=True, message=message)
+    return IP_DhcpClientResult(ok=True, message=message)
 
 
 def _set_windows_ethernet_dhcp(
@@ -53,3 +53,4 @@ def _set_windows_ethernet_dhcp(
     from .windows import set_windows_network_adapter_dhcp
 
     return set_windows_network_adapter_dhcp(interface, enabled)
+
