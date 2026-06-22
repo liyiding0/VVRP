@@ -11,12 +11,8 @@ from src.CCmd.running_config import (
     remove_host_interface_config_command,
     set_host_interface_config_command,
 )
-from src.DPlane.Windows.npcap import (
-    NpcapDevice,
-    NpcapError,
-    NpcapLibrary,
-    find_npcap_device_for_interface,
-)
+from src.DPlane.backend import DPlane_create_backend
+from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.imports import (
@@ -43,7 +39,7 @@ class DplaneInterfaceRow:
     os_index: str
     vvrp: str
     ifnet_index: str
-    npcap_device: str
+    packet_device: str
     status: str
 
 
@@ -51,10 +47,17 @@ def register_dplane_commands(
     registry: CommandRegistry,
     ifnet_provider: InterfaceProvider | None = None,
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
-    npcap_library: NpcapLibrary | None = None,
+    npcap_library=None,
+    dplane_backend: DPlane_Backend | None = None,
     modes: Sequence[str] = DEFAULT_DPLANE_COMMAND_MODES,
     after_import_commit: Callable | None = None,
 ) -> None:
+    DPlane_backend = dplane_backend or DPlane_create_backend(
+        DPlane_ifnet_provider=ifnet_provider,
+        DPlane_admin_provider=ifnet_admin_provider,
+        DPlane_npcap_library=npcap_library,
+    )
+
     @registry.command(
         "show dplane interfaces",
         help_text="Show data-plane interface bindings",
@@ -67,11 +70,11 @@ def register_dplane_commands(
                 provider=ifnet_provider,
                 admin_provider=ifnet_admin_provider,
             ).list_interfaces()
-            devices = (npcap_library or NpcapLibrary()).list_devices()
+            devices = DPlane_backend.DPlane_list_packet_devices()
         except InterfaceDiscoveryError as exc:
             return CommandResult(ok=False, message=f"% {exc}")
-        except NpcapError as exc:
-            return CommandResult(ok=False, message=f"% Npcap interface discovery failed: {exc}")
+        except RuntimeError as exc:
+            return CommandResult(ok=False, message=f"% DPlane interface discovery failed: {exc}")
 
         return CommandResult(message=_format_dplane_interfaces_detail(ctx.state, interfaces, devices))
 
@@ -87,11 +90,11 @@ def register_dplane_commands(
                 provider=ifnet_provider,
                 admin_provider=ifnet_admin_provider,
             ).list_interfaces()
-            devices = (npcap_library or NpcapLibrary()).list_devices()
+            devices = DPlane_backend.DPlane_list_packet_devices()
         except InterfaceDiscoveryError as exc:
             return CommandResult(ok=False, message=f"% {exc}")
-        except NpcapError as exc:
-            return CommandResult(ok=False, message=f"% Npcap interface discovery failed: {exc}")
+        except RuntimeError as exc:
+            return CommandResult(ok=False, message=f"% DPlane interface discovery failed: {exc}")
 
         return CommandResult(message=_format_dplane_interfaces_brief(ctx.state, interfaces, devices))
 
@@ -130,13 +133,13 @@ def register_dplane_commands(
         interface = _get_host_interface(ctx, ifnet_provider, ifnet_admin_provider, ctx.mode_label)
         if isinstance(interface, CommandResult):
             return interface
-        devices = _list_npcap_devices(npcap_library)
+        devices = _list_packet_devices(DPlane_backend)
         if isinstance(devices, CommandResult):
             return devices
-        if find_npcap_device_for_interface(interface, devices) is None:
+        if DPlane_backend.DPlane_find_packet_device(interface, devices) is None:
             return CommandResult(
                 ok=False,
-                message=f"% Host interface is not matched to an Npcap device: {interface.name}",
+                message=f"% Host interface is not matched to a DPlane packet device: {interface.name}",
             )
         stage_import_interface(ctx.state, interface.name)
         if ctx.state.get(RUNNING_CONFIG_LOADING_STATE_KEY):
@@ -242,17 +245,19 @@ def _get_host_interface(
     return interface
 
 
-def _list_npcap_devices(npcap_library: NpcapLibrary | None) -> tuple[NpcapDevice, ...] | CommandResult:
+def _list_packet_devices(
+    DPlane_backend: DPlane_Backend,
+) -> tuple[DPlane_PacketDevice, ...] | CommandResult:
     try:
-        return (npcap_library or NpcapLibrary()).list_devices()
-    except NpcapError as exc:
-        return CommandResult(ok=False, message=f"% Npcap interface discovery failed: {exc}")
+        return DPlane_backend.DPlane_list_packet_devices()
+    except RuntimeError as exc:
+        return CommandResult(ok=False, message=f"% DPlane interface discovery failed: {exc}")
 
 
 def _format_dplane_interfaces_detail(
     state: dict,
     interfaces: tuple[NetworkInterface, ...],
-    devices: tuple[NpcapDevice, ...],
+    devices: tuple[DPlane_PacketDevice, ...],
 ) -> str:
     if not interfaces:
         return "No IFNET interfaces found"
@@ -265,7 +270,7 @@ def _format_dplane_interfaces_detail(
             f"OS Index       : {row.os_index}",
             f"VVRP           : {_highlight_dplane_word(row.vvrp)}",
             f"IFNET Index    : {row.ifnet_index}",
-            f"Npcap Device   : {row.npcap_device}",
+            f"Packet Device  : {row.packet_device}",
             f"Status         : {_highlight_dplane_word(row.status)}",
         ]
         blocks.append("\n".join(block))
@@ -275,7 +280,7 @@ def _format_dplane_interfaces_detail(
 def _format_dplane_interfaces_brief(
     state: dict,
     interfaces: tuple[NetworkInterface, ...],
-    devices: tuple[NpcapDevice, ...],
+    devices: tuple[DPlane_PacketDevice, ...],
 ) -> str:
     rows = _dplane_interface_rows(state, interfaces, devices)
     lines = [
@@ -296,14 +301,14 @@ def _format_dplane_interfaces_brief(
 def _dplane_interface_rows(
     state: dict,
     interfaces: tuple[NetworkInterface, ...],
-    devices: tuple[NpcapDevice, ...],
+    devices: tuple[DPlane_PacketDevice, ...],
 ) -> tuple[DplaneInterfaceRow, ...]:
     active_imports = imported_interface_names(state)
     pending_imports = pending_import_names(state)
     imported_indices = imported_ifnet_index_map(state, interfaces)
     rows: list[DplaneInterfaceRow] = []
     for interface in interfaces:
-        device = find_npcap_device_for_interface(interface, devices)
+        device = _find_packet_device_for_interface(interface, devices)
         if device is None:
             device_name = "-"
             status = "unmatched"
@@ -322,11 +327,26 @@ def _dplane_interface_rows(
                 os_index=_display_os_index(interface.index),
                 vvrp=_display_vvrp_import_state(interface.name, active_imports),
                 ifnet_index=_display_ifnet_index(imported_indices.get(interface.name)),
-                npcap_device=device_name,
+                packet_device=device_name,
                 status=status,
             )
         )
     return tuple(rows)
+
+
+def _find_packet_device_for_interface(
+    interface: NetworkInterface,
+    devices: tuple[DPlane_PacketDevice, ...],
+) -> DPlane_PacketDevice | None:
+    for device in devices:
+        if interface.name == device.name or interface.name in (device.description or ""):
+            return device
+    try:
+        from src.DPlane.Windows.npcap import find_npcap_device_for_interface
+
+        return find_npcap_device_for_interface(interface, devices)  # type: ignore[arg-type]
+    except RuntimeError:
+        return None
 
 
 def _display_ifnet_index(ifnet_index: int | None) -> str:

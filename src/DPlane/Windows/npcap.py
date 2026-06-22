@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from src.DPlane.packet import CapturedFrame
+from src.DPlane.backend import DPlane_LegacyHostBackend
+from src.DPlane.models import DPlane_PacketDevice, DPlane_PlatformInfo
 from src.IFNET.models import NetworkInterface
 
 
@@ -27,9 +29,10 @@ class NpcapError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class NpcapDevice:
+class NpcapDevice(DPlane_PacketDevice):
     name: str
     description: str = ""
+    backend: str = "npcap"
 
 
 class _Timeval(ctypes.Structure):
@@ -286,6 +289,52 @@ class NpcapPacketPort:
 
     def __exit__(self, exc_type, exc, traceback) -> None:
         self.close()
+
+
+class DPlane_WindowsNpcapBackend(DPlane_LegacyHostBackend):
+    def __init__(
+        self,
+        DPlane_ifnet_provider=None,
+        DPlane_admin_provider=None,
+        DPlane_npcap_library: NpcapLibrary | None = None,
+        DPlane_platform: DPlane_PlatformInfo | None = None,
+    ) -> None:
+        super().__init__(
+            DPlane_ifnet_provider=DPlane_ifnet_provider,
+            DPlane_admin_provider=DPlane_admin_provider,
+        )
+        self.DPlane_npcap_library = DPlane_npcap_library
+        if DPlane_platform is not None:
+            self._DPlane_platform = DPlane_platform
+
+    def DPlane_list_packet_devices(self) -> tuple[DPlane_PacketDevice, ...]:
+        return tuple(self._DPlane_library().list_devices())
+
+    def DPlane_find_packet_device(
+        self,
+        DPlane_interface: NetworkInterface,
+        DPlane_devices: tuple[DPlane_PacketDevice, ...] | None = None,
+    ) -> DPlane_PacketDevice | None:
+        DPlane_active_devices = DPlane_devices
+        if DPlane_active_devices is None:
+            DPlane_active_devices = self.DPlane_list_packet_devices()
+        return find_npcap_device_for_interface(
+            DPlane_interface,
+            tuple(
+                NpcapDevice(
+                    name=DPlane_device.name,
+                    description=DPlane_device.description,
+                    backend=DPlane_device.backend or "npcap",
+                )
+                for DPlane_device in DPlane_active_devices
+            ),
+        )
+
+    def DPlane_open_packet_port(self, DPlane_device: DPlane_PacketDevice) -> NpcapPacketPort:
+        return NpcapPacketPort(DPlane_device.name, library=self.DPlane_npcap_library)
+
+    def _DPlane_library(self) -> NpcapLibrary:
+        return self.DPlane_npcap_library or NpcapLibrary()
 
 
 def find_npcap_device_for_interface(

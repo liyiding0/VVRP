@@ -1163,7 +1163,7 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertIn("OS Index       : 2", text)
         self.assertIn("VVRP           : -", text)
         self.assertIn("IFNET Index    : -", text)
-        self.assertIn(r"Npcap Device   : \Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}", text)
+        self.assertIn(r"Packet Device  : \Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}", text)
         self.assertIn("Status         : \x1b[38;2;242;242;242mmatched\x1b[0m", text)
 
         output.truncate(0)
@@ -1480,7 +1480,7 @@ class IFNETCommandTests(unittest.TestCase):
         outcome = dispatch_line(ctx, registry, "import")
 
         self.assertTrue(outcome.executed)
-        self.assertEqual("% Host interface is not matched to an Npcap device: eth3", outcome.message)
+        self.assertEqual("% Host interface is not matched to a DPlane packet device: eth3", outcome.message)
 
     def test_host_interface_import_writes_and_loads_running_config(self):
         with tempfile.TemporaryDirectory() as temp_dir:

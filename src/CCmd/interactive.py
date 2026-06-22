@@ -129,9 +129,13 @@ def run_interactive_cli(
         from prompt_toolkit.shortcuts import print_formatted_text
         from prompt_toolkit.styles import Style
     except ImportError:
-        print("prompt_toolkit is required for interactive mode.")
-        print("Install it with: python -m pip install prompt_toolkit")
-        return 2
+        print("prompt_toolkit is not available; falling back to plain interactive mode.")
+        return _run_plain_cli(
+            registry,
+            prompt=prompt,
+            hostname=hostname,
+            saved_configuration_file=saved_configuration_file,
+        )
 
     parser = CommandParser(registry)
     ctx = CliContext(
