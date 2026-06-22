@@ -1,5 +1,13 @@
 """Ethernet protocol support for VVRP."""
 
+from .commands import register_ethernet_commands
+from .debug import (
+    ETHERNET_FRAME_BRIEF_DEBUG_STATE_KEY,
+    debug_ethernet_frame,
+    format_ethernet_frame_brief,
+    is_ethernet_frame_brief_debug_enabled,
+    set_ethernet_frame_brief_debug,
+)
 from .frame import (
     BROADCAST_MAC,
     ETHERNET_II_MIN_ETHERTYPE,
@@ -29,6 +37,7 @@ __all__ = [
     "ETHERNET_HEADER_LENGTH",
     "ETHERNET_MAX_PAYLOAD_LENGTH",
     "ETHERNET_MIN_FRAME_LENGTH",
+    "ETHERNET_FRAME_BRIEF_DEBUG_STATE_KEY",
     "ETHERTYPE_8021Q",
     "ETHERTYPE_ARP",
     "ETHERTYPE_IPV4",
@@ -41,8 +50,13 @@ __all__ = [
     "RawEthernetPort",
     "UnsupportedEthernetFrame",
     "build_ethernet_ii_frame",
+    "debug_ethernet_frame",
     "encode_ethertype",
     "format_mac_address",
+    "format_ethernet_frame_brief",
+    "is_ethernet_frame_brief_debug_enabled",
     "parse_ethernet_ii_frame",
     "parse_mac_address",
+    "register_ethernet_commands",
+    "set_ethernet_frame_brief_debug",
 ]

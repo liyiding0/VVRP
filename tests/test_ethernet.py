@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import unittest
 
 from VVRP.ETHERNET import (
@@ -11,11 +12,17 @@ from VVRP.ETHERNET import (
     EthernetPort,
     UnsupportedEthernetFrame,
     build_ethernet_ii_frame,
+    debug_ethernet_frame,
     encode_ethertype,
+    format_ethernet_frame_brief,
     format_mac_address,
+    is_ethernet_frame_brief_debug_enabled,
     parse_ethernet_ii_frame,
     parse_mac_address,
+    register_ethernet_commands,
 )
+from VVRP.CCmd import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
+from VVRP.CCmd.examples import build_default_registry
 
 
 class FakePacketPort:
@@ -129,6 +136,82 @@ class EthernetPortTests(unittest.TestCase):
         self.assertTrue(packet_port.closed)
         self.assertEqual(ETHERNET_MIN_FRAME_LENGTH, len(packet_port.sent[0]))
         self.assertEqual(["ether proto 0x0800"], packet_port.filters)
+
+
+class EthernetDebugTests(unittest.TestCase):
+    def test_format_ethernet_frame_brief(self):
+        frame = EthernetFrame(
+            destination="ff:ff:ff:ff:ff:ff",
+            source="00:11:22:33:44:55",
+            ethertype=ETHERTYPE_ARP,
+            payload=b"arp",
+        )
+
+        self.assertEqual(
+            "ETHERNET/FRAME: eth2 RX dst=ff:ff:ff:ff:ff:ff "
+            "src=00:11:22:33:44:55 type=ARP(0x0806) len=17",
+            format_ethernet_frame_brief("eth2", "rx", frame),
+        )
+
+    def test_debug_ethernet_frame_writes_only_when_enabled(self):
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        frame = EthernetFrame(
+            destination="ff:ff:ff:ff:ff:ff",
+            source="00:11:22:33:44:55",
+            ethertype=ETHERTYPE_IPV4,
+            payload=b"ip",
+        )
+
+        debug_ethernet_frame(ctx, "eth2", "tx", frame)
+        self.assertEqual("", output.getvalue())
+
+        registry = build_default_registry()
+        ctx.push_mode("privileged")
+        self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)
+        output.truncate(0)
+        output.seek(0)
+
+        debug_ethernet_frame(ctx, "eth2", "tx", frame)
+
+        self.assertIn("ETHERNET/FRAME: eth2 TX", output.getvalue())
+        self.assertIn("type=IPv4(0x0800)", output.getvalue())
+
+    def test_debugging_ethernet_commands(self):
+        registry = build_default_registry()
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        ctx.push_mode("privileged")
+
+        self.assertFalse(is_ethernet_frame_brief_debug_enabled(ctx))
+        self.assertTrue(dispatch_line(ctx, registry, "show debugging ethernet").executed)
+        self.assertIn("off", output.getvalue())
+
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)
+        self.assertTrue(is_ethernet_frame_brief_debug_enabled(ctx))
+        self.assertIn("on", output.getvalue())
+
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "no debugging ethernet frame brief").executed)
+        self.assertFalse(is_ethernet_frame_brief_debug_enabled(ctx))
+        self.assertIn("off", output.getvalue())
+
+    def test_debugging_ethernet_command_help_and_modes(self):
+        registry = CommandRegistry()
+        register_ethernet_commands(registry)
+        parser = CommandParser(registry)
+
+        for mode in ("privileged", "config", "hidden", "interface", "host-interface"):
+            self.assertTrue(parser.parse("debugging ethernet frame brief", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("no debugging ethernet frame brief", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show debugging ethernet", mode=mode).executable, mode)
+        self.assertEqual(
+            ParseStatus.INVALID,
+            parser.parse("debugging ethernet frame brief", mode="user").status,
+        )
 
 
 if __name__ == "__main__":

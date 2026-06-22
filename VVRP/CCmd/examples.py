@@ -3,6 +3,7 @@ from __future__ import annotations
 from VVRP.ARP import ArpTable, register_arp_commands
 from VVRP.DPlane import register_dplane_commands
 from VVRP.DPlane.Windows.npcap import NpcapLibrary
+from VVRP.ETHERNET import register_ethernet_commands
 from VVRP.IFNET import register_ifnet_commands
 from VVRP.IFNET.admin import InterfaceAdminProvider
 from VVRP.IFNET.discovery import InterfaceProvider
@@ -95,6 +96,10 @@ def build_default_registry(
         registry,
         table=arp_table,
         modes=SHOW_MODES,
+    )
+    register_ethernet_commands(
+        registry,
+        modes=("privileged", "config", "hidden", "interface", "host-interface"),
     )
 
     @registry.command(
