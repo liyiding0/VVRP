@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from VVRP.CCmd.models import CommandResult
 from VVRP.CCmd.registry import CommandRegistry
@@ -15,6 +15,7 @@ from VVRP.CCmd.running_config import (
     set_host_interface_config_command,
     set_interface_config_command,
 )
+from VVRP.DPlane.Windows.npcap import NpcapLibrary
 from VVRP.IFNET.admin import InterfaceAdminProvider
 from VVRP.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from VVRP.IFNET.imports import imported_interfaces
@@ -23,7 +24,7 @@ from VVRP.IFNET.models import InterfaceAddress, NetworkInterface
 from VVRP.IFNET.state import is_admin_down, set_interface_addresses
 
 from .dhcp import DhcpClientProvider, OsDhcpClientProvider
-from .ping import PING_ARGUMENT_PATTERN, run_ping
+from .ICMP.ping import PING_ARGUMENT_PATTERN, run_ping
 from .static import (
     OsStaticIpv4Provider,
     StaticIpv4Address,
@@ -50,8 +51,10 @@ def register_ip_commands(
     modes: Sequence[str] = DEFAULT_IP_COMMAND_MODES,
     ifnet_provider: InterfaceProvider | None = None,
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
+    npcap_library: NpcapLibrary | None = None,
     dhcp_provider: DhcpClientProvider | None = None,
     static_ipv4_provider: StaticIpv4Provider | None = None,
+    after_vvrp_ipv4_change: Callable | None = None,
 ) -> None:
     active_dhcp_provider = dhcp_provider or OsDhcpClientProvider()
     active_static_ipv4_provider = static_ipv4_provider or OsStaticIpv4Provider()
@@ -62,7 +65,14 @@ def register_ip_commands(
         modes=tuple(modes),
     )
     def ping(ctx, args):
-        result = run_ping(args["arguments"], output=ctx.output)
+        result = run_ping(
+            args["arguments"],
+            output=ctx.output,
+            ctx=ctx,
+            ifnet_provider=ifnet_provider,
+            ifnet_admin_provider=ifnet_admin_provider,
+            npcap_library=npcap_library,
+        )
         return CommandResult(ok=result.ok, message=result.message)
 
     @registry.command(
@@ -334,6 +344,7 @@ def register_ip_commands(
             ifnet_provider,
             ifnet_admin_provider,
             active_static_ipv4_provider,
+            after_vvrp_ipv4_change,
             args["ip_address"],
             args["mask"],
             secondary=False,
@@ -350,6 +361,7 @@ def register_ip_commands(
             ifnet_provider,
             ifnet_admin_provider,
             active_static_ipv4_provider,
+            after_vvrp_ipv4_change,
             args["ip_address"],
             args["mask"],
             secondary=True,
@@ -366,6 +378,7 @@ def register_ip_commands(
             ifnet_provider,
             ifnet_admin_provider,
             active_static_ipv4_provider,
+            after_vvrp_ipv4_change,
         )
 
     @registry.command(
@@ -379,6 +392,7 @@ def register_ip_commands(
             ifnet_provider,
             ifnet_admin_provider,
             active_static_ipv4_provider,
+            after_vvrp_ipv4_change,
             args["ip_address"],
             args["mask"],
             secondary=False,
@@ -395,6 +409,7 @@ def register_ip_commands(
             ifnet_provider,
             ifnet_admin_provider,
             active_static_ipv4_provider,
+            after_vvrp_ipv4_change,
             args["ip_address"],
             args["mask"],
             secondary=True,
@@ -531,6 +546,7 @@ def _set_static_ipv4(
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
     static_ipv4_provider: StaticIpv4Provider,
+    after_vvrp_ipv4_change: Callable | None,
     ip_address: str,
     mask: str,
     secondary: bool,
@@ -548,8 +564,9 @@ def _set_static_ipv4(
     return _set_vvrp_static_ipv4(
         ctx,
         ifnet_provider,
-        ifnet_admin_provider,
-        ip_address,
+            ifnet_admin_provider,
+            after_vvrp_ipv4_change,
+            ip_address,
         mask,
         secondary,
     )
@@ -612,6 +629,7 @@ def _set_vvrp_static_ipv4(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
+    after_vvrp_ipv4_change: Callable | None,
     ip_address: str,
     mask: str,
     secondary: bool,
@@ -638,6 +656,7 @@ def _set_vvrp_static_ipv4(
     else:
         current = [address, *[item for item in current if item.secondary]]
     _apply_vvrp_static_ipv4_addresses(ctx, interface.name, tuple(current))
+    _call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
 
     dhcp_error = remove_interface_config_command(ctx, interface.name, "ip-address-dhcp")
     if dhcp_error:
@@ -659,6 +678,7 @@ def _remove_static_ipv4(
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
     static_ipv4_provider: StaticIpv4Provider,
+    after_vvrp_ipv4_change: Callable | None,
     ip_address: str | None = None,
     mask: str | None = None,
     secondary: bool = False,
@@ -676,8 +696,9 @@ def _remove_static_ipv4(
     return _remove_vvrp_static_ipv4(
         ctx,
         ifnet_provider,
-        ifnet_admin_provider,
-        ip_address,
+            ifnet_admin_provider,
+            after_vvrp_ipv4_change,
+            ip_address,
         mask,
         secondary,
     )
@@ -732,6 +753,7 @@ def _remove_vvrp_static_ipv4(
     ctx,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
+    after_vvrp_ipv4_change: Callable | None,
     ip_address: str | None = None,
     mask: str | None = None,
     secondary: bool = False,
@@ -757,6 +779,7 @@ def _remove_vvrp_static_ipv4(
 
     if address is None:
         _apply_vvrp_static_ipv4_addresses(ctx, interface.name, ())
+        _call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
         config_error = remove_interface_config_prefix(ctx, interface.name, "ip-address:")
         return CommandResult(ok=not config_error, message=config_error)
 
@@ -770,6 +793,7 @@ def _remove_vvrp_static_ipv4(
         )
     )
     _apply_vvrp_static_ipv4_addresses(ctx, interface.name, current)
+    _call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
     config_error = remove_interface_config_command(
         ctx,
         interface.name,
@@ -788,6 +812,12 @@ def _apply_vvrp_static_ipv4_addresses(
         interface_name,
         tuple(_interface_address_from_static(address) for address in addresses),
     )
+
+
+def _call_after_vvrp_ipv4_change(ctx, callback: Callable | None) -> None:
+    if callback is None:
+        return
+    callback(ctx)
 
 
 def _interface_address_from_static(address: StaticIpv4Address) -> InterfaceAddress:

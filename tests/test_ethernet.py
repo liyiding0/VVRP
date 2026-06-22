@@ -24,9 +24,11 @@ from VVRP.ETHERNET import (
 )
 from VVRP.CCmd import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
 from VVRP.CCmd.examples import build_default_registry
+from VVRP.ARP import ARP_REPLY, ArpPacket, get_arp_table
 from VVRP.DPlane.frame_debug import DplaneEthernetFrameDebugService
 from VVRP.DPlane.Windows.npcap import NpcapDevice
 from VVRP.IFNET.imports import commit_imports, stage_import_interface
+from VVRP.IFNET.state import set_interface_mac_address
 from VVRP.IFNET import InterfaceAddress, NetworkInterface
 
 
@@ -226,11 +228,18 @@ class EthernetDebugTests(unittest.TestCase):
         self.assertIn("off", output.getvalue())
 
     def test_debugging_ethernet_command_starts_dplane_listener(self):
+        arp = ArpPacket(
+            operation=ARP_REPLY,
+            sender_mac="66:77:88:99:aa:bb",
+            sender_ip="10.0.0.2",
+            target_mac="00:11:22:33:44:55",
+            target_ip="10.0.0.1",
+        )
         raw = build_ethernet_ii_frame(
-            destination="ff:ff:ff:ff:ff:ff",
-            source="00:11:22:33:44:55",
+            destination="00:11:22:33:44:55",
+            source="66:77:88:99:aa:bb",
             ethertype=ETHERTYPE_ARP,
-            payload=b"arp",
+            payload=arp.to_bytes(),
         )
         ports: list[DebugPacketPort] = []
 
@@ -267,6 +276,9 @@ class EthernetDebugTests(unittest.TestCase):
         self.assertIn("1 listener(s) running", output.getvalue())
         self.assertIn("ETHERNET/FRAME: eth4 RX", output.getvalue())
         self.assertEqual(["ether proto 0x0806"], ports[0].filters)
+        learned = get_arp_table(ctx.state).lookup("10.0.0.2", "eth4")
+        self.assertIsNotNone(learned)
+        self.assertEqual("66:77:88:99:aa:bb", learned.mac_address)
 
         self.assertTrue(dispatch_line(ctx, registry, "no debugging ethernet frame brief").executed)
 
@@ -282,19 +294,71 @@ class EthernetDebugTests(unittest.TestCase):
         self.assertFalse(is_ethernet_frame_brief_debug_enabled(ctx))
         self.assertIn("off", output.getvalue())
 
+    def test_debugging_ethernet_filters_host_mac_after_vvrp_mac_override(self):
+        host_raw = build_ethernet_ii_frame(
+            destination="66:77:88:99:aa:bb",
+            source="00:11:22:33:44:55",
+            ethertype=ETHERTYPE_IPV4,
+            payload=b"host",
+        )
+        vvrp_raw = build_ethernet_ii_frame(
+            destination="02:00:00:00:00:01",
+            source="66:77:88:99:aa:bb",
+            ethertype=ETHERTYPE_IPV4,
+            payload=b"vvrp",
+        )
+        ports: list[DebugPacketPort] = []
+
+        def port_factory(device_name):
+            port = DebugPacketPort(frames=(host_raw, vvrp_raw))
+            ports.append(port)
+            return port
+
+        service = DplaneEthernetFrameDebugService(
+            ifnet_provider=FakeInterfaceProvider(),
+            npcap_library=FakeNpcapLibrary(),
+            port_factory=port_factory,
+            packet_filter="ether proto 0x0800",
+        )
+        registry = CommandRegistry()
+        register_ethernet_commands(
+            registry,
+            frame_debug_start=service.start,
+            frame_debug_stop=service.stop,
+            frame_debug_status=service.status,
+        )
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        ctx.push_mode("privileged")
+        stage_import_interface(ctx.state, "eth4")
+        commit_imports(ctx.state)
+        set_interface_mac_address(ctx.state, "eth4", "02:00:00:00:00:01")
+
+        self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)
+
+        deadline = time.time() + 1
+        while "dst=02:00:00:00:00:01" not in output.getvalue() and time.time() < deadline:
+            time.sleep(0.01)
+
+        text = output.getvalue()
+        self.assertNotIn("src=00:11:22:33:44:55", text)
+        self.assertIn("dst=02:00:00:00:00:01", text)
+
+        self.assertTrue(dispatch_line(ctx, registry, "no debugging ethernet frame brief").executed)
+
     def test_debugging_ethernet_command_help_and_modes(self):
         registry = CommandRegistry()
         register_ethernet_commands(registry)
         parser = CommandParser(registry)
 
-        for mode in ("privileged", "config", "hidden", "interface", "host-interface"):
+        for mode in ("privileged", "config", "hidden"):
             self.assertTrue(parser.parse("debugging ethernet frame brief", mode=mode).executable, mode)
             self.assertTrue(parser.parse("no debugging ethernet frame brief", mode=mode).executable, mode)
             self.assertTrue(parser.parse("show debugging ethernet", mode=mode).executable, mode)
-        self.assertEqual(
-            ParseStatus.INVALID,
-            parser.parse("debugging ethernet frame brief", mode="user").status,
-        )
+        for mode in ("user", "interface", "host-interface"):
+            self.assertEqual(ParseStatus.INVALID, parser.parse("debugging ethernet frame brief", mode=mode).status)
+            self.assertEqual(ParseStatus.INVALID, parser.parse("no debugging ethernet frame brief", mode=mode).status)
+            self.assertEqual(ParseStatus.INVALID, parser.parse("show debugging ethernet", mode=mode).status)
 
 
 if __name__ == "__main__":

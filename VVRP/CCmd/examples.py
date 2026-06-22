@@ -8,6 +8,7 @@ from VVRP.ETHERNET import register_ethernet_commands
 from VVRP.IFNET import register_ifnet_commands
 from VVRP.IFNET.admin import InterfaceAdminProvider
 from VVRP.IFNET.discovery import InterfaceProvider
+from VVRP.IP.ICMP.responder import IcmpResponderService
 from VVRP.IP import register_ip_commands
 from VVRP.IP.dhcp import DhcpClientProvider
 from VVRP.IP.static import StaticIpv4Provider
@@ -40,6 +41,11 @@ def build_default_registry(
 ) -> CommandRegistry:
     registry = CommandRegistry()
     ethernet_frame_debug = DplaneEthernetFrameDebugService(
+        ifnet_provider=ifnet_provider,
+        ifnet_admin_provider=ifnet_admin_provider,
+        npcap_library=dplane_npcap_library,
+    )
+    icmp_responder = IcmpResponderService(
         ifnet_provider=ifnet_provider,
         ifnet_admin_provider=ifnet_admin_provider,
         npcap_library=dplane_npcap_library,
@@ -89,14 +95,17 @@ def build_default_registry(
         ifnet_admin_provider=ifnet_admin_provider,
         npcap_library=dplane_npcap_library,
         modes=("hidden", "host-interface"),
+        after_import_commit=icmp_responder.refresh,
     )
     register_ip_commands(
         registry,
         modes=ALL_MODES,
         ifnet_provider=ifnet_provider,
         ifnet_admin_provider=ifnet_admin_provider,
+        npcap_library=dplane_npcap_library,
         dhcp_provider=ip_dhcp_provider,
         static_ipv4_provider=ip_static_ipv4_provider,
+        after_vvrp_ipv4_change=icmp_responder.refresh,
     )
     register_arp_commands(
         registry,
@@ -105,7 +114,9 @@ def build_default_registry(
     )
     register_ethernet_commands(
         registry,
-        modes=("privileged", "config", "hidden", "interface", "host-interface"),
+        modes=("privileged", "config", "hidden"),
+        ifnet_provider=ifnet_provider,
+        ifnet_admin_provider=ifnet_admin_provider,
         frame_debug_start=ethernet_frame_debug.start,
         frame_debug_stop=ethernet_frame_debug.stop,
         frame_debug_status=ethernet_frame_debug.status,

@@ -24,7 +24,7 @@ from .state import is_admin_down, no_shutdown_interface, shutdown_interface
 
 DEFAULT_IFNET_COMMAND_MODES = ("hidden", "interface")
 VVRP_INTERFACE_SHOW_MODES = ("user", "privileged", "config", "hidden", "interface", "host-interface")
-VVRP_INTERFACE_CONFIG_MODES = ("config", "interface", "host-interface")
+VVRP_INTERFACE_CONFIG_MODES = ("config", "hidden", "interface", "host-interface")
 INTERFACE_NAME_PATTERN = r".+"
 OS_ADMIN_VERIFY_ATTEMPTS = 10
 OS_ADMIN_VERIFY_DELAY_SECONDS = 0.5
@@ -523,3 +523,4 @@ def _display_value(value: object) -> str:
     if value is None or value == "":
         return "-"
     return str(value)
+

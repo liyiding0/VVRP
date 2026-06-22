@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from VVRP.CCmd.models import CommandResult
@@ -52,6 +53,7 @@ def register_dplane_commands(
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
     npcap_library: NpcapLibrary | None = None,
     modes: Sequence[str] = DEFAULT_DPLANE_COMMAND_MODES,
+    after_import_commit: Callable | None = None,
 ) -> None:
     @registry.command(
         "show dplane interfaces",
@@ -139,6 +141,7 @@ def register_dplane_commands(
         stage_import_interface(ctx.state, interface.name)
         if ctx.state.get(RUNNING_CONFIG_LOADING_STATE_KEY):
             commit_imports(ctx.state)
+            _call_after_import_commit(ctx, after_import_commit)
             config_error = _sync_import_config_from_active(ctx, (interface.name,))
             return CommandResult(ok=not config_error, message=config_error)
         return CommandResult(message="% Configuration changed; use commit to apply")
@@ -155,6 +158,7 @@ def register_dplane_commands(
         stage_unimport_interface(ctx.state, interface.name)
         if ctx.state.get(RUNNING_CONFIG_LOADING_STATE_KEY):
             commit_imports(ctx.state)
+            _call_after_import_commit(ctx, after_import_commit)
             config_error = _sync_import_config_from_active(ctx, (interface.name,))
             return CommandResult(ok=not config_error, message=config_error)
         return CommandResult(message="% Configuration changed; use commit to apply")
@@ -168,6 +172,7 @@ def register_dplane_commands(
         active_before = imported_interface_names(ctx.state)
         pending_before = pending_import_names(ctx.state)
         commit_imports(ctx.state)
+        _call_after_import_commit(ctx, after_import_commit)
         config_error = _sync_import_config_from_active(
             ctx,
             active_before | pending_before | imported_interface_names(ctx.state),
@@ -175,6 +180,12 @@ def register_dplane_commands(
         if config_error:
             return CommandResult(ok=False, message=config_error)
         return CommandResult(message="Commit complete")
+
+
+def _call_after_import_commit(ctx, callback: Callable | None) -> None:
+    if callback is None:
+        return
+    callback(ctx)
 
 def _list_host_interfaces(
     ctx,

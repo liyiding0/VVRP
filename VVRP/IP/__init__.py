@@ -2,13 +2,15 @@
 
 from .commands import register_ip_commands
 from .dhcp import DhcpClientProvider, DhcpClientResult, OsDhcpClientProvider
-from .ping import (
+from .ICMP.ping import (
     PING_ARGUMENT_PATTERN,
     IcmpSocketPinger,
     PingOptions,
     PingReply,
     PingResult,
+    VvrpPacketPinger,
     build_icmp_echo_packet,
+    build_ipv4_packet,
     classify_ping_target,
     format_ping_reply,
     format_ping_statistics,
@@ -40,6 +42,8 @@ __all__ = [
     "PingOptions",
     "PingReply",
     "PingResult",
+    "VvrpPacketPinger",
+    "build_ipv4_packet",
     "StaticIpv4Address",
     "StaticIpv4Provider",
     "StaticIpv4Result",

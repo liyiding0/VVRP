@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import importlib.util
+import struct
 import tempfile
 import unittest
 from dataclasses import replace
@@ -17,6 +18,7 @@ from VVRP.CCmd import (
     TokenStyle,
     dispatch_line,
 )
+from VVRP.ARP import ARP_REPLY, ArpPacket
 from VVRP.CCmd.examples import build_default_registry
 from VVRP.CCmd.help import format_help
 from VVRP.CCmd.interactive import (
@@ -54,16 +56,23 @@ from VVRP.IFNET.discovery import (
     _interface_metadata_map,
 )
 from VVRP.IFNET.imports import commit_imports, stage_import_interface
+from VVRP.IFNET.state import set_interface_addresses, set_interface_mac_address
+from VVRP.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
 from VVRP.IP.dhcp import DhcpClientResult
-from VVRP.IP.ping import (
+from VVRP.IP.ICMP.ping import (
+    ICMP_CODE,
+    ICMP_ECHO_REPLY,
     IcmpSocketPinger,
     PingOptions,
     PingReply,
     PingResult,
+    VvrpPacketPinger,
     build_icmp_echo_packet,
+    build_ipv4_packet,
     classify_ping_target,
     format_ping_reply,
     format_ping_statistics,
+    icmp_checksum,
     parse_ping_arguments,
     run_ping,
 )
@@ -220,6 +229,51 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(ParseStatus.VALID_UNIQUE, unique.status)
         self.assertEqual(("ip",), unique.candidates)
         self.assertEqual(TokenStyle.VALID, unique.token_statuses[2].style)
+
+    def test_partial_ipv4_parameter_token_style(self):
+        parser = CommandParser(build_default_registry())
+
+        partial = parser.parse("ip address 192.168.211", mode="interface")
+        self.assertEqual(ParseStatus.AMBIGUOUS, partial.status)
+        self.assertEqual(TokenStyle.VALID, partial.token_statuses[0].style)
+        self.assertEqual(TokenStyle.VALID, partial.token_statuses[1].style)
+        self.assertEqual(TokenStyle.AMBIGUOUS, partial.token_statuses[2].style)
+
+        valid = parser.parse("ip address 192.168.211.1 24", mode="interface")
+        self.assertEqual(ParseStatus.VALID_UNIQUE, valid.status)
+        self.assertEqual(TokenStyle.VALID, valid.token_statuses[2].style)
+        self.assertEqual(TokenStyle.VALID, valid.token_statuses[3].style)
+
+        invalid = parser.parse("ip address 192.168.999", mode="interface")
+        self.assertEqual(ParseStatus.INVALID, invalid.status)
+        self.assertEqual(TokenStyle.INVALID, invalid.token_statuses[2].style)
+
+    def test_partial_ipv4_mask_parameter_token_style(self):
+        parser = CommandParser(build_default_registry())
+
+        partial = parser.parse("ip address 192.168.211.1 255.255", mode="interface")
+        self.assertEqual(ParseStatus.AMBIGUOUS, partial.status)
+        self.assertEqual(TokenStyle.AMBIGUOUS, partial.token_statuses[3].style)
+
+        invalid = parser.parse("ip address 192.168.211.1 255.999", mode="interface")
+        self.assertEqual(ParseStatus.INVALID, invalid.status)
+        self.assertEqual(TokenStyle.INVALID, invalid.token_statuses[3].style)
+
+    def test_partial_mac_address_parameter_token_style(self):
+        parser = CommandParser(build_default_registry())
+
+        partial = parser.parse("mac-address 00:E0:4C:11:22:", mode="interface")
+        self.assertEqual(ParseStatus.AMBIGUOUS, partial.status)
+        self.assertEqual(TokenStyle.VALID, partial.token_statuses[0].style)
+        self.assertEqual(TokenStyle.AMBIGUOUS, partial.token_statuses[1].style)
+
+        valid = parser.parse("mac-address 00:E0:4C:11:22:33", mode="interface")
+        self.assertEqual(ParseStatus.VALID_UNIQUE, valid.status)
+        self.assertEqual(TokenStyle.VALID, valid.token_statuses[1].style)
+
+        invalid = parser.parse("mac-address 00:E0:4C:11:22:333", mode="interface")
+        self.assertEqual(ParseStatus.INVALID, invalid.status)
+        self.assertEqual(TokenStyle.INVALID, invalid.token_statuses[1].style)
 
     def test_unique_token_completes_before_space_for_any_command(self):
         parser = CommandParser(build_default_registry())
@@ -486,7 +540,7 @@ class InteractiveTests(unittest.TestCase):
 class ModuleBoundaryTests(unittest.TestCase):
     def test_ping_module_lives_in_ip_not_ccmd(self):
         self.assertIsNone(importlib.util.find_spec("VVRP.CCmd.ping"))
-        self.assertIsNotNone(importlib.util.find_spec("VVRP.IP.ping"))
+        self.assertIsNotNone(importlib.util.find_spec("VVRP.IP.ICMP.ping"))
         self.assertIsNotNone(importlib.util.find_spec("VVRP.IFNET"))
         self.assertIsNotNone(importlib.util.find_spec("VVRP.ETHERNET"))
         self.assertIsNotNone(importlib.util.find_spec("VVRP.ARP"))
@@ -603,6 +657,51 @@ class FakeNpcapLibrary:
         return self.devices
 
 
+class FakePingPacketPort:
+    def __init__(self, frames: tuple[bytes | None, ...] = ()):
+        self.frames = list(frames)
+        self.sent: list[bytes] = []
+        self.filters: list[str] = []
+        self.opened = False
+        self.closed = False
+
+    def open(self) -> None:
+        self.opened = True
+
+    def close(self) -> None:
+        self.closed = True
+
+    def recv_frame(self) -> bytes | None:
+        if not self.frames:
+            return None
+        return self.frames.pop(0)
+
+    def send_frame(self, frame: bytes) -> None:
+        self.sent.append(frame)
+
+    def set_filter(self, expression: str) -> None:
+        self.filters.append(expression)
+
+    def __enter__(self):
+        self.open()
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def monotonic(self) -> float:
+        self.value += 0.001
+        return self.value
+
+    def sleep(self, seconds: float) -> None:
+        self.value += seconds
+
+
 class FakeStaticIpv4Provider:
     def __init__(self):
         self.calls: list[tuple[str, str, StaticIpv4Address | None]] = []
@@ -688,6 +787,12 @@ def with_ipv4(
         interface,
         addresses=(InterfaceAddress(family="ipv4", address=address, prefix_length=prefix_length),),
     )
+
+
+def _build_icmp_echo_reply(identifier: int, sequence: int, payload: bytes) -> bytes:
+    header = struct.pack("!BBHHH", ICMP_ECHO_REPLY, ICMP_CODE, 0, identifier, sequence)
+    checksum = icmp_checksum(header + payload)
+    return struct.pack("!BBHHH", ICMP_ECHO_REPLY, ICMP_CODE, checksum, identifier, sequence) + payload
 
 
 def fake_interface_with_spaces() -> NetworkInterface:
@@ -984,10 +1089,20 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertTrue(abbreviated_host_interfaces.executable)
         self.assertEqual("host interface eth3", abbreviated_host_interfaces.complete_command)
         self.assertTrue(parser.parse("interface eth3", mode="config").executable)
+        self.assertTrue(parser.parse("interface eth3", mode="hidden").executable)
         self.assertTrue(parser.parse("shutdown", mode="interface").executable)
         self.assertTrue(parser.parse("no shutdown", mode="interface").executable)
+        self.assertTrue(parser.parse("mac-address 02:00:00:00:00:01", mode="interface").executable)
+        self.assertTrue(parser.parse("no mac-address", mode="interface").executable)
         self.assertEqual(ParseStatus.INVALID, parser.parse("shutdown", mode="privileged").status)
         self.assertEqual(ParseStatus.INVALID, parser.parse("no shutdown", mode="config").status)
+        self.assertEqual(ParseStatus.INVALID, parser.parse("mac-address 02:00:00:00:00:01", mode="config").status)
+
+        hidden_candidates = parser.help_candidates("", mode="hidden")
+        self.assertIn(
+            ("interface", "Enter VVRP interface configuration mode"),
+            [(candidate.display, candidate.help_text) for candidate in hidden_candidates],
+        )
 
     def test_default_registry_has_dplane_interface_show_in_hidden_mode(self):
         registry = build_default_registry(
@@ -1100,6 +1215,20 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertEqual("interface", ctx.mode)
         self.assertEqual("eth3", ctx.mode_label)
 
+    def test_hidden_view_can_enter_imported_vvrp_interface(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth2"), fake_ethernet("eth3")))
+        )
+        ctx = CliContext(output=io.StringIO())
+        registry.initialize_context(ctx)
+        stage_import_interface(ctx.state, "eth3")
+        commit_imports(ctx.state)
+        ctx.push_mode("hidden")
+
+        self.assertTrue(dispatch_line(ctx, registry, "interface eth3").executed)
+        self.assertEqual("interface", ctx.mode)
+        self.assertEqual("eth3", ctx.mode_label)
+
     def test_vvrp_interface_show_this_displays_current_interface_config(self):
         registry = build_default_registry(
             ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth2"), fake_ethernet("eth3")))
@@ -1129,6 +1258,66 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertTrue(dispatch_line(ctx, registry, "interface eth3").executed)
         self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
         self.assertEqual("interface eth3\n quit\n", output.getvalue())
+
+    def test_vvrp_interface_mac_address_overrides_and_restores_imported_mac(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth2"), fake_ethernet("eth3")))
+        )
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        registry.initialize_context(ctx)
+        stage_import_interface(ctx.state, "eth2")
+        commit_imports(ctx.state)
+        ctx.push_mode("config")
+        self.assertTrue(dispatch_line(ctx, registry, "interface eth2").executed)
+
+        self.assertTrue(dispatch_line(ctx, registry, "mac-address 02-00-00-00-00-01").executed)
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth2").executed)
+        self.assertIn("Hardware address is 02:00:00:00:00:01", output.getvalue())
+
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show host interface eth2").executed)
+        self.assertIn("Hardware address is AA:BB:CC:DD:EE:FF", output.getvalue())
+
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
+        self.assertEqual("interface eth2\n mac-address 02:00:00:00:00:01\n quit\n", output.getvalue())
+
+        self.assertTrue(dispatch_line(ctx, registry, "no mac-address").executed)
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth2").executed)
+        self.assertIn("Hardware address is AA:BB:CC:DD:EE:FF", output.getvalue())
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
+        self.assertEqual("interface eth2\n quit\n", output.getvalue())
+
+    def test_vvrp_interface_mac_address_rejects_bad_addresses(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth2"),))
+        )
+        ctx = CliContext(output=io.StringIO())
+        registry.initialize_context(ctx)
+        stage_import_interface(ctx.state, "eth2")
+        commit_imports(ctx.state)
+        ctx.push_mode("config")
+        dispatch_line(ctx, registry, "interface eth2")
+
+        for command, message in (
+            ("mac-address ff:ff:ff:ff:ff:ff", "broadcast"),
+            ("mac-address 01:00:00:00:00:01", "multicast"),
+            ("mac-address 00:00:00:00:00:00", "all-zero"),
+            ("mac-address AA:BB:CC:DD:EE:FF", "must differ"),
+        ):
+            with self.subTest(command=command):
+                outcome = dispatch_line(ctx, registry, command)
+                self.assertTrue(outcome.executed)
+                self.assertIn(message, outcome.message)
 
     def test_host_interface_import_requires_match_and_commit(self):
         registry = build_default_registry(
@@ -2851,7 +3040,7 @@ class PingTests(unittest.TestCase):
                 return PingResult(ok=True)
 
         output = io.StringIO()
-        with patch("VVRP.IP.ping.resolve_ipv4_target", return_value="192.0.2.10"):
+        with patch("VVRP.IP.ICMP.ping.resolve_ipv4_target", return_value="192.0.2.10"):
             result = run_ping("-c 1 192.0.2.10", output=output, pinger=FakePinger())
 
         self.assertTrue(result.ok)
@@ -2859,6 +3048,76 @@ class PingTests(unittest.TestCase):
         self.assertIn("PING 192.0.2.10: 56 data bytes", text)
         self.assertIn("Reply from 192.0.2.10", text)
         self.assertIn("1 packet(s) transmitted", text)
+
+    def test_vvrp_packet_ping_uses_imported_interface_mac_and_npcap(self):
+        ctx = CliContext(output=io.StringIO())
+        stage_import_interface(ctx.state, "eth3")
+        commit_imports(ctx.state)
+        set_interface_addresses(
+            ctx.state,
+            "eth3",
+            (InterfaceAddress(family="ipv4", address="192.0.2.10", prefix_length=24),),
+        )
+        set_interface_mac_address(ctx.state, "eth3", "02:00:00:00:00:01")
+        provider = FakeInterfaceProvider((fake_ethernet("eth3"),))
+        clock = FakeClock()
+        target_ip = "192.0.2.1"
+        target_mac = "66:77:88:99:aa:bb"
+        payload = bytes(range(32, 32 + 56))
+
+        arp_reply = ArpPacket(
+            operation=ARP_REPLY,
+            sender_mac=target_mac,
+            sender_ip=target_ip,
+            target_mac="02:00:00:00:00:01",
+            target_ip="192.0.2.10",
+        )
+        arp_reply_frame = build_ethernet_ii_frame(
+            destination="02:00:00:00:00:01",
+            source=target_mac,
+            ethertype=ETHERTYPE_ARP,
+            payload=arp_reply.to_bytes(),
+        )
+        icmp_reply = _build_icmp_echo_reply(0x1234, 1, payload)
+        ipv4_reply = build_ipv4_packet(
+            target_ip,
+            "192.0.2.10",
+            1,
+            icmp_reply,
+            ttl=64,
+            identification=0x4321,
+        )
+        icmp_reply_frame = build_ethernet_ii_frame(
+            destination="02:00:00:00:00:01",
+            source=target_mac,
+            ethertype=ETHERTYPE_IPV4,
+            payload=ipv4_reply,
+        )
+        port = FakePingPacketPort((arp_reply_frame, icmp_reply_frame))
+        pinger = VvrpPacketPinger(
+            ctx,
+            ifnet_provider=provider,
+            npcap_library=FakeNpcapLibrary((NpcapDevice(name=r"\Device\NPF_eth3", description="eth3"),)),
+            port_factory=lambda device_name: port,
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+            identifier=0x1234,
+        )
+        output = io.StringIO()
+
+        result = run_ping("-c 1 -m 0 192.0.2.1", output=output, pinger=pinger)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(["ether proto 0x0806 or ether proto 0x0800"], port.filters)
+        self.assertEqual(2, len(port.sent))
+        arp_request = parse_ethernet_ii_frame(port.sent[0])
+        self.assertEqual(ETHERTYPE_ARP, arp_request.ethertype)
+        self.assertEqual("02:00:00:00:00:01", arp_request.source)
+        icmp_request = parse_ethernet_ii_frame(port.sent[1])
+        self.assertEqual(ETHERTYPE_IPV4, icmp_request.ethertype)
+        self.assertEqual("02:00:00:00:00:01", icmp_request.source)
+        self.assertEqual(target_mac, icmp_request.destination)
+        self.assertIn("Reply from 192.0.2.1", output.getvalue())
 
     def test_ping_command_is_available_in_all_modes(self):
         registry = build_default_registry()
@@ -2879,7 +3138,12 @@ class PingTests(unittest.TestCase):
             outcome = dispatch_line(ctx, registry, "ping -c 1 192.0.2.10")
 
         self.assertTrue(outcome.executed)
-        run_ping_mock.assert_called_once_with("-c 1 192.0.2.10", output=ctx.output)
+        _, kwargs = run_ping_mock.call_args
+        self.assertEqual("-c 1 192.0.2.10", run_ping_mock.call_args.args[0])
+        self.assertIs(ctx.output, kwargs["output"])
+        self.assertIs(ctx, kwargs["ctx"])
+        self.assertIn("ifnet_provider", kwargs)
+        self.assertIn("npcap_library", kwargs)
         self.assertIn("pong", ctx.output.getvalue())
 
 

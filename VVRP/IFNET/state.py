@@ -8,6 +8,7 @@ from .models import InterfaceAddress, NetworkInterface
 
 IFNET_ADMIN_DOWN_STATE_KEY = "ifnet.admin_down"
 IFNET_INTERFACE_ADDRESSES_STATE_KEY = "ifnet.interface_addresses"
+IFNET_INTERFACE_MACS_STATE_KEY = "ifnet.interface_macs"
 
 
 def admin_down_interfaces(state: dict[str, Any]) -> set[str]:
@@ -38,11 +39,34 @@ def set_interface_addresses(
     interface_addresses(state)[name] = tuple(addresses)
 
 
+def set_interface_mac_address(
+    state: dict[str, Any],
+    name: str,
+    mac_address: str,
+) -> None:
+    interface_mac_addresses(state)[name] = mac_address
+
+
+def remove_interface_mac_address(
+    state: dict[str, Any],
+    name: str,
+) -> None:
+    interface_mac_addresses(state).pop(name, None)
+
+
 def interface_addresses(state: dict[str, Any]) -> dict[str, tuple[InterfaceAddress, ...]]:
     value = state.setdefault(IFNET_INTERFACE_ADDRESSES_STATE_KEY, {})
     if not isinstance(value, dict):
         value = {}
         state[IFNET_INTERFACE_ADDRESSES_STATE_KEY] = value
+    return value
+
+
+def interface_mac_addresses(state: dict[str, Any]) -> dict[str, str]:
+    value = state.setdefault(IFNET_INTERFACE_MACS_STATE_KEY, {})
+    if not isinstance(value, dict):
+        value = {}
+        state[IFNET_INTERFACE_MACS_STATE_KEY] = value
     return value
 
 
@@ -57,8 +81,23 @@ def addresses_for_interface(
     return value
 
 
+def mac_address_for_interface(
+    state: dict[str, Any],
+    name: str,
+    default: str,
+) -> str:
+    value = interface_mac_addresses(state).get(name)
+    if isinstance(value, str) and value:
+        return value
+    return default
+
+
 def apply_vvrp_interface_state(
     state: dict[str, Any],
     interface: NetworkInterface,
 ) -> NetworkInterface:
-    return replace(interface, addresses=addresses_for_interface(state, interface.name))
+    return replace(
+        interface,
+        addresses=addresses_for_interface(state, interface.name),
+        mac_address=mac_address_for_interface(state, interface.name, interface.mac_address),
+    )

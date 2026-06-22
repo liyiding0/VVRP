@@ -432,7 +432,14 @@ class CommandParser:
 
         parameter_matches: list[_EdgeMatch] = []
         for edge in node.parameter_edges:
-            if edge.token.pattern is None or edge.token.pattern.fullmatch(value) is None:
+            if edge.token.pattern is None:
+                continue
+
+            if edge.token.pattern.fullmatch(value) is None:
+                if self._parameter_accepts_partial(edge, value):
+                    parameter_matches.append(
+                        _EdgeMatch(edge, TokenStyle.AMBIGUOUS, (edge.token.display,))
+                    )
                 continue
 
             dynamic_values = self._parameter_values(edge, resolved_tokens, ctx)
@@ -466,7 +473,17 @@ class CommandParser:
         return (
             edge.token.display.startswith(prefix)
             or edge.token.pattern.fullmatch(prefix) is not None
+            or self._parameter_accepts_partial(edge, prefix)
         )
+
+    def _parameter_accepts_partial(self, edge: TrieEdge, value: str) -> bool:
+        if edge.token.name == "ip_address":
+            return _is_partial_ipv4_address(value)
+        if edge.token.name == "mask":
+            return _is_partial_ipv4_mask(value)
+        if edge.token.name == "mac_address":
+            return _is_partial_mac_address(value)
+        return False
 
     def _parameter_values(
         self,
@@ -511,3 +528,76 @@ def _format_resolved_token(token: str) -> str:
         return token
     escaped = token.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
+
+
+def _is_partial_ipv4_address(value: str) -> bool:
+    if not value or any(char not in "0123456789." for char in value):
+        return False
+    if ".." in value or value.count(".") > 3:
+        return False
+    parts = value.split(".")
+    for part in parts:
+        if part == "":
+            continue
+        if len(part) > 3:
+            return False
+        if int(part) > 255:
+            return False
+    return True
+
+
+def _is_partial_ipv4_mask(value: str) -> bool:
+    if not value:
+        return False
+    if value.isdigit():
+        if len(value) > 2:
+            return False
+        return 0 <= int(value) <= 32 or any(str(number).startswith(value) for number in range(33))
+    return _is_partial_ipv4_address(value)
+
+
+def _is_partial_mac_address(value: str) -> bool:
+    if not value or any(char not in "0123456789abcdefABCDEF:-." for char in value):
+        return False
+
+    has_dot = "." in value
+    has_octet_separator = ":" in value or "-" in value
+    if has_dot and has_octet_separator:
+        return False
+
+    if has_dot:
+        return _is_partial_grouped_hex(value, ".", group_size=4, group_count=3)
+    if has_octet_separator:
+        separators = {char for char in value if char in ":-"}
+        if len(separators) > 1:
+            return False
+        return _is_partial_grouped_hex(value, separators.pop(), group_size=2, group_count=6)
+
+    return value.isalnum() and len(value) < 12
+
+
+def _is_partial_grouped_hex(
+    value: str,
+    separator: str,
+    *,
+    group_size: int,
+    group_count: int,
+) -> bool:
+    if value.startswith(separator):
+        return False
+
+    groups = value.split(separator)
+    if len(groups) > group_count:
+        return False
+
+    for index, group in enumerate(groups):
+        if group == "":
+            if index != len(groups) - 1:
+                return False
+            continue
+        if len(group) > group_size:
+            return False
+        if any(char not in "0123456789abcdefABCDEF" for char in group):
+            return False
+
+    return True
