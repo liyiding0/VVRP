@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-22_20-37-30",
+  "prompt": "Upgrade Codex replay tools to v1.0",
+  "changed_files": [
+    "tools/codex_logger.py",
+    "tools/replay.py",
+    "tools/timeline.py",
+    "tools/README.md"
+  ],
+  "note": "adds diff capture, decision replay, architecture tags, and timeline UI",
+  "decisions": [
+    "Capture dirty working tree metadata instead of requiring a commit",
+    "Generate static HTML timeline under context/replays for local viewing",
+    "Infer touched architecture modules from changed file paths"
+  ],
+  "codex_output": "",
+  "git_commit": "86cfa0ac97d0c10eb5128435e9afdd7a8209b4d1",
+  "git_branch": "codex/restructure-source-layout",
+  "git_dirty_files": [
+    "context/replays/timeline.html",
+    "context/sessions/2026-06-22_20-32-43.json",
+    "tools/"
+  ],
+  "diff_stat": "",
+  "diff_summary": "",
+  "architecture": {
+    "touched_modules": [
+      "tools"
+    ]
+  }
+}

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    
+            <article class="card">
+              <div class="meta">
+                <span>2026-06-22_20-32-43</span>
+                <span></span>
+                <span>86cfa0a</span>
+              </div>
+              <h2>Add Codex development replay tool</h2>
+              <p>renamed replay script so development sessions can be replayed</p>
+              <h3>Files</h3>
+              <ul><li>tools/replay.py</li><li>tools/replay.py.txt</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>No module tags</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+            <article class="card">
+              <div class="meta">
+                <span>2026-06-22_20-37-30</span>
+                <span>codex/restructure-source-layout</span>
+                <span>86cfa0a</span>
+              </div>
+              <h2>Upgrade Codex replay tools to v1.0</h2>
+              <p>adds diff capture, decision replay, architecture tags, and timeline UI</p>
+              <h3>Files</h3>
+              <ul><li>tools/codex_logger.py</li><li>tools/replay.py</li><li>tools/timeline.py</li><li>tools/README.md</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Capture dirty working tree metadata instead of requiring a commit</li><li>Generate static HTML timeline under context/replays for local viewing</li><li>Infer touched architecture modules from changed file paths</li></ul>
+              <h3>Architecture</h3>
+              <p>tools</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+  </main>
+  <script type="application/json" id="records">[{&quot;timestamp&quot;: &quot;2026-06-22_20-32-43&quot;, &quot;prompt&quot;: &quot;Add Codex development replay tool&quot;, &quot;changed_files&quot;: [&quot;tools/replay.py&quot;, &quot;tools/replay.py.txt&quot;], &quot;note&quot;: &quot;renamed replay script so development sessions can be replayed&quot;, &quot;git_commit&quot;: &quot;86cfa0ac97d0c10eb5128435e9afdd7a8209b4d1&quot;, &quot;_path&quot;: &quot;D:\\CodeX_Codes\\router_cli_project\\context\\sessions\\2026-06-22_20-32-43.json&quot;}, {&quot;version&quot;: &quot;1.0&quot;, &quot;timestamp&quot;: &quot;2026-06-22_20-37-30&quot;, &quot;prompt&quot;: &quot;Upgrade Codex replay tools to v1.0&quot;, &quot;changed_files&quot;: [&quot;tools/codex_logger.py&quot;, &quot;tools/replay.py&quot;, &quot;tools/timeline.py&quot;, &quot;tools/README.md&quot;], &quot;note&quot;: &quot;adds diff capture, decision replay, architecture tags, and timeline UI&quot;, &quot;decisions&quot;: [&quot;Capture dirty working tree metadata instead of requiring a commit&quot;, &quot;Generate static HTML timeline under context/replays for local viewing&quot;, &quot;Infer touched architecture modules from changed file paths&quot;], &quot;codex_output&quot;: &quot;&quot;, &quot;git_commit&quot;: &quot;86cfa0ac97d0c10eb5128435e9afdd7a8209b4d1&quot;, &quot;git_branch&quot;: &quot;codex/restructure-source-layout&quot;, &quot;git_dirty_files&quot;: [&quot;context/replays/timeline.html&quot;, &quot;context/sessions/2026-06-22_20-32-43.json&quot;, &quot;tools/&quot;], &quot;diff_stat&quot;: &quot;&quot;, &quot;diff_summary&quot;: &quot;&quot;, &quot;architecture&quot;: {&quot;touched_modules&quot;: [&quot;tools&quot;]}, &quot;_path&quot;: &quot;D:\\CodeX_Codes\\router_cli_project\\context\\sessions\\2026-06-22_20-37-30.json&quot;}]</script>
+</body>
+</html>
