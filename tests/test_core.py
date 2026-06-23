@@ -847,7 +847,7 @@ class IFNETCommandTests(unittest.TestCase):
             _interface_index("missing-name", "00:E0:4C:68:00:BE", index_map),
         )
 
-    def test_windows_metadata_map_preserves_stable_os_identity(self):
+    def test_windows_metadata_map_preserves_stable_interface_index(self):
         class FakePsutil:
             AF_LINK = object()
 
@@ -862,7 +862,7 @@ class IFNETCommandTests(unittest.TestCase):
                 return_value={
                     "eth4": {
                         "index": 70,
-                        "os_id": "{13ED46E6-5AA8-4B75-BB3B-71F6CC306B6A}",
+                        "adapter_name": "{13ED46E6-5AA8-4B75-BB3B-71F6CC306B6A}",
                         "names": (
                             "eth4",
                             "{13ED46E6-5AA8-4B75-BB3B-71F6CC306B6A}",
@@ -877,8 +877,6 @@ class IFNETCommandTests(unittest.TestCase):
 
         metadata = metadata_map["eth4"]
         self.assertEqual(70, metadata["index"])
-        self.assertEqual("{13ED46E6-5AA8-4B75-BB3B-71F6CC306B6A}", metadata["os_id"])
-        self.assertIn("Realtek USB GbE Family Controller #2", metadata["os_aliases"])
 
     def test_show_interfaces_brief_lists_fake_provider(self):
         registry = CommandRegistry()
@@ -1503,6 +1501,45 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertTrue(outcome.executed)
         self.assertEqual("% Host interface is not matched to a DPlane packet device: eth3", outcome.message)
 
+        outcome = dispatch_line(ctx, registry, "commit")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual("% No host interface import changes to commit", outcome.message)
+
+    def test_ip_address_change_syncs_connected_route_to_fib(self):
+        interface_guid = "FD33D129-8AEC-4C32-B9FB-7057F7FF0782"
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet_without_ipv4("eth4", index=7),)),
+            dplane_npcap_library=FakeNpcapLibrary(
+                (
+                    NpcapDevice(
+                        name=rf"\Device\NPF_{{{interface_guid}}}",
+                        description="Intel(R) Ethernet Connection (14) I219-V",
+                    ),
+                )
+            ),
+        )
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        ctx.push_mode("hidden")
+
+        with patch(
+            "src.DPlane.Windows.npcap._windows_interface_identity_values",
+            return_value=[f"{{{interface_guid}}}", "Intel(R) Ethernet Connection (14) I219-V"],
+        ):
+            self.assertTrue(dispatch_line(ctx, registry, "host interface eth4").executed)
+            self.assertTrue(dispatch_line(ctx, registry, "import").executed)
+            self.assertTrue(dispatch_line(ctx, registry, "commit").executed)
+            self.assertTrue(dispatch_line(ctx, registry, "interface eth4").executed)
+            self.assertTrue(dispatch_line(ctx, registry, "ip address 1.1.1.1 24").executed)
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show fib").executed)
+
+        text = output.getvalue()
+        self.assertIn("1.1.1.0/24", text)
+        self.assertIn("eth4", text)
+
     def test_host_interface_import_writes_and_loads_running_config(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "saved-configuration"
@@ -1833,23 +1870,16 @@ class IFNETCommandTests(unittest.TestCase):
 
         api.assert_called_once_with(interface, False)
 
-    def test_windows_identity_prefers_cached_os_id_when_ifindex_is_unavailable(self):
+    def test_windows_identity_requires_ifindex(self):
         from src.IFNET.Ethernet.windows import _adapter_identity_for_interface
 
         interface = replace(
             fake_interfaces()[0],
             index=None,
-            os_id="{13ED46E6-5AA8-4B75-BB3B-71F6CC306B6A}",
-            os_aliases=("Realtek USB GbE Family Controller #2",),
         )
 
-        identity = _adapter_identity_for_interface(interface)
-
-        self.assertEqual(
-            "{13ED46E6-5AA8-4B75-BB3B-71F6CC306B6A}",
-            identity["adapter_name"],
-        )
-        self.assertIn("Realtek USB GbE Family Controller #2", identity["names"])
+        with self.assertRaisesRegex(OSError, "missing OS interface index"):
+            _adapter_identity_for_interface(interface)
 
     def test_ethernet_admin_backend_dispatches_to_linux_api(self):
         interface = fake_interfaces()[0]
@@ -2790,15 +2820,14 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertEqual([1, 1, 1, 1], list(iphlpapi.row.Address.Ipv4.sin_addr.S_un_b))
         self.assertEqual(24, iphlpapi.row.OnLinkPrefixLength)
 
-    def test_windows_adapter_configuration_queries_prefer_setting_id(self):
+    def test_windows_adapter_configuration_queries_use_interface_index(self):
         from src.IFNET.Ethernet.windows import _wmi_adapter_configuration_queries
 
-        interface = replace(fake_ethernet("eth3"), os_id="{GUID}")
+        interface = fake_ethernet("eth3")
 
         queries = _wmi_adapter_configuration_queries(interface)
 
-        self.assertIn("WHERE SettingID = '{GUID}'", queries[0])
-        self.assertIn("WHERE InterfaceIndex = 2", queries[1])
+        self.assertIn("WHERE InterfaceIndex = 2", queries[0])
 
     def test_windows_secondary_static_ipv4_uses_iphelper_create(self):
         from src.IFNET.Ethernet.windows import set_windows_static_ipv4

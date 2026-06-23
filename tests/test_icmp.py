@@ -197,7 +197,6 @@ def fake_ethernet(name: str) -> NetworkInterface:
             mac_address="00:E0:4C:68:00:BE",
             mtu=1500,
             speed_mbps=1000,
-            os_id=name,
         ),
         addresses=(),
     )

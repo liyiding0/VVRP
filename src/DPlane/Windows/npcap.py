@@ -383,12 +383,124 @@ def _decode_c_string(value) -> str:
     return str(value)
 
 
+def _decode_adapter_name(adapter_name: bytes | None) -> str:
+    if not adapter_name:
+        return ""
+    return adapter_name.decode("ascii", errors="ignore")
+
+
+def _format_physical_address(raw_address, length: int) -> str:
+    if not length:
+        return ""
+    return ":".join(f"{raw_address[index]:02X}" for index in range(int(length)))
+
+
 def _interface_match_keys(interface: NetworkInterface) -> set[str]:
-    values = [interface.name, interface.os_id, *interface.os_aliases]
+    values = [interface.name]
+    try:
+        values.extend(_windows_interface_identity_values(interface))
+    except OSError:
+        pass
     keys = set()
     for value in values:
         keys.update(_match_keys(value))
     return keys
+
+
+def _windows_interface_identity_values(interface: NetworkInterface) -> list[str]:
+    if platform.system().lower() != "windows" or interface.index is None:
+        return []
+    adapter = _windows_adapter_for_ifindex(int(interface.index))
+    return [
+        adapter.get("adapter_name", ""),
+        adapter.get("friendly_name", ""),
+        adapter.get("description", ""),
+        adapter.get("mac_address", ""),
+    ]
+
+
+def _windows_adapter_for_ifindex(ifindex: int) -> dict[str, str]:
+    for adapter in _windows_adapters():
+        if adapter["index"] == ifindex:
+            return adapter
+    raise OSError(f"Windows adapter not found for interface index {ifindex}")
+
+
+def _windows_adapters() -> tuple[dict[str, str], ...]:
+    from ctypes import wintypes
+
+    max_adapter_address_length = 8
+    af_unspec = 0
+    error_buffer_overflow = 111
+    no_error = 0
+
+    class IP_ADAPTER_ADDRESSES(ctypes.Structure):
+        pass
+
+    IP_ADAPTER_ADDRESSES_POINTER = ctypes.POINTER(IP_ADAPTER_ADDRESSES)
+    IP_ADAPTER_ADDRESSES._fields_ = [
+        ("Length", wintypes.ULONG),
+        ("IfIndex", wintypes.DWORD),
+        ("Next", IP_ADAPTER_ADDRESSES_POINTER),
+        ("AdapterName", ctypes.c_char_p),
+        ("FirstUnicastAddress", ctypes.c_void_p),
+        ("FirstAnycastAddress", ctypes.c_void_p),
+        ("FirstMulticastAddress", ctypes.c_void_p),
+        ("FirstDnsServerAddress", ctypes.c_void_p),
+        ("DnsSuffix", wintypes.LPWSTR),
+        ("Description", wintypes.LPWSTR),
+        ("FriendlyName", wintypes.LPWSTR),
+        ("PhysicalAddress", ctypes.c_ubyte * max_adapter_address_length),
+        ("PhysicalAddressLength", wintypes.DWORD),
+        ("Flags", wintypes.DWORD),
+        ("Mtu", wintypes.DWORD),
+        ("IfType", wintypes.DWORD),
+        ("OperStatus", wintypes.DWORD),
+        ("Ipv6IfIndex", wintypes.DWORD),
+        ("ZoneIndices", wintypes.DWORD * 16),
+        ("FirstPrefix", ctypes.c_void_p),
+    ]
+
+    iphlpapi = ctypes.WinDLL("iphlpapi")
+    buffer_size = wintypes.ULONG(15_000)
+    buffer = ctypes.create_string_buffer(buffer_size.value)
+    result = iphlpapi.GetAdaptersAddresses(
+        af_unspec,
+        0,
+        None,
+        ctypes.cast(buffer, IP_ADAPTER_ADDRESSES_POINTER),
+        ctypes.byref(buffer_size),
+    )
+    if result == error_buffer_overflow:
+        buffer = ctypes.create_string_buffer(buffer_size.value)
+        result = iphlpapi.GetAdaptersAddresses(
+            af_unspec,
+            0,
+            None,
+            ctypes.cast(buffer, IP_ADAPTER_ADDRESSES_POINTER),
+            ctypes.byref(buffer_size),
+        )
+    if result != no_error:
+        raise OSError(f"Windows IP Helper API error {result}")
+
+    adapters: list[dict[str, str]] = []
+    current = ctypes.cast(buffer, IP_ADAPTER_ADDRESSES_POINTER)
+    while current:
+        adapter = current.contents
+        adapters.append(
+            {
+                "index": int(adapter.IfIndex),
+                "adapter_name": _decode_adapter_name(adapter.AdapterName),
+                "friendly_name": adapter.FriendlyName or "",
+                "description": adapter.Description or "",
+                "mac_address": _format_physical_address(
+                    adapter.PhysicalAddress,
+                    adapter.PhysicalAddressLength,
+                ),
+            }
+        )
+        current = adapter.Next
+    return tuple(adapters)
 
 
 def _device_match_keys(device: NpcapDevice) -> set[str]:

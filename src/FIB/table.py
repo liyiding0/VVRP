@@ -61,8 +61,13 @@ def FIB_entry_key(FIB_entry: FIBEntry) -> str:
 def FIB_entry_from_request(
     FIB_request: FIB_InstallRequest,
     FIB_devices: tuple[DPlane_PacketDevice, ...],
+    FIB_device_resolver=None,
 ) -> FIBEntry | None:
-    FIB_device = FIB_find_device_for_request(FIB_request, FIB_devices)
+    FIB_device = None
+    if FIB_device_resolver is not None:
+        FIB_device = FIB_device_resolver(FIB_request)
+    if FIB_device is None:
+        FIB_device = FIB_find_device_for_request(FIB_request, FIB_devices)
     if FIB_device is None:
         return None
     return FIBEntry(
@@ -83,8 +88,9 @@ def FIB_install_request(
     FIB_request: FIB_InstallRequest,
     FIB_devices: tuple[DPlane_PacketDevice, ...],
     FIB_backend: DPlane_Backend | None = None,
+    FIB_device_resolver=None,
 ) -> FIBEntry | None:
-    FIB_entry = FIB_entry_from_request(FIB_request, FIB_devices)
+    FIB_entry = FIB_entry_from_request(FIB_request, FIB_devices, FIB_device_resolver)
     if FIB_entry is None:
         return None
     FIB_table(FIB_state).FIB_install(FIB_entry)
@@ -98,6 +104,7 @@ def FIB_sync_active_routes(
     FIB_routes: tuple,
     FIB_devices: tuple[DPlane_PacketDevice, ...],
     FIB_backend: DPlane_Backend | None = None,
+    FIB_device_resolver=None,
 ) -> FIB_Table:
     FIB_active_table = FIB_table(FIB_state)
     for FIB_existing in FIB_active_table.FIB_entries():
@@ -111,6 +118,7 @@ def FIB_sync_active_routes(
             FIB_install_request_from_route(FIB_route),
             FIB_devices,
             FIB_backend,
+            FIB_device_resolver,
         )
     return FIB_active_table
 

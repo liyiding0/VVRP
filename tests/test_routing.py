@@ -345,6 +345,36 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertIn("192.168.211.0/24", RM_text)
         self.assertIn("eth4", RM_text)
 
+    def test_show_ip_routing_table_installs_fib_with_dplane_resolver(self):
+        RM_registry = CommandRegistry()
+        device = NpcapDevice(
+            name=r"\Device\NPF_{FD33D129-8AEC-4C32-B9FB-7057F7FF0782}",
+            description="Intel(R) Ethernet Connection (14) I219-V",
+        )
+        RM_register_commands(
+            RM_registry,
+            RM_interfaces_provider=lambda RM_ctx: (
+                routing_ethernet("eth4", "1.1.1.1", 24),
+            ),
+            RM_fib_devices_provider=lambda RM_ctx: (device,),
+            RM_fib_device_resolver=lambda RM_ctx, request: device if request.out_if_index == 0 else None,
+        )
+        from src.FIB import FIB_register_commands
+
+        FIB_register_commands(RM_registry)
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        RM_registry.initialize_context(RM_ctx)
+
+        self.assertTrue(dispatch_line(RM_ctx, RM_registry, "show ip routing-table").executed)
+        RM_output.truncate(0)
+        RM_output.seek(0)
+        self.assertTrue(dispatch_line(RM_ctx, RM_registry, "show fib").executed)
+
+        RM_text = RM_output.getvalue()
+        self.assertIn("1.1.1.0/24", RM_text)
+        self.assertIn("eth4", RM_text)
+
     def test_show_ip_routing_table_protocol_filters_routes(self):
         RM_registry = CommandRegistry()
         RM_register_commands(RM_registry)
@@ -522,7 +552,6 @@ def routing_ethernet(
         mtu=1500,
         speed_mbps=1000,
         addresses=(InterfaceAddress(family="ipv4", address=address, prefix_length=prefix_length),),
-        os_id=name,
     )
 
 
@@ -561,7 +590,6 @@ def routing_loopback(
         mtu=1500,
         speed_mbps=None,
         addresses=(InterfaceAddress(family="ipv4", address=address, prefix_length=prefix_length),),
-        os_id=name,
     )
 
 

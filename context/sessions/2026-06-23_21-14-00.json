@@ -1,0 +1,64 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-23_21-14-00",
+  "prompt": "Keep OS interface identity inside DPlane adapter layer",
+  "changed_files": [
+    "src/IFNET/models.py",
+    "src/IFNET/discovery.py",
+    "src/IFNET/inventory.py",
+    "src/IFNET/Ethernet/windows.py",
+    "src/RM/IM/models.py",
+    "src/RM/IM/table.py",
+    "src/FIB/models.py",
+    "src/FIB/table.py",
+    "src/DPlane/Windows/npcap.py",
+    "src/CCmd/examples.py",
+    "tests/test_core.py",
+    "tests/test_dplane_npcap.py",
+    "tests/test_ethernet.py",
+    "tests/test_routing.py"
+  ],
+  "note": "Enforces the architecture rule that OS-specific adapter identity is hidden by DPlane and not exposed through IFNET, RM, or FIB models.",
+  "decisions": [
+    "Removed OS identity fields from IFNET and above; FIB requests carry IFNET-facing identifiers only, while DPlane resolves Windows/Npcap GUIDs internally."
+  ],
+  "codex_output": "",
+  "git_commit": "c639b6d2fd59216f0c7f17d2d488940cf37b536c",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.html",
+    "src/CCmd/examples.py",
+    "src/DPlane/Windows/npcap.py",
+    "src/DPlane/commands.py",
+    "src/FIB/table.py",
+    "src/IFNET/Ethernet/windows.py",
+    "src/IFNET/discovery.py",
+    "src/IFNET/inventory.py",
+    "src/IFNET/models.py",
+    "src/IP/ICMP/ping.py",
+    "src/RM/IM/models.py",
+    "src/RM/IM/table.py",
+    "src/RM/commands.py",
+    "tests/test_core.py",
+    "tests/test_dplane_npcap.py",
+    "tests/test_ethernet.py",
+    "tests/test_icmp.py",
+    "tests/test_routing.py",
+    "context/commits/c639b6d2fd59.json",
+    "context/sessions/2026-06-23_18-31-16.json",
+    "context/sessions/2026-06-23_20-50-41.json",
+    "context/sessions/2026-06-23_20-58-19.json"
+  ],
+  "diff_stat": "context/replays/timeline.html |  73 ++++++++++++++++++++++++++-\n src/CCmd/examples.py          |  64 +++++++++++++++++++++++-\n src/DPlane/Windows/npcap.py   | 114 +++++++++++++++++++++++++++++++++++++++++-\n src/DPlane/commands.py        |  15 ++++++\n src/FIB/table.py              |  12 ++++-\n src/IFNET/Ethernet/windows.py |  16 +-----\n src/IFNET/discovery.py        |  36 +------------\n src/IFNET/inventory.py        |   2 -\n src/IFNET/models.py           |   2 -\n src/IP/ICMP/ping.py           |   1 -\n src/RM/IM/models.py           |   2 -\n src/RM/IM/table.py            |   2 -\n src/RM/commands.py            |  58 +++++++++++++++++++--\n tests/test_core.py            |  65 +++++++++++++++++-------\n tests/test_dplane_npcap.py    |  23 +++++++--\n tests/test_ethernet.py        |   8 ++-\n tests/test_icmp.py            |   1 -\n tests/test_routing.py         |  32 +++++++++++-\n 18 files changed, 431 insertions(+), 95 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.html b/context/replays/timeline.html\nindex b18248f..354cf71 100644\n--- a/context/replays/timeline.html\n+++ b/context/replays/timeline.html\n@@ -757,7 +757,78 @@\n               </details>\n             </article>\n             \n+            <article class=\"card\">\n+              <div class=\"meta\">\n+                <span>2026-06-23_18-31-16</span>\n+                <span>main</span>\n+                <span>c639b6d</span>\n+              </div>\n+              <h2>Count code lines and push RM FIB DPlane work</h2>\n+              <p>Python line count: src 9976, tests 4340, tools 280, total 14596 lines. Commit c639b6d pushed to origin/main.</p>\n+              <h3>Files</h3>\n+              <ul><li>src</li><li>tests</li><li>context</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>Committed the accumulated RM RIB, FIB, show command, DPlane packet input, and CLI fixes to main and pushed through proxy 127.0.0.1:12334.</li></ul>\n+              <h3>Architecture</h3>\n+              <p>context, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre></pre>\n+              </details>\n+            </article>\n+            \n+            <article class=\"card\">\n+              <div class=\"meta\">\n+                <span>2026-06-23_20-50-41</span>\n+                <span>main</span>\n+                <span>c639b6d</span>\n+              </div>\n+              <h2>Clarify unmatched interface import commit behavior</h2>\n+              <p>Prevents failed unmatched imports from looking like a successful commit.</p>\n+              <h3>Files</h3>\n+              <ul><li>src/DPlane/commands.py</li><li>tests/test_core.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>Unmatched host interfaces remain blocked at import, and commit now reports no pending import changes instead of Commit complete when no stage exists.</li></ul>\n+              <h3>Architecture</h3>\n+              <p>DPlane, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>context/replays/timeline.html | 22 +++++++++++++++++++++-\n+ src/DPlane/commands.py        | 15 +++++++++++++++\n+ tests/test_core.py            |  5 +++++\n+ 3 files changed, 41 insertions(+), 1 deletion(-)</pre>\n+              </details>\n+            </article>\n+            \n+            <article class=\"card\">\n+              <div class=\"meta\">\n+                <span>2026-06-23_20-58-19</span>\n+                <span>main</span>\n+                <span>c639b6d</span>\n+              </div>\n+              <h2>Fix connected route FIB installation after IP configuration</h2>\n+              <p>Fixes Direct routes visible in show ip routing-table but missing from show fib, and avoids requiring show ip routing-table before ping can use the route.</p>\n+              <h3>Files</h3>\n+              <ul><li>src/FIB/models.py</li><li>src/FIB/table.py</li><li>src/RM/commands.py</li><li>src/CCmd/examples.py</li><li>tests/test_core.py</li><li>tests/test_routing.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>FIB install requests now carry interface OS identity for Npcap GUID matching, and IP/import callbacks refresh RM connected routes plus FIB immediately.</li></ul>\n+              <h3>Architecture</h3>\n+              <p>CCmd, FIB, RM, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>context/replays/timeline.html | 45 ++++++++++++++++++++++++++++++++++++++++++-\n+ src/CCmd/examples.py          | 18 +++++++++++++++--\n+ src/DPlane/commands.py        | 15 +++++++++++++++\n+ src/FIB/models.py             |  2 ++\n+ src/FIB/table.py              | 33 +++++++++++++++++++++++++++++++\n+ src/RM/commands.py            | 26 ++++++++++++++++++++++++-\n+ tests/test_core.py            | 43 +++++++++++++++++++++++++++++++++++++++++\n+ tests/test_routing.py         | 42 +++++++++++++++++++++++++++++++++++++++-\n+ 8 files changed, 219 insertions(+), 5 deletions(-)</pre>\n+              </details>\n+            </article>\n+            \n   </main>\n... truncated 902 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CCmd",
+      "DPlane",
+      "FIB",
+      "IFNET",
+      "RM",
+      "tests"
+    ]
+  }
+}

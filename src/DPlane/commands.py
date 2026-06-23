@@ -16,6 +16,7 @@ from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.imports import (
+    IFNET_IMPORT_STATE_KEY,
     commit_imports,
     imported_ifnet_index_map,
     imported_interface_names,
@@ -174,6 +175,8 @@ def register_dplane_commands(
     def commit_host_interface(ctx, args):
         active_before = imported_interface_names(ctx.state)
         pending_before = pending_import_names(ctx.state)
+        if not _has_pending_import_changes(ctx.state, active_before, pending_before):
+            return CommandResult(message="% No host interface import changes to commit")
         commit_imports(ctx.state)
         _call_after_import_commit(ctx, after_import_commit)
         config_error = _sync_import_config_from_active(
@@ -189,6 +192,18 @@ def _call_after_import_commit(ctx, callback: Callable | None) -> None:
     if callback is None:
         return
     callback(ctx)
+
+
+def _has_pending_import_changes(
+    state: dict,
+    active_imports: frozenset[str],
+    pending_imports: frozenset[str],
+) -> bool:
+    import_state = state.get(IFNET_IMPORT_STATE_KEY)
+    if not isinstance(import_state, dict):
+        return False
+    return import_state.get("pending") is not None and pending_imports != active_imports
+
 
 def _list_host_interfaces(
     ctx,

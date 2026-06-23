@@ -65,8 +65,6 @@ def RM_IM_from_ifnet_interface(
         mac_address=RM_IM_interface.mac_address,
         mtu=RM_IM_interface.mtu,
         addresses=RM_IM_interface.addresses if RM_IM_include_addresses else (),
-        os_id=RM_IM_interface.os_id,
-        os_aliases=RM_IM_interface.os_aliases,
     )
 
 

@@ -53,8 +53,6 @@ class IfnetManager:
                     interface,
                     ifnet_index=existing.ifnet_index,
                     index=interface.index if interface.index is not None else existing.index,
-                    os_id=interface.os_id or existing.os_id,
-                    os_aliases=interface.os_aliases or existing.os_aliases,
                 )
             self._interfaces_by_name[interface.name] = interface
 

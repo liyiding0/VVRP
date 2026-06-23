@@ -54,6 +54,27 @@ def build_default_registry(
     )
     active_npcap_library = dplane_npcap_library or NpcapLibrary()
 
+    def refresh_control_plane_and_dplane(ctx):
+        from src.RM.commands import RM_refresh_connected_routes_from_interfaces
+
+        RM_refresh_connected_routes_from_interfaces(
+            ctx,
+            lambda current_ctx: _list_vvrp_interfaces_for_rm(
+                current_ctx,
+                ifnet_provider,
+                ifnet_admin_provider,
+            ),
+            lambda current_ctx: active_npcap_library.list_devices(),
+            lambda current_ctx, request: _resolve_fib_packet_device(
+                current_ctx,
+                request,
+                ifnet_provider,
+                ifnet_admin_provider,
+                active_npcap_library,
+            ),
+        )
+        return dplane_packet_input.DPlane_refresh(ctx)
+
     @registry.command("show", help_text="Show command group", modes=SHOW_MODES)
     def show(ctx, args):
         candidates = CommandParser(registry).help_candidates("show ", mode=ctx.mode, ctx=ctx)
@@ -100,6 +121,13 @@ def build_default_registry(
             ifnet_admin_provider,
         ),
         RM_fib_devices_provider=lambda ctx: active_npcap_library.list_devices(),
+        RM_fib_device_resolver=lambda ctx, request: _resolve_fib_packet_device(
+            ctx,
+            request,
+            ifnet_provider,
+            ifnet_admin_provider,
+            active_npcap_library,
+        ),
         RM_modes=("hidden",),
     )
     FIB_register_commands(registry, FIB_modes=SHOW_MODES)
@@ -109,7 +137,7 @@ def build_default_registry(
         ifnet_admin_provider=ifnet_admin_provider,
         npcap_library=dplane_npcap_library,
         modes=("hidden", "host-interface"),
-        after_import_commit=dplane_packet_input.DPlane_refresh,
+        after_import_commit=refresh_control_plane_and_dplane,
     )
     IP_register_commands(
         registry,
@@ -119,7 +147,7 @@ def build_default_registry(
         npcap_library=dplane_npcap_library,
         dhcp_provider=ip_dhcp_provider,
         static_ipv4_provider=ip_static_ipv4_provider,
-        after_vvrp_ipv4_change=dplane_packet_input.DPlane_refresh,
+        after_vvrp_ipv4_change=refresh_control_plane_and_dplane,
     )
     register_arp_commands(
         registry,
@@ -223,4 +251,36 @@ def _list_vvrp_interfaces_for_rm(
         admin_provider=ifnet_admin_provider,
     ).list_interfaces()
     return imported_interfaces(ctx.state, interfaces)
+
+
+def _resolve_fib_packet_device(
+    ctx,
+    request,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+    npcap_library: NpcapLibrary,
+):
+    from src.DPlane.Windows.npcap import NpcapDevice, find_npcap_device_for_interface
+    from src.IFNET.imports import imported_interfaces
+    from src.IFNET.inventory import get_ifnet_manager
+
+    interfaces = get_ifnet_manager(
+        ctx.state,
+        provider=ifnet_provider,
+        admin_provider=ifnet_admin_provider,
+    ).list_interfaces()
+    for interface in imported_interfaces(ctx.state, interfaces):
+        if interface.ifnet_index == request.out_if_index or interface.name == request.out_if_name:
+            return find_npcap_device_for_interface(
+                interface,
+                tuple(
+                    NpcapDevice(
+                        name=device.name,
+                        description=device.description,
+                        backend=device.backend or "npcap",
+                    )
+                    for device in npcap_library.list_devices()
+                ),
+            )
+    return None
 

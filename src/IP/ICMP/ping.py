@@ -822,7 +822,6 @@ def _ICMP_interface_from_fib_entry(ICMP_route: FIBEntry) -> NetworkInterface:
                 prefix_length=ICMP_route.destination.prefixlen,
             ),
         ),
-        os_id=ICMP_route.out_if_name,
     )
 
 

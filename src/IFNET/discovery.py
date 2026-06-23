@@ -48,8 +48,6 @@ class PsutilInterfaceProvider:
                     mtu=int(stats.mtu) if stats is not None and stats.mtu else None,
                     speed_mbps=int(stats.speed) if stats is not None and stats.speed else None,
                     addresses=addresses,
-                    os_id=_interface_os_id(name, mac_address, metadata_map),
-                    os_aliases=_interface_os_aliases(name, mac_address, metadata_map),
                 )
             )
 
@@ -188,11 +186,7 @@ def _interface_metadata_map(
 
     lookup: dict[str, dict[str, Any]] = {}
     for adapter in adapters.values():
-        metadata = {
-            "index": adapter["index"],
-            "os_id": adapter.get("os_id", ""),
-            "os_aliases": tuple(adapter.get("names", ())),
-        }
+        metadata = {"index": adapter["index"]}
         for key in adapter["names"]:
             if key:
                 lookup[_normalize_lookup_key(key)] = metadata
@@ -204,32 +198,6 @@ def _interface_metadata_map(
                 lookup[mac_key] = metadata
 
     return lookup
-
-
-def _interface_os_id(
-    name: str,
-    mac_address: str,
-    metadata_map: dict[str, Any],
-) -> str:
-    metadata = _interface_metadata(name, mac_address, metadata_map)
-    if not isinstance(metadata, dict):
-        return ""
-    value = metadata.get("os_id")
-    return value if isinstance(value, str) else ""
-
-
-def _interface_os_aliases(
-    name: str,
-    mac_address: str,
-    metadata_map: dict[str, Any],
-) -> tuple[str, ...]:
-    metadata = _interface_metadata(name, mac_address, metadata_map)
-    if not isinstance(metadata, dict):
-        return ()
-    aliases = metadata.get("os_aliases")
-    if not isinstance(aliases, tuple):
-        return ()
-    return tuple(alias for alias in aliases if isinstance(alias, str) and alias)
 
 
 def _interface_metadata(
@@ -336,7 +304,7 @@ def _windows_interface_index_map() -> dict[str, dict[str, Any]]:
         key = adapter.FriendlyName or adapter_name or adapter.Description or str(adapter.IfIndex)
         adapters[key] = {
             "index": int(adapter.IfIndex),
-            "os_id": adapter_name,
+            "adapter_name": adapter_name,
             "names": names,
             "mac_address": mac_address,
         }

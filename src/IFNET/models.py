@@ -32,8 +32,6 @@ class NetworkInterface:
     mtu: int | None
     speed_mbps: int | None
     addresses: tuple[InterfaceAddress, ...] = ()
-    os_id: str = ""
-    os_aliases: tuple[str, ...] = ()
 
     def addresses_by_family(self, family: AddressFamily) -> tuple[InterfaceAddress, ...]:
         return tuple(address for address in self.addresses if address.family == family)

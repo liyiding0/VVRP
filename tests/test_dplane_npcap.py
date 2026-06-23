@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import unittest
+from unittest.mock import patch
 
 from src.DPlane import CapturedFrame
 from src.DPlane.Windows.npcap import (
@@ -26,8 +27,6 @@ def fake_interface() -> NetworkInterface:
         mac_address="00:11:22:33:44:55",
         mtu=1500,
         speed_mbps=1000,
-        os_id="{12345678-1234-1234-1234-1234567890AB}",
-        os_aliases=("Ethernet 1", r"\DEVICE\TCPIP_{12345678-1234-1234-1234-1234567890AB}"),
     )
 
 
@@ -94,7 +93,7 @@ class FakePcapDll:
 
 
 class NpcapTests(unittest.TestCase):
-    def test_find_npcap_device_for_interface_matches_guid_and_alias(self):
+    def test_find_npcap_device_for_interface_matches_dplane_adapter_identity(self):
         devices = (
             NpcapDevice(
                 name=r"\Device\NPF_{12345678-1234-1234-1234-1234567890AB}",
@@ -103,7 +102,14 @@ class NpcapTests(unittest.TestCase):
             NpcapDevice(name=r"\Device\NPF_{99999999-9999-9999-9999-999999999999}"),
         )
 
-        self.assertEqual(devices[0], find_npcap_device_for_interface(fake_interface(), devices))
+        with patch(
+            "src.DPlane.Windows.npcap._windows_interface_identity_values",
+            return_value=[
+                "{12345678-1234-1234-1234-1234567890AB}",
+                "Ethernet 1",
+            ],
+        ):
+            self.assertEqual(devices[0], find_npcap_device_for_interface(fake_interface(), devices))
 
         alias_only = (
             NpcapDevice(
@@ -111,7 +117,14 @@ class NpcapTests(unittest.TestCase):
                 description="Ethernet 1",
             ),
         )
-        self.assertEqual(alias_only[0], find_npcap_device_for_interface(fake_interface(), alias_only))
+        with patch(
+            "src.DPlane.Windows.npcap._windows_interface_identity_values",
+            return_value=[
+                "{12345678-1234-1234-1234-1234567890AB}",
+                "Ethernet 1",
+            ],
+        ):
+            self.assertEqual(alias_only[0], find_npcap_device_for_interface(fake_interface(), alias_only))
 
     def test_npcap_packet_port_lifecycle_recv_send_and_filter(self):
         library = FakePacketLibrary()

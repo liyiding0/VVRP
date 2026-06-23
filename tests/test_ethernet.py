@@ -69,7 +69,6 @@ def fake_interface() -> NetworkInterface:
         mtu=1500,
         speed_mbps=1000,
         addresses=(InterfaceAddress(family="ipv4", address="10.0.0.1", prefix_length=24),),
-        os_id="{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
     )
 
 
@@ -80,7 +79,12 @@ class FakeInterfaceProvider:
 
 class FakeNpcapLibrary:
     def list_devices(self) -> tuple[NpcapDevice, ...]:
-        return (NpcapDevice(name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"),)
+        return (
+            NpcapDevice(
+                name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
+                description="eth4",
+            ),
+        )
 
 
 class DebugPacketPort(FakePacketPort):

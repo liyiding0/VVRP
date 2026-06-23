@@ -393,15 +393,6 @@ def _unicast_ipv4_row(
 
 
 def _adapter_identity_for_interface(interface: NetworkInterface) -> dict[str, object]:
-    if interface.os_id:
-        return {
-            "adapter_name": interface.os_id,
-            "names": tuple(
-                name
-                for name in (interface.name, interface.os_id, *interface.os_aliases)
-                if name
-            ),
-        }
     if interface.index is None:
         raise OSError("missing OS interface index")
     return _adapter_identity_for_ifindex(interface.index)
@@ -567,11 +558,6 @@ def _wmi_netip_interface_queries(interface: NetworkInterface) -> tuple[str, ...]
 
 def _wmi_adapter_configuration_queries(interface: NetworkInterface) -> tuple[str, ...]:
     queries: list[str] = []
-    if interface.os_id:
-        queries.append(
-            "SELECT * FROM Win32_NetworkAdapterConfiguration "
-            f"WHERE SettingID = {_wql_string(interface.os_id)}"
-        )
     if interface.index is not None:
         queries.append(
             "SELECT * FROM Win32_NetworkAdapterConfiguration "
@@ -590,7 +576,7 @@ def _wmi_adapter_configuration_queries(interface: NetworkInterface) -> tuple[str
 
 
 def _interface_identity_names(interface: NetworkInterface) -> tuple[str, ...]:
-    names = [interface.name, interface.os_id, *interface.os_aliases]
+    names = [interface.name]
     try:
         identity = _adapter_identity_for_interface(interface)
     except OSError:
