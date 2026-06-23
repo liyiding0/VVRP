@@ -1,16 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from ipaddress import IPv4Network
 
-from src.DPlane.Windows.npcap import NpcapDevice
-from src.IFNET.models import NetworkInterface
-from src.RM import RMRoute
+from src.DPlane import DPlane_PacketDevice
 
 
 @dataclass(frozen=True)
 class FIBEntry:
-    route: RMRoute
-    interface: NetworkInterface
+    destination: IPv4Network
+    out_if_name: str
+    out_if_index: int | None
     source_ip: str
+    source_mac: str
     next_hop_ip: str
-    device: NpcapDevice
+    device: DPlane_PacketDevice
+    mtu: int | None = None
+    flags: str = "D"
+
+
+@dataclass(frozen=True)
+class FIB_InstallRequest:
+    destination: IPv4Network
+    out_if_name: str
+    out_if_index: int | None
+    source_ip: str
+    source_mac: str
+    next_hop_ip: str = ""
+    mtu: int | None = None
+    flags: str = "D"

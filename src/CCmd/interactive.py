@@ -123,7 +123,7 @@ def run_interactive_cli(
         from prompt_toolkit.completion import Completer, Completion
         from prompt_toolkit.document import Document
         from prompt_toolkit.formatted_text import ANSI
-        from prompt_toolkit.history import FileHistory
+        from prompt_toolkit.history import FileHistory, InMemoryHistory
         from prompt_toolkit.key_binding import KeyBindings
         from prompt_toolkit.lexers import Lexer
         from prompt_toolkit.shortcuts import print_formatted_text
@@ -283,11 +283,18 @@ def run_interactive_cli(
     )
 
     history_path = Path(history_file or Path.home() / ".vvrp_ccmd_history")
+    try:
+        history_path.parent.mkdir(parents=True, exist_ok=True)
+        with history_path.open("ab"):
+            pass
+        active_history = FileHistory(str(history_path))
+    except OSError:
+        active_history = InMemoryHistory()
     session = PromptSession(
         lexer=RouterCommandLexer(),
         completer=RouterCommandCompleter(),
         complete_while_typing=False,
-        history=FileHistory(str(history_path)),
+        history=active_history,
         key_bindings=key_bindings,
         style=style,
     )

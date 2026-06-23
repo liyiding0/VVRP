@@ -4,7 +4,13 @@ from src.IFNET.admin import InterfaceAdminProvider, OsInterfaceAdminProvider
 from src.IFNET.discovery import InterfaceProvider, discover_interfaces
 from src.IFNET.models import NetworkInterface
 
-from .models import DPlane_Backend, DPlane_PacketDevice, DPlane_PlatformInfo, DPlane_Result
+from .models import (
+    DPlane_Backend,
+    DPlane_ForwardingEntry,
+    DPlane_PacketDevice,
+    DPlane_PlatformInfo,
+    DPlane_Result,
+)
 from .platform import DPlane_detect_platform
 
 
@@ -36,6 +42,24 @@ class DPlane_UnsupportedBackend:
         self,
         DPlane_interface: NetworkInterface,
         DPlane_enabled: bool,
+    ) -> DPlane_Result:
+        return DPlane_Result(
+            ok=False,
+            message=f"% unsupported DPlane platform: {self.DPlane_platform.kind}",
+        )
+
+    def DPlane_install_forwarding_entry(
+        self,
+        DPlane_entry: DPlane_ForwardingEntry,
+    ) -> DPlane_Result:
+        return DPlane_Result(
+            ok=False,
+            message=f"% unsupported DPlane platform: {self.DPlane_platform.kind}",
+        )
+
+    def DPlane_delete_forwarding_entry(
+        self,
+        DPlane_entry: DPlane_ForwardingEntry,
     ) -> DPlane_Result:
         return DPlane_Result(
             ok=False,
@@ -95,6 +119,18 @@ class DPlane_LegacyHostBackend:
         else:
             DPlane_result = self.DPlane_admin_provider.shutdown(DPlane_interface)
         return DPlane_Result(ok=DPlane_result.ok, message=DPlane_result.message)
+
+    def DPlane_install_forwarding_entry(
+        self,
+        DPlane_entry: DPlane_ForwardingEntry,
+    ) -> DPlane_Result:
+        return DPlane_Result()
+
+    def DPlane_delete_forwarding_entry(
+        self,
+        DPlane_entry: DPlane_ForwardingEntry,
+    ) -> DPlane_Result:
+        return DPlane_Result()
 
 
 def DPlane_create_backend(

@@ -262,6 +262,186 @@ def IP_register_commands(
         return CommandResult(message=_IP_format_one_ip_interface_detail(interface, ctx.state))
 
     @registry.command(
+        "show ip interface",
+        help_text="Show IPv4 interface information",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_IP_format_ip_interface_detail(result, ctx.state))
+
+    @registry.command(
+        "show ip interface brief",
+        help_text="Show brief IPv4 interface summary",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_brief(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_IP_format_ip_interface_brief(result, ctx.state))
+
+    @registry.command(
+        "show ip interface brief ethernet",
+        help_text="Show brief IPv4 summary for Ethernet interfaces",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_brief_ethernet(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_IP_format_ip_interface_brief(_IP_filter_interface_kind(result, "ethernet"), ctx.state))
+
+    @registry.command(
+        "show ip interface brief loopback",
+        help_text="Show brief IPv4 summary for loopback interfaces",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_brief_loopback(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_IP_format_ip_interface_brief(_IP_filter_interface_kind(result, "loopback"), ctx.state))
+
+    @registry.command(
+        "show ip interface brief ip-configured",
+        help_text="Show brief IPv4 summary for interfaces with IPv4 configured",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_brief_ip_configured(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_IP_format_ip_interface_brief(_IP_filter_ip_configured(result), ctx.state))
+
+    @registry.command(
+        "show ip interface brief ip-configured except ethernet",
+        help_text="Show IPv4-configured interfaces except Ethernet",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_brief_ip_configured_except_ethernet(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        result = _IP_exclude_interface_kind(_IP_filter_ip_configured(result), "ethernet")
+        return CommandResult(message=_IP_format_ip_interface_brief(result, ctx.state))
+
+    @registry.command(
+        "show ip interface brief ip-configured except loopback",
+        help_text="Show IPv4-configured interfaces except loopback",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_brief_ip_configured_except_loopback(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        result = _IP_exclude_interface_kind(_IP_filter_ip_configured(result), "loopback")
+        return CommandResult(message=_IP_format_ip_interface_brief(result, ctx.state))
+
+    @registry.command(
+        f"show ip interface brief <name:{g_IP_INTERFACE_NAME_PATTERN}>",
+        help_text="Show brief IPv4 summary for an interface",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_brief_name(ctx, args):
+        interface = _IP_get_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
+        if isinstance(interface, CommandResult):
+            return interface
+        return CommandResult(message=_IP_format_ip_interface_brief((interface,), ctx.state))
+
+    @registry.command(
+        "show ip interface description",
+        help_text="Show IPv4 interface descriptions",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_description(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_IP_format_ip_interface_description(result, ctx.state))
+
+    @registry.command(
+        "show ip interface description ethernet",
+        help_text="Show IPv4 descriptions for Ethernet interfaces",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_description_ethernet(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_IP_format_ip_interface_description(_IP_filter_interface_kind(result, "ethernet"), ctx.state))
+
+    @registry.command(
+        "show ip interface description loopback",
+        help_text="Show IPv4 descriptions for loopback interfaces",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_description_loopback(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_IP_format_ip_interface_description(_IP_filter_interface_kind(result, "loopback"), ctx.state))
+
+    @registry.command(
+        "show ip interface description ip-configured",
+        help_text="Show IPv4 descriptions for interfaces with IPv4 configured",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_description_ip_configured(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_IP_format_ip_interface_description(_IP_filter_ip_configured(result), ctx.state))
+
+    @registry.command(
+        "show ip interface description ip-configured except ethernet",
+        help_text="Show IPv4-configured descriptions except Ethernet",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_description_ip_configured_except_ethernet(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        result = _IP_exclude_interface_kind(_IP_filter_ip_configured(result), "ethernet")
+        return CommandResult(message=_IP_format_ip_interface_description(result, ctx.state))
+
+    @registry.command(
+        "show ip interface description ip-configured except loopback",
+        help_text="Show IPv4-configured descriptions except loopback",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_description_ip_configured_except_loopback(ctx, args):
+        result = _IP_list_vvrp_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        result = _IP_exclude_interface_kind(_IP_filter_ip_configured(result), "loopback")
+        return CommandResult(message=_IP_format_ip_interface_description(result, ctx.state))
+
+    @registry.command(
+        f"show ip interface description <name:{g_IP_INTERFACE_NAME_PATTERN}>",
+        help_text="Show IPv4 description for an interface",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_description_name(ctx, args):
+        interface = _IP_get_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
+        if isinstance(interface, CommandResult):
+            return interface
+        return CommandResult(message=_IP_format_ip_interface_description((interface,), ctx.state))
+
+    @registry.command(
+        f"show ip interface <name:{g_IP_INTERFACE_NAME_PATTERN}>",
+        help_text="Show IPv4 information for an interface",
+        modes=tuple(modes),
+    )
+    def IP_show_vvrp_ip_interface_name(ctx, args):
+        interface = _IP_get_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
+        if isinstance(interface, CommandResult):
+            return interface
+        return CommandResult(message=_IP_format_one_ip_interface_detail(interface, ctx.state))
+
+    @registry.command(
         "ip",
         help_text="Configure IP features",
         modes=("interface", "host-interface"),

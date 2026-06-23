@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-23_15-47-15",
+  "prompt": "Install active routes into FIB from routing-table path",
+  "changed_files": [
+    "src/RM/commands.py",
+    "src/CCmd/examples.py",
+    "tests/test_routing.py"
+  ],
+  "note": "Fixes the case where show ip routing-table displayed a Direct route but show fib remained empty.",
+  "decisions": [
+    "When RM builds or reads the active route table for show ip routing-table, synchronize active routes into FIB using the configured packet devices.",
+    "Default CLI passes the Npcap device provider to RM so show fib reflects active direct routes."
+  ],
+  "codex_output": "",
+  "git_commit": "b075c88b7d405a2c9a5793d3c10b1bfd96b82a54",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.html",
+    "src/CCmd/examples.py",
+    "src/DPlane/__init__.py",
+    "src/DPlane/backend.py",
+    "src/DPlane/models.py",
+    "src/FIB/__init__.py",
+    "src/FIB/models.py",
+    "src/FIB/table.py",
+    "src/IP/ICMP/ping.py",
+    "src/IP/commands.py",
+    "src/RM/__init__.py",
+    "src/RM/commands.py",
+    "src/RM/routes.py",
+    "tests/test_core.py",
+    "tests/test_routing.py",
+    "context/commits/b075c88b7d40.json",
+    "context/sessions/2026-06-23_14-13-32.json",
+    "context/sessions/2026-06-23_14-19-39.json",
+    "context/sessions/2026-06-23_14-25-22.json",
+    "context/sessions/2026-06-23_14-28-18.json",
+    "context/sessions/2026-06-23_15-42-15.json",
+    "src/FIB/commands.py",
+    "src/RM/rib.py"
+  ],
+  "diff_stat": "context/replays/timeline.html | 141 ++++++++++++++++++-\n src/CCmd/examples.py          |   4 +\n src/DPlane/__init__.py        |   9 +-\n src/DPlane/backend.py         |  38 ++++-\n src/DPlane/models.py          |  22 +++\n src/FIB/__init__.py           |  14 +-\n src/FIB/models.py             |  14 +-\n src/FIB/table.py              | 123 ++++++++++++++--\n src/IP/ICMP/ping.py           |   2 +-\n src/IP/commands.py            | 180 ++++++++++++++++++++++++\n src/RM/__init__.py            |  20 ++-\n src/RM/commands.py            | 142 +++++++++++++++++++\n src/RM/routes.py              | 100 +++++++++++--\n tests/test_core.py            | 109 ++++++++++++++-\n tests/test_routing.py         | 318 +++++++++++++++++++++++++++++++++++++++++-\n 15 files changed, 1194 insertions(+), 42 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.html b/context/replays/timeline.html\nindex 4729d85..0c24d90 100644\n--- a/context/replays/timeline.html\n+++ b/context/replays/timeline.html\n@@ -320,7 +320,146 @@\n               </details>\n             </article>\n             \n+            <article class=\"card\">\n+              <div class=\"meta\">\n+                <span>2026-06-23_14-13-32</span>\n+                <span>main</span>\n+                <span>b075c88</span>\n+              </div>\n+              <h2>Add RM route table with Radix LPM index</h2>\n+              <p>Added RM route table indexes by prefix/interface/source and active-route LPM lookup.</p>\n+              <h3>Files</h3>\n+              <ul><li>src/RM/rib.py</li><li>src/RM/routes.py</li><li>src/RM/__init__.py</li><li>src/IP/ICMP/ping.py</li><li>tests/test_routing.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>Keep route selection inside RM and expose a RIB plus active IPv4 Radix tree for longest-prefix-match.</li><li>Leave ICMP as a FIB caller only; remove direct-route wording from ping failure text.</li></ul>\n+              <h3>Architecture</h3>\n+              <p>IP, RM, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>src/IP/ICMP/ping.py   |  2 +-\n+ src/RM/__init__.py    | 16 +++++++++-\n+ src/RM/routes.py      | 22 ++++++-------\n+ tests/test_routing.py | 88 ++++++++++++++++++++++++++++++++++++++++++++++++++-\n+ 4 files changed, 114 insertions(+), 14 deletions(-)</pre>\n+              </details>\n+            </article>\n+            \n+            <article class=\"card\">\n+              <div class=\"meta\">\n+                <span>2026-06-23_14-19-39</span>\n+                <span>main</span>\n+                <span>b075c88</span>\n+              </div>\n+              <h2>Wire RM connected routes from IP interface events to FIB</h2>\n+              <p>IP address events now create connected active routes that FIB can use for forwarding lookup.</p>\n+              <h3>Files</h3>\n+              <ul><li>src/RM/rib.py</li><li>src/RM/routes.py</li><li>src/RM/__init__.py</li><li>tests/test_routing.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>RM route table is stored in CLI state and updated synchronously from RM_IM interface/address events.</li><li>FIB lookup uses the RM state route table when present; otherwise it keeps the older compatibility path.</li></ul>\n+              <h3>Architecture</h3>\n+              <p>RM, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>context/replays/timeline.html |  26 ++++++++-\n+ src/IP/ICMP/ping.py           |   2 +-\n+ src/RM/__init__.py            |  20 ++++++-\n+ src/RM/routes.py              |  85 +++++++++++++++++++++++++----\n+ tests/test_routing.py         | 124 +++++++++++++++++++++++++++++++++++++++++-\n+ 5 files changed, 242 insertions(+), 15 deletions(-)</pre>\n+              </details>\n+            </article>\n+            \n+            <article class=\"card\">\n+              <div class=\"meta\">\n+                <span>2026-06-23_14-25-22</span>\n+                <span>main</span>\n+                <span>b075c88</span>\n+              </div>\n+              <h2>Add show ip routing-table command family</h2>\n+              <p>Supports active route display and protocol filtering for direct/connected/static/dynamic routes.</p>\n+              <h3>Files</h3>\n+              <ul><li>src/RM/commands.py</li><li>tests/test_routing.py</li><li>tests/test_core.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>Implement show ip routing-table in RM because RM owns route selection while exposing the VRP-style IP command path.</li><li>Add show ip as a visible command group; keep show rm incomplete as previously required.</li></ul>\n+              <h3>Architecture</h3>\n+              <p>RM, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>context/replays/timeline.html |  51 +++++++++++-\n+ src/IP/ICMP/ping.py           |   2 +-\n+ src/RM/__init__.py            |  20 ++++-\n+ src/RM/commands.py            | 105 +++++++++++++++++++++++\n+ src/RM/routes.py              |  85 ++++++++++++++++---\n+ tests/test_core.py            |   7 +-\n+ tests/test_routing.py         | 190 +++++++++++++++++++++++++++++++++++++++++-\n... truncated 1514 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CCmd",
+      "RM",
+      "tests"
+    ]
+  }
+}

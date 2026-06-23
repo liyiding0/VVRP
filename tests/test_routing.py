@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from src.DPlane.Windows.npcap import NpcapDevice
-from src.FIB import FIB_resolve_forwarding
+from src.FIB import FIB_resolve_forwarding, FIB_sync_active_routes, FIB_table
 from src.IFNET import InterfaceAddress, NetworkInterface
 from src.RM.IM import (
     RM_IM_InterfaceAddressAdded,
@@ -13,7 +13,16 @@ from src.RM.IM import (
 )
 from src.events import VVRP_EventBus
 from src.IFNET.state import set_interface_addresses
-from src.RM import RM_connected_routes, RM_connected_routes_from_im, RM_lookup_route, RM_register_commands
+from src.RM import (
+    RM_RouteTable,
+    RM_connected_routes,
+    RM_connected_routes_from_im,
+    RM_lookup_route,
+    RM_register_commands,
+    RM_register_route_event_handlers,
+    RM_route_table,
+    RM_route_table_from_im,
+)
 from src.CCmd import CliContext, CommandRegistry, dispatch_line
 
 
@@ -60,24 +69,77 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertEqual("eth5", RM_route.interface.name)
         self.assertEqual("192.168.211.128/25", str(RM_route.destination))
 
+    def test_rm_route_table_uses_radix_tree_for_active_longest_prefix_match(self):
+        RM_route_table = RM_RouteTable()
+        RM_route_table.RM_add_routes(
+            (
+                routing_route("eth4", "192.168.211.0/24", "192.168.211.100"),
+                routing_route("eth5", "192.168.211.128/25", "192.168.211.129"),
+                routing_route("eth6", "0.0.0.0/0", "10.0.0.1", preference=60),
+            )
+        )
+
+        RM_route = RM_route_table.RM_lookup("192.168.211.130")
+        RM_default = RM_route_table.RM_lookup("198.51.100.10")
+
+        self.assertIsNotNone(RM_route)
+        self.assertEqual("eth5", RM_route.interface.name)
+        self.assertEqual("192.168.211.128/25", str(RM_route.destination))
+        self.assertIsNotNone(RM_default)
+        self.assertEqual("eth6", RM_default.interface.name)
+
+    def test_rm_route_table_selects_active_route_per_prefix(self):
+        RM_route_table = RM_RouteTable()
+        RM_route_table.RM_add_routes(
+            (
+                routing_route("eth4", "192.168.211.0/24", "192.168.211.100", preference=60),
+                routing_route("eth5", "192.168.211.0/24", "192.168.211.129", source="static", preference=5),
+            )
+        )
+
+        RM_route = RM_route_table.RM_lookup("192.168.211.10")
+
+        self.assertIsNotNone(RM_route)
+        self.assertEqual("static", RM_route.source)
+        self.assertEqual("eth5", RM_route.interface.name)
+        self.assertEqual(2, len(RM_route_table.RM_routes_for_prefix(RM_route.destination)))
+        self.assertEqual(1, len(RM_route_table.RM_active_routes()))
+
+    def test_rm_route_table_indexes_routes_by_source_and_interface(self):
+        RM_route_table = RM_RouteTable()
+        RM_route_table.RM_add_routes(
+            (
+                routing_route("eth4", "192.168.211.0/24", "192.168.211.100"),
+                routing_route("eth5", "192.168.212.0/24", "192.168.212.100", source="static", preference=60),
+            )
+        )
+
+        self.assertEqual(("192.168.211.0/24",), tuple(str(route.destination) for route in RM_route_table.RM_routes_for_interface("eth4")))
+        self.assertEqual(("192.168.212.0/24",), tuple(str(route.destination) for route in RM_route_table.RM_routes_for_source("static")))
+
     def test_fib_resolves_route_to_npcap_device(self):
         FIB_state = {}
-        set_interface_addresses(
+        RM_table = RM_RouteTable()
+        RM_table.RM_add_route(
+            routing_route("eth4", "192.168.211.0/24", "192.168.211.100")
+        )
+        FIB_sync_active_routes(
             FIB_state,
-            "eth4",
-            (InterfaceAddress(family="ipv4", address="192.168.211.100", prefix_length=24),),
+            RM_table.RM_active_routes(),
+            (NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),),
         )
 
         FIB_entry = FIB_resolve_forwarding(
             FIB_state,
-            (routing_ethernet("eth4"),),
+            (),
             (NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),),
             "192.168.211.1",
         )
 
         self.assertIsNotNone(FIB_entry)
-        self.assertEqual("eth4", FIB_entry.interface.name)
+        self.assertEqual("eth4", FIB_entry.out_if_name)
         self.assertEqual("192.168.211.100", FIB_entry.source_ip)
+        self.assertEqual("00:E0:4C:11:22:33", FIB_entry.source_mac)
         self.assertEqual("192.168.211.1", FIB_entry.next_hop_ip)
 
     def test_rm_im_synchronous_event_bus_updates_route_interface_view(self):
@@ -98,6 +160,232 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertEqual(1, len(RM_routes))
         self.assertEqual("192.168.211.0/24", str(RM_routes[0].destination))
         self.assertEqual("eth4", RM_routes[0].interface.name)
+
+    def test_ip_address_event_creates_connected_active_route_for_fib(self):
+        RM_state = {}
+        RM_IM_bus = VVRP_EventBus()
+        RM_IM_table = RM_IM_InterfaceTable()
+        RM_IM_register_event_handlers(RM_IM_bus, RM_IM_table)
+        RM_table = RM_register_route_event_handlers(
+            RM_IM_bus,
+            RM_state,
+            RM_IM_table,
+            RM_fib_devices=(NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),),
+        )
+
+        RM_IM_bus.VVRP_publish(RM_IM_InterfaceChanged(routing_ethernet("eth4", address="0.0.0.0")))
+        self.assertEqual((), RM_table.RM_active_routes())
+
+        RM_IM_bus.VVRP_publish(
+            RM_IM_InterfaceAddressAdded(
+                "eth4",
+                InterfaceAddress(family="ipv4", address="192.168.211.100", prefix_length=24),
+            )
+        )
+
+        RM_active_routes = RM_table.RM_active_routes()
+        self.assertEqual(1, len(RM_active_routes))
+        self.assertEqual("connected", RM_active_routes[0].source)
+        self.assertEqual("192.168.211.0/24", str(RM_active_routes[0].destination))
+        self.assertIs(RM_table, RM_route_table(RM_state))
+
+        FIB_entry = FIB_resolve_forwarding(
+            RM_state,
+            (),
+            (NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),),
+            "192.168.211.1",
+        )
+
+        self.assertIsNotNone(FIB_entry)
+        self.assertEqual("eth4", FIB_entry.out_if_name)
+        self.assertEqual("192.168.211.100", FIB_entry.source_ip)
+        self.assertEqual(1, len(FIB_table(RM_state).FIB_entries()))
+        self.assertEqual("00:E0:4C:11:22:33", FIB_entry.source_mac)
+
+    def test_fib_sync_installs_only_active_routes(self):
+        FIB_state = {}
+        RM_table = RM_RouteTable()
+        RM_table.RM_add_routes(
+            (
+                routing_route("eth4", "192.168.211.0/24", "192.168.211.100", preference=60),
+                routing_route(
+                    "eth5",
+                    "192.168.211.0/24",
+                    "192.168.211.129",
+                    source="static",
+                    preference=5,
+                ),
+            )
+        )
+
+        FIB_sync_active_routes(
+            FIB_state,
+            RM_table.RM_active_routes(),
+            (NpcapDevice(name=r"\Device\NPF_eth5", description="eth5"),),
+        )
+
+        FIB_entries = FIB_table(FIB_state).FIB_entries()
+        self.assertEqual(1, len(FIB_entries))
+        self.assertEqual("eth5", FIB_entries[0].out_if_name)
+        self.assertEqual("192.168.211.129", FIB_entries[0].source_ip)
+
+    def test_show_fib_displays_installed_forwarding_entries(self):
+        RM_registry = CommandRegistry()
+        from src.FIB import FIB_register_commands
+
+        FIB_register_commands(RM_registry)
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        FIB_sync_active_routes(
+            RM_ctx.state,
+            (routing_route("eth4", "192.168.211.0/24", "192.168.211.100"),),
+            (NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),),
+        )
+        RM_registry.initialize_context(RM_ctx)
+
+        RM_outcome = dispatch_line(RM_ctx, RM_registry, "show fib")
+
+        self.assertTrue(RM_outcome.executed)
+        RM_text = RM_output.getvalue()
+        self.assertIn("Destination/Mask", RM_text)
+        self.assertIn("192.168.211.0/24", RM_text)
+        self.assertIn("eth4", RM_text)
+
+    def test_show_fib_ip_uses_fib_longest_prefix_match(self):
+        RM_registry = CommandRegistry()
+        from src.FIB import FIB_register_commands
+
+        FIB_register_commands(RM_registry)
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        FIB_sync_active_routes(
+            RM_ctx.state,
+            (
+                routing_route("eth4", "192.168.211.0/24", "192.168.211.100"),
+                routing_route("eth5", "192.168.211.128/25", "192.168.211.129"),
+            ),
+            (
+                NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),
+                NpcapDevice(name=r"\Device\NPF_eth5", description="eth5"),
+            ),
+        )
+        RM_registry.initialize_context(RM_ctx)
+
+        RM_outcome = dispatch_line(RM_ctx, RM_registry, "show fib 192.168.211.130")
+
+        self.assertTrue(RM_outcome.executed)
+        RM_text = RM_output.getvalue()
+        self.assertIn("192.168.211.128/25", RM_text)
+        self.assertIn("eth5", RM_text)
+        self.assertNotIn("192.168.211.0/24", RM_text)
+
+    def test_rm_route_table_builds_from_im_interface_view(self):
+        RM_route_table = RM_route_table_from_im(
+            {},
+            (routing_ethernet("eth4", "192.168.211.100", 24),),
+        )
+
+        RM_route = RM_route_table.RM_lookup("192.168.211.1")
+
+        self.assertIsNotNone(RM_route)
+        self.assertEqual("eth4", RM_route.interface.name)
+
+    def test_show_ip_routing_table_displays_active_routes(self):
+        RM_registry = CommandRegistry()
+        RM_register_commands(
+            RM_registry,
+            RM_interfaces_provider=lambda RM_ctx: (
+                routing_ethernet("eth4", "192.168.211.100", 24),
+            ),
+            RM_fib_devices_provider=lambda RM_ctx: (
+                NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),
+            ),
+        )
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        RM_registry.initialize_context(RM_ctx)
+
+        RM_outcome = dispatch_line(RM_ctx, RM_registry, "show ip routing-table")
+
+        self.assertTrue(RM_outcome.executed)
+        RM_text = RM_output.getvalue()
+        self.assertIn("Route Flags: R - relay, D - download to fib", RM_text)
+        self.assertIn("Routing Tables: Public", RM_text)
+        self.assertIn("Destination/Mask", RM_text)
+        self.assertIn("192.168.211.0/24", RM_text)
+        self.assertIn("Direct", RM_text)
+        self.assertIn("192.168.211.100", RM_text)
+        self.assertIn("eth4", RM_text)
+        self.assertEqual(1, len(FIB_table(RM_ctx.state).FIB_entries()))
+
+    def test_show_ip_routing_table_installs_active_routes_into_fib(self):
+        RM_registry = CommandRegistry()
+        RM_register_commands(
+            RM_registry,
+            RM_interfaces_provider=lambda RM_ctx: (
+                routing_ethernet("eth4", "192.168.211.100", 24),
+            ),
+            RM_fib_devices_provider=lambda RM_ctx: (
+                NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),
+            ),
+        )
+        from src.FIB import FIB_register_commands
+
+        FIB_register_commands(RM_registry)
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        RM_registry.initialize_context(RM_ctx)
+
+        self.assertTrue(dispatch_line(RM_ctx, RM_registry, "show ip routing-table").executed)
+        RM_output.truncate(0)
+        RM_output.seek(0)
+        self.assertTrue(dispatch_line(RM_ctx, RM_registry, "show fib").executed)
+
+        RM_text = RM_output.getvalue()
+        self.assertIn("192.168.211.0/24", RM_text)
+        self.assertIn("eth4", RM_text)
+
+    def test_show_ip_routing_table_protocol_filters_routes(self):
+        RM_registry = CommandRegistry()
+        RM_register_commands(RM_registry)
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        RM_table = RM_route_table(RM_ctx.state)
+        RM_table.RM_add_routes(
+            (
+                routing_route("eth4", "192.168.211.0/24", "192.168.211.100"),
+                routing_route(
+                    "eth5",
+                    "203.0.113.0/24",
+                    "192.168.212.100",
+                    source="static",
+                    preference=60,
+                ),
+            )
+        )
+        RM_registry.initialize_context(RM_ctx)
+
+        RM_outcome = dispatch_line(RM_ctx, RM_registry, "show ip routing-table protocol static")
+
+        self.assertTrue(RM_outcome.executed)
+        RM_text = RM_output.getvalue()
+        self.assertIn("203.0.113.0/24", RM_text)
+        self.assertIn("Static", RM_text)
+        self.assertNotIn("192.168.211.0/24", RM_text)
+
+    def test_show_ip_routing_table_protocol_direct_maps_connected_routes(self):
+        RM_registry = CommandRegistry()
+        RM_register_commands(RM_registry)
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        RM_table = RM_route_table(RM_ctx.state)
+        RM_table.RM_add_route(routing_route("eth4", "192.168.211.0/24", "192.168.211.100"))
+        RM_registry.initialize_context(RM_ctx)
+
+        RM_outcome = dispatch_line(RM_ctx, RM_registry, "show ip routing-table protocol direct")
+
+        self.assertTrue(RM_outcome.executed)
+        self.assertIn("192.168.211.0/24", RM_output.getvalue())
 
     def test_show_rm_interface_displays_detail_in_hidden_mode(self):
         RM_registry = CommandRegistry()
@@ -235,6 +523,26 @@ def routing_ethernet(
         speed_mbps=1000,
         addresses=(InterfaceAddress(family="ipv4", address=address, prefix_length=prefix_length),),
         os_id=name,
+    )
+
+
+def routing_route(
+    interface_name: str,
+    destination: str,
+    source_ip: str,
+    *,
+    source: str = "connected",
+    preference: int = 0,
+):
+    from ipaddress import IPv4Network
+    from src.RM import RMRoute
+
+    return RMRoute(
+        destination=IPv4Network(destination),
+        source=source,
+        interface=routing_ethernet(interface_name, source_ip),
+        source_ip=source_ip,
+        preference=preference,
     )
 
 

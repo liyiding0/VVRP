@@ -2,13 +2,20 @@
 
 from .backend import DPlane_create_backend
 from .commands import register_dplane_commands
-from .models import DPlane_Backend, DPlane_PacketDevice, DPlane_PlatformInfo, DPlane_Result
+from .models import (
+    DPlane_Backend,
+    DPlane_ForwardingEntry,
+    DPlane_PacketDevice,
+    DPlane_PlatformInfo,
+    DPlane_Result,
+)
 from .packet import CapturedFrame, PacketPort
 from .platform import DPlane_detect_platform
 
 __all__ = [
     "CapturedFrame",
     "DPlane_Backend",
+    "DPlane_ForwardingEntry",
     "DPlane_PacketDevice",
     "DPlane_PlatformInfo",
     "DPlane_Result",

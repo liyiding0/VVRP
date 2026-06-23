@@ -3,12 +3,13 @@ from __future__ import annotations
 from src.ARP import ArpTable, register_arp_commands
 from src.DPlane import register_dplane_commands
 from src.DPlane.frame_debug import DplaneEthernetFrameDebugService
+from src.DPlane.input import DPlane_PacketInputService
 from src.DPlane.Windows.npcap import NpcapLibrary
 from src.ETHERNET import register_ethernet_commands
+from src.FIB import FIB_register_commands
 from src.IFNET import register_ifnet_commands
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceProvider
-from src.IP.ICMP.responder import ICMP_ResponderService
 from src.IP import IP_register_commands
 from src.IP.dhcp import IP_DhcpClientProvider
 from src.IP.static import IP_StaticIpv4Provider
@@ -46,11 +47,12 @@ def build_default_registry(
         ifnet_admin_provider=ifnet_admin_provider,
         npcap_library=dplane_npcap_library,
     )
-    icmp_responder = ICMP_ResponderService(
-        ICMP_ifnet_provider=ifnet_provider,
-        ICMP_ifnet_admin_provider=ifnet_admin_provider,
-        ICMP_npcap_library=dplane_npcap_library,
+    dplane_packet_input = DPlane_PacketInputService(
+        DPlane_ifnet_provider=ifnet_provider,
+        DPlane_ifnet_admin_provider=ifnet_admin_provider,
+        DPlane_npcap_library=dplane_npcap_library,
     )
+    active_npcap_library = dplane_npcap_library or NpcapLibrary()
 
     @registry.command("show", help_text="Show command group", modes=SHOW_MODES)
     def show(ctx, args):
@@ -97,15 +99,17 @@ def build_default_registry(
             ifnet_provider,
             ifnet_admin_provider,
         ),
+        RM_fib_devices_provider=lambda ctx: active_npcap_library.list_devices(),
         RM_modes=("hidden",),
     )
+    FIB_register_commands(registry, FIB_modes=SHOW_MODES)
     register_dplane_commands(
         registry,
         ifnet_provider=ifnet_provider,
         ifnet_admin_provider=ifnet_admin_provider,
         npcap_library=dplane_npcap_library,
         modes=("hidden", "host-interface"),
-        after_import_commit=icmp_responder.ICMP_refresh,
+        after_import_commit=dplane_packet_input.DPlane_refresh,
     )
     IP_register_commands(
         registry,
@@ -115,7 +119,7 @@ def build_default_registry(
         npcap_library=dplane_npcap_library,
         dhcp_provider=ip_dhcp_provider,
         static_ipv4_provider=ip_static_ipv4_provider,
-        after_vvrp_ipv4_change=icmp_responder.ICMP_refresh,
+        after_vvrp_ipv4_change=dplane_packet_input.DPlane_refresh,
     )
     register_arp_commands(
         registry,

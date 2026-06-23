@@ -4,9 +4,18 @@ import ipaddress
 
 from src.IFNET.models import NetworkInterface
 from src.IFNET.state import apply_vvrp_interface_state, is_admin_down
-from src.RM.IM import RM_IM_Interface, RM_IM_interface_table_from_ifnet
+from src.RM.IM import (
+    RM_IM_Interface,
+    RM_IM_InterfaceAddressAdded,
+    RM_IM_InterfaceChanged,
+    RM_IM_InterfaceDeleted,
+    RM_IM_InterfaceTable,
+    RM_IM_interface_table_from_ifnet,
+)
+from src.events import VVRP_EventBus
 
 from .models import RMRoute, RM_route_interface_addresses_by_family
+from .rib import RM_RouteTable, RM_route_table, RM_route_table_from_routes
 
 
 def RM_connected_routes(
@@ -52,15 +61,84 @@ def RM_lookup_route(
     RM_host_interfaces: tuple[NetworkInterface, ...],
     RM_destination_ip: str,
 ) -> RMRoute | None:
-    RM_destination = ipaddress.IPv4Address(RM_destination_ip)
-    RM_candidates = tuple(
-        RM_route
-        for RM_route in RM_connected_routes(RM_state, RM_host_interfaces)
-        if RM_destination in RM_route.destination
+    RM_existing_table = RM_state.get("rm.route_table")
+    if isinstance(RM_existing_table, RM_RouteTable):
+        return RM_existing_table.RM_lookup(RM_destination_ip)
+    RM_route_table = RM_route_table_from_routes(
+        RM_connected_routes(RM_state, RM_host_interfaces)
     )
-    if not RM_candidates:
-        return None
-    return max(
-        RM_candidates,
-        key=lambda RM_route: (RM_route.prefix_length, -RM_route.preference),
+    return RM_route_table.RM_lookup(RM_destination_ip)
+
+
+def RM_route_table_from_im(
+    RM_state: dict,
+    RM_interfaces: tuple[NetworkInterface | RM_IM_Interface, ...],
+) -> RM_RouteTable:
+    return RM_route_table_from_routes(RM_connected_routes_from_im(RM_state, RM_interfaces))
+
+
+def RM_sync_connected_routes_for_interface(
+    RM_state: dict,
+    RM_table: RM_RouteTable,
+    RM_interface: NetworkInterface | RM_IM_Interface,
+) -> None:
+    RM_table.RM_replace_routes_for_interface_source(
+        RM_interface.name,
+        "connected",
+        RM_connected_routes_from_im(RM_state, (RM_interface,)),
     )
+
+
+def RM_sync_connected_routes_from_im_table(
+    RM_state: dict,
+    RM_im_table: RM_IM_InterfaceTable,
+    RM_table: RM_RouteTable,
+) -> None:
+    RM_table.RM_replace_routes_for_source(
+        "connected",
+        RM_connected_routes_from_im(RM_state, RM_im_table.RM_IM_list()),
+    )
+
+
+def RM_register_route_event_handlers(
+    RM_bus: VVRP_EventBus,
+    RM_state: dict,
+    RM_im_table: RM_IM_InterfaceTable,
+    RM_table: RM_RouteTable | None = None,
+    RM_fib_devices: tuple = (),
+    RM_fib_backend=None,
+) -> RM_RouteTable:
+    RM_active_table = RM_table or RM_route_table(RM_state)
+
+    def RM_sync_fib() -> None:
+        from src.FIB import FIB_sync_active_routes
+
+        FIB_sync_active_routes(
+            RM_state,
+            RM_active_table.RM_active_routes(),
+            RM_fib_devices,
+            RM_fib_backend,
+        )
+
+    def RM_handle_interface_changed(RM_event: RM_IM_InterfaceChanged) -> None:
+        RM_interface = RM_im_table.RM_IM_get(RM_event.interface.name)
+        if RM_interface is None:
+            return
+        RM_sync_connected_routes_for_interface(RM_state, RM_active_table, RM_interface)
+        RM_sync_fib()
+
+    def RM_handle_interface_deleted(RM_event: RM_IM_InterfaceDeleted) -> None:
+        RM_active_table.RM_replace_routes_for_interface_source(RM_event.name, "connected", ())
+        RM_sync_fib()
+
+    def RM_handle_address_added(RM_event: RM_IM_InterfaceAddressAdded) -> None:
+        RM_interface = RM_im_table.RM_IM_get(RM_event.name)
+        if RM_interface is None:
+            return
+        RM_sync_connected_routes_for_interface(RM_state, RM_active_table, RM_interface)
+        RM_sync_fib()
+
+    RM_bus.VVRP_subscribe(RM_IM_InterfaceChanged, RM_handle_interface_changed)
+    RM_bus.VVRP_subscribe(RM_IM_InterfaceDeleted, RM_handle_interface_deleted)
+    RM_bus.VVRP_subscribe(RM_IM_InterfaceAddressAdded, RM_handle_address_added)
+    return RM_active_table

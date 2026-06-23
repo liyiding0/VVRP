@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from ipaddress import IPv4Network
 from typing import Literal, Protocol
 
 from src.ETHERNET import RawEthernetPort
@@ -31,6 +32,15 @@ class DPlane_PacketDevice:
     backend: str = ""
 
 
+@dataclass(frozen=True)
+class DPlane_ForwardingEntry:
+    destination: IPv4Network
+    interface_name: str
+    source_ip: str
+    next_hop_ip: str
+    device_name: str
+
+
 class DPlane_Backend(Protocol):
     @property
     def DPlane_platform(self) -> DPlane_PlatformInfo:
@@ -58,3 +68,15 @@ class DPlane_Backend(Protocol):
         DPlane_enabled: bool,
     ) -> DPlane_Result:
         """Set kernel interface administrative state."""
+
+    def DPlane_install_forwarding_entry(
+        self,
+        DPlane_entry: DPlane_ForwardingEntry,
+    ) -> DPlane_Result:
+        """Install a forwarding entry into the data-plane backend."""
+
+    def DPlane_delete_forwarding_entry(
+        self,
+        DPlane_entry: DPlane_ForwardingEntry,
+    ) -> DPlane_Result:
+        """Delete a forwarding entry from the data-plane backend."""

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import io
 import importlib.util
+import subprocess
 import struct
+import sys
 import tempfile
 import unittest
 from dataclasses import replace
@@ -166,7 +168,9 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(
             [
                 ("arp", "Show ARP mapping table"),
+                ("fib", "Show IPv4 FIB entries"),
                 ("interfaces", "Show VVRP interfaces"),
+                ("ip", "Show IP information"),
                 ("version", "Show software version"),
                 ("<cr>", "Show command group"),
             ],
@@ -210,7 +214,7 @@ class ParserTests(unittest.TestCase):
 
         self.assertEqual(ParseStatus.VALID_UNIQUE, result.status)
         self.assertEqual("show ?", result.complete_command)
-        self.assertEqual(("arp", "interfaces", "version", "<cr>"), result.candidates)
+        self.assertEqual(("arp", "fib", "interfaces", "ip", "version", "<cr>"), result.candidates)
 
     def test_question_mark_suffix_keeps_prefix_token_style(self):
         parser = CommandParser(build_default_registry())
@@ -1183,6 +1187,23 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertIn("\x1b[38;2;242;242;242mmatched\x1b[0m", eth3_line)
         self.assertNotIn(r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}", eth3_line)
 
+    def test_ccmd_entrypoint_from_src_uses_canonical_src_package(self):
+        project_root = Path(__file__).resolve().parents[1]
+        src_dir = project_root / "src"
+
+        completed = subprocess.run(
+            [sys.executable, "-m", "CCmd"],
+            cwd=src_dir,
+            input="_\nshow dplane interfaces brief\nexit\n",
+            text=True,
+            capture_output=True,
+            timeout=10,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("Host Interface", completed.stdout)
+        self.assertIn("OS Index", completed.stdout)
+
     def test_host_interface_help_has_ip_and_no_descriptions(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
         parser = CommandParser(registry)
@@ -1897,7 +1918,15 @@ class DhcpClientCommandTests(unittest.TestCase):
 
         for mode in ("user", "privileged", "config"):
             self.assertEqual(ParseStatus.INVALID, parser.parse("show host ip interface", mode=mode).status, mode)
-            self.assertEqual(ParseStatus.INVALID, parser.parse("show ip interface", mode=mode).status, mode)
+
+        for mode in ("user", "privileged", "config", "interface", "hidden", "host-interface"):
+            self.assertTrue(parser.parse("show ip interface", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show ip interface brief", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show ip interface brief ip-configured", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show ip interface description", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show ip interface eth3", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show ip interface brief eth3", mode=mode).executable, mode)
+            self.assertTrue(parser.parse("show ip interface description eth3", mode=mode).executable, mode)
 
     def test_help_candidates_for_show_ip_interface_family(self):
         parser = CommandParser(build_default_registry())
@@ -1906,6 +1935,12 @@ class DhcpClientCommandTests(unittest.TestCase):
         self.assertEqual(
             [("interface", "Show IPv4 interface information")],
             [(candidate.display, candidate.help_text) for candidate in show_ip_candidates],
+        )
+
+        vvrp_show_ip_candidates = parser.help_candidates("show ip ", mode="user")
+        self.assertIn(
+            ("interface", "Show IPv4 interface information"),
+            [(candidate.display, candidate.help_text) for candidate in vvrp_show_ip_candidates],
         )
 
         interface_candidates = parser.help_candidates("show host ip interface ", mode="hidden")
@@ -1931,6 +1966,17 @@ class DhcpClientCommandTests(unittest.TestCase):
             [(candidate.display, candidate.help_text) for candidate in brief_candidates],
         )
 
+        vvrp_interface_candidates = parser.help_candidates("show ip interface ", mode="user")
+        self.assertEqual(
+            [
+                ("brief", "Show brief IPv4 interface summary"),
+                ("description", "Show IPv4 interface descriptions"),
+                ("<name>", "Show IPv4 information for an interface"),
+                ("<cr>", "Show IPv4 interface information"),
+            ],
+            [(candidate.display, candidate.help_text) for candidate in vvrp_interface_candidates],
+        )
+
     def test_show_ip_interface_brief_lists_ipv4_summary(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
         output = io.StringIO()
@@ -1953,6 +1999,64 @@ class DhcpClientCommandTests(unittest.TestCase):
         self.assertIn("up(s)", text)
         self.assertIn("eth3", text)
         self.assertIn("192.0.2.10/24", text)
+
+    def test_show_vvrp_ip_interface_brief_lists_imported_ipv4_summary(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        stage_import_interface(ctx.state, "eth3")
+        commit_imports(ctx.state)
+        set_interface_addresses(
+            ctx.state,
+            "eth3",
+            (InterfaceAddress(family="ipv4", address="192.0.2.10", prefix_length=24),),
+        )
+
+        outcome = dispatch_line(ctx, registry, "show ip interface brief")
+
+        self.assertTrue(outcome.executed)
+        text = output.getvalue()
+        self.assertIn("eth3", text)
+        self.assertIn("192.0.2.10/24", text)
+        self.assertNotIn("loopback_0", text)
+
+    def test_show_vvrp_ip_interface_detail_lists_imported_interface(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        stage_import_interface(ctx.state, "eth3")
+        commit_imports(ctx.state)
+        set_interface_addresses(
+            ctx.state,
+            "eth3",
+            (InterfaceAddress(family="ipv4", address="192.0.2.10", prefix_length=24),),
+        )
+
+        outcome = dispatch_line(ctx, registry, "show ip interface eth3")
+
+        self.assertTrue(outcome.executed)
+        text = output.getvalue()
+        self.assertIn("eth3 current state : UP", text)
+        self.assertIn("Internet Address is 192.0.2.10/24 Primary", text)
+
+    def test_show_vvrp_ip_interface_description_filters_imported_interfaces(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        stage_import_interface(ctx.state, "loopback_0")
+        commit_imports(ctx.state)
+        set_interface_addresses(
+            ctx.state,
+            "loopback_0",
+            (InterfaceAddress(family="ipv4", address="127.0.0.1", prefix_length=8),),
+        )
+
+        outcome = dispatch_line(ctx, registry, "show ip interface description ip-configured except ethernet")
+
+        self.assertTrue(outcome.executed)
+        text = output.getvalue()
+        self.assertIn("loopback_0", text)
+        self.assertNotIn("eth3", text)
 
     def test_show_ip_interface_brief_can_filter_one_interface(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
@@ -3179,6 +3283,22 @@ class PingTests(unittest.TestCase):
         )
         set_interface_mac_address(ctx.state, "eth3", "02:00:00:00:00:01")
         provider = FakeInterfaceProvider((fake_ethernet("eth3"),))
+        from src.FIB import FIB_sync_active_routes
+        from src.RM import RMRoute
+        from ipaddress import IPv4Network
+
+        FIB_sync_active_routes(
+            ctx.state,
+            (
+                RMRoute(
+                    destination=IPv4Network("192.0.2.0/24"),
+                    source="connected",
+                    interface=replace(fake_ethernet("eth3"), mac_address="02:00:00:00:00:01"),
+                    source_ip="192.0.2.10",
+                ),
+            ),
+            (NpcapDevice(name=r"\Device\NPF_eth3", description="eth3"),),
+        )
         clock = FakeClock()
         target_ip = "192.0.2.1"
         target_mac = "66:77:88:99:aa:bb"
@@ -3450,7 +3570,7 @@ class ModeTests(unittest.TestCase):
         user_text = output.getvalue()
         self.assertIn("version", user_text)
         self.assertIn("interfaces", user_text)
-        self.assertNotIn("ip", user_text)
+        self.assertIn("ip", user_text)
         self.assertNotIn("hostname", user_text)
 
         output.truncate(0)
@@ -3461,7 +3581,7 @@ class ModeTests(unittest.TestCase):
         config_text = output.getvalue()
         self.assertIn("hostname", config_text)
         self.assertIn("interfaces", config_text)
-        self.assertNotIn("ip", config_text)
+        self.assertIn("ip", config_text)
         self.assertNotIn("version", config_text)
 
     def test_parser_filters_candidates_by_mode(self):
