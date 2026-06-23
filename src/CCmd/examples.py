@@ -12,6 +12,7 @@ from src.IP.ICMP.responder import ICMP_ResponderService
 from src.IP import IP_register_commands
 from src.IP.dhcp import IP_DhcpClientProvider
 from src.IP.static import IP_StaticIpv4Provider
+from src.RM import RM_register_commands
 
 from .models import CommandResult
 from .parser import CommandParser
@@ -88,6 +89,15 @@ def build_default_registry(
         admin_provider=ifnet_admin_provider,
         modes=("hidden", "interface", "host-interface"),
         register_interface_config_command=False,
+    )
+    RM_register_commands(
+        registry,
+        RM_interfaces_provider=lambda ctx: _list_vvrp_interfaces_for_rm(
+            ctx,
+            ifnet_provider,
+            ifnet_admin_provider,
+        ),
+        RM_modes=("hidden",),
     )
     register_dplane_commands(
         registry,
@@ -193,4 +203,20 @@ def build_default_registry(
         return CommandResult(message="Bye.", exit_requested=True)
 
     return registry
+
+
+def _list_vvrp_interfaces_for_rm(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+):
+    from src.IFNET.imports import imported_interfaces
+    from src.IFNET.inventory import get_ifnet_manager
+
+    interfaces = get_ifnet_manager(
+        ctx.state,
+        provider=ifnet_provider,
+        admin_provider=ifnet_admin_provider,
+    ).list_interfaces()
+    return imported_interfaces(ctx.state, interfaces)
 

@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-22_20-47-44",
+  "prompt": "Merge VVRP restructure branch into main",
+  "changed_files": [
+    "README.md",
+    "pyproject.toml",
+    "src",
+    "tests",
+    "tools",
+    "context"
+  ],
+  "note": "main now contains source layout restructure and Codex replay tools",
+  "decisions": [
+    "Fast-forward merge codex/restructure-source-layout into main without PR",
+    "Push main through proxy 127.0.0.1:7890"
+  ],
+  "codex_output": "",
+  "git_commit": "73ac1f00142cf2fdab735c3780ebf3ca3db0b66e",
+  "git_branch": "main",
+  "git_dirty_files": [],
+  "diff_stat": "",
+  "diff_summary": "",
+  "architecture": {
+    "touched_modules": [
+      "context",
+      "tests",
+      "tools"
+    ]
+  }
+}

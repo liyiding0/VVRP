@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-22_20-48-32",
+  "prompt": "Explain IFNET RM import boundary and VVRP EventBus model",
+  "changed_files": [
+    "src/IFNET",
+    "src/RM"
+  ],
+  "note": "architecture discussion only; no code changes",
+  "decisions": [
+    "Treat imported host adapters as already materialized VVRP IFNET interfaces",
+    "Keep RM dependent only on IFNET-visible interfaces, not import provenance",
+    "Use EventBus as synchronous in-process domain event dispatcher"
+  ],
+  "codex_output": "",
+  "git_commit": "73ac1f00142cf2fdab735c3780ebf3ca3db0b66e",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.html",
+    "context/commits/73ac1f00142c.json",
+    "context/sessions/2026-06-22_20-47-44.json"
+  ],
+  "diff_stat": "",
+  "diff_summary": "",
+  "architecture": {
+    "touched_modules": [
+      "IFNET",
+      "RM"
+    ]
+  }
+}
