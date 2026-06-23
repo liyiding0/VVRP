@@ -7,6 +7,7 @@ from dataclasses import replace
 
 from src.ARP import ARP_REQUEST, ArpPacket
 from src.CCmd import CliContext
+from src.DPlane import DPlane_PlatformInfo, DPlane_Result
 from src.DPlane.input import DPlane_PacketInputService
 from src.DPlane.Windows.npcap import NpcapDevice
 from src.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
@@ -28,6 +29,36 @@ class FakeInterfaceProvider:
 class FakeNpcapLibrary:
     def list_devices(self) -> tuple[NpcapDevice, ...]:
         return (NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),)
+
+
+class FakeDPlaneBackend:
+    def DPlane_list_packet_devices(self) -> tuple[NpcapDevice, ...]:
+        return (NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),)
+
+    @property
+    def DPlane_platform(self):
+        return DPlane_PlatformInfo(kind="windows", system="Windows")
+
+    def DPlane_list_host_interfaces(self):
+        return ()
+
+    def DPlane_find_packet_device(self, DPlane_interface, DPlane_devices=None):
+        for DPlane_device in tuple(DPlane_devices or self.DPlane_list_packet_devices()):
+            if DPlane_interface.name in (DPlane_device.name, DPlane_device.description):
+                return DPlane_device
+        return None
+
+    def DPlane_open_packet_port(self, DPlane_device):
+        raise RuntimeError("FakeDPlaneBackend does not provide packet ports")
+
+    def DPlane_set_interface_enabled(self, DPlane_interface, DPlane_enabled):
+        return DPlane_Result(ok=True)
+
+    def DPlane_install_forwarding_entry(self, DPlane_entry):
+        return DPlane_Result(ok=True)
+
+    def DPlane_delete_forwarding_entry(self, DPlane_entry):
+        return DPlane_Result(ok=True)
 
 
 class FakeDPlaneInputPort:
@@ -127,8 +158,8 @@ class DPlanePacketInputTests(unittest.TestCase):
         port = FakeDPlaneInputPort((arp_frame, icmp_frame))
         service = DPlane_PacketInputService(
             DPlane_ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth4"),)),
-            DPlane_npcap_library=FakeNpcapLibrary(),
-            DPlane_port_factory=lambda device_name: port,
+            DPlane_backend=FakeDPlaneBackend(),
+            DPlane_port_factory=lambda device: port,
         )
 
         self.assertIn("1 listener", service.DPlane_refresh(ctx))
@@ -171,8 +202,8 @@ class DPlanePacketInputTests(unittest.TestCase):
         port = StopErrorDPlaneInputPort()
         service = DPlane_PacketInputService(
             DPlane_ifnet_provider=FakeInterfaceProvider((fake_ethernet("eth4"),)),
-            DPlane_npcap_library=FakeNpcapLibrary(),
-            DPlane_port_factory=lambda device_name: port,
+            DPlane_backend=FakeDPlaneBackend(),
+            DPlane_port_factory=lambda device: port,
         )
 
         self.assertIn("1 listener", service.DPlane_refresh(ctx))

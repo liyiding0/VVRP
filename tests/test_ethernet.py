@@ -25,6 +25,7 @@ from src.ETHERNET import (
 from src.CCmd import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
 from src.CCmd.examples import build_default_registry
 from src.ARP import ARP_REPLY, ArpPacket, get_arp_table
+from src.DPlane import DPlane_PlatformInfo, DPlane_Result
 from src.DPlane.frame_debug import DplaneEthernetFrameDebugService
 from src.DPlane.Windows.npcap import NpcapDevice
 from src.IFNET.imports import commit_imports, stage_import_interface
@@ -85,6 +86,36 @@ class FakeNpcapLibrary:
                 description="eth4",
             ),
         )
+
+
+class FakeDPlaneBackend:
+    def DPlane_list_packet_devices(self) -> tuple[NpcapDevice, ...]:
+        return FakeNpcapLibrary().list_devices()
+
+    @property
+    def DPlane_platform(self):
+        return DPlane_PlatformInfo(kind="windows", system="Windows")
+
+    def DPlane_list_host_interfaces(self):
+        return ()
+
+    def DPlane_find_packet_device(self, DPlane_interface, DPlane_devices=None):
+        for DPlane_device in tuple(DPlane_devices or self.DPlane_list_packet_devices()):
+            if DPlane_interface.name in (DPlane_device.name, DPlane_device.description):
+                return DPlane_device
+        return None
+
+    def DPlane_open_packet_port(self, DPlane_device):
+        raise RuntimeError("FakeDPlaneBackend does not provide packet ports")
+
+    def DPlane_set_interface_enabled(self, DPlane_interface, DPlane_enabled):
+        return DPlane_Result(ok=True)
+
+    def DPlane_install_forwarding_entry(self, DPlane_entry):
+        return DPlane_Result(ok=True)
+
+    def DPlane_delete_forwarding_entry(self, DPlane_entry):
+        return DPlane_Result(ok=True)
 
 
 class DebugPacketPort(FakePacketPort):
@@ -247,14 +278,14 @@ class EthernetDebugTests(unittest.TestCase):
         )
         ports: list[DebugPacketPort] = []
 
-        def port_factory(device_name):
+        def port_factory(device):
             port = DebugPacketPort(frames=(raw,))
             ports.append(port)
             return port
 
         service = DplaneEthernetFrameDebugService(
             ifnet_provider=FakeInterfaceProvider(),
-            npcap_library=FakeNpcapLibrary(),
+            dplane_backend=FakeDPlaneBackend(),
             port_factory=port_factory,
             packet_filter="ether proto 0x0806",
         )
@@ -313,14 +344,14 @@ class EthernetDebugTests(unittest.TestCase):
         )
         ports: list[DebugPacketPort] = []
 
-        def port_factory(device_name):
+        def port_factory(device):
             port = DebugPacketPort(frames=(host_raw, VVRP_raw))
             ports.append(port)
             return port
 
         service = DplaneEthernetFrameDebugService(
             ifnet_provider=FakeInterfaceProvider(),
-            npcap_library=FakeNpcapLibrary(),
+            dplane_backend=FakeDPlaneBackend(),
             port_factory=port_factory,
             packet_filter="ether proto 0x0800",
         )

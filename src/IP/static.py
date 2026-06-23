@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ipaddress
-import platform
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -63,63 +62,24 @@ class IP_StaticIpv4ValidationError(ValueError):
 
 
 class IP_OsStaticIpv4Provider:
-    def __init__(self, system: str | None = None) -> None:
-        self.system = (system or platform.system()).lower()
-        self._ethernet = None
-        self._loopback = None
+    def __init__(self, dplane_backend=None) -> None:
+        from src.DPlane.ip_config import DPlane_StaticIpv4Provider
+
+        self._provider = DPlane_StaticIpv4Provider(dplane_backend)
 
     def IP_set_static_ipv4(
         self,
         interface: NetworkInterface,
         address: IP_StaticIpv4Address,
     ) -> IP_StaticIpv4Result:
-        return self._IP_apply(interface, address)
+        return self._provider.IP_set_static_ipv4(interface, address)
 
     def IP_remove_static_ipv4(
         self,
         interface: NetworkInterface,
         address: IP_StaticIpv4Address | None = None,
     ) -> IP_StaticIpv4Result:
-        return self._IP_apply(interface, address, remove=True)
-
-    def _IP_apply(
-        self,
-        interface: NetworkInterface,
-        address: IP_StaticIpv4Address | None,
-        remove: bool = False,
-    ) -> IP_StaticIpv4Result:
-        if interface.kind == "ethernet":
-            provider = self._IP_ethernet_provider()
-            if remove:
-                return provider.IP_remove_static_ipv4(interface, address)
-            assert address is not None
-            return provider.IP_set_static_ipv4(interface, address)
-
-        if interface.kind == "loopback":
-            provider = self._IP_loopback_provider()
-            if remove:
-                return provider.IP_remove_static_ipv4(interface, address)
-            assert address is not None
-            return provider.IP_set_static_ipv4(interface, address)
-
-        return IP_StaticIpv4Result(
-            ok=False,
-            message=f"% Unsupported interface type for static IPv4: {interface.kind}",
-        )
-
-    def _IP_ethernet_provider(self):
-        if self._ethernet is None:
-            from src.IFNET.Ethernet.static import EthernetStaticIpv4Provider
-
-            self._ethernet = EthernetStaticIpv4Provider(system=self.system)
-        return self._ethernet
-
-    def _IP_loopback_provider(self):
-        if self._loopback is None:
-            from src.IFNET.Loopback.static import LoopbackStaticIpv4Provider
-
-            self._loopback = LoopbackStaticIpv4Provider(system=self.system)
-        return self._loopback
+        return self._provider.IP_remove_static_ipv4(interface, address)
 
 
 def IP_parse_static_ipv4_address(

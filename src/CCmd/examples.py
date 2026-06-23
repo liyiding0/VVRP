@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from src.ARP import ArpTable, register_arp_commands
-from src.DPlane import register_dplane_commands
+from src.DPlane import DPlane_Backend, DPlane_create_backend, register_dplane_commands
 from src.DPlane.frame_debug import DplaneEthernetFrameDebugService
 from src.DPlane.input import DPlane_PacketInputService
-from src.DPlane.Windows.npcap import NpcapLibrary
 from src.ETHERNET import register_ethernet_commands
 from src.FIB import FIB_register_commands
 from src.IFNET import register_ifnet_commands
@@ -38,21 +37,24 @@ def build_default_registry(
     ip_dhcp_provider: IP_DhcpClientProvider | None = None,
     ip_static_ipv4_provider: IP_StaticIpv4Provider | None = None,
     arp_table: ArpTable | None = None,
-    dplane_npcap_library: NpcapLibrary | None = None,
+    dplane_backend: DPlane_Backend | None = None,
     enable_host_interface_config: bool = False,
 ) -> CommandRegistry:
     registry = CommandRegistry()
+    active_dplane_backend = dplane_backend or DPlane_create_backend(
+        DPlane_ifnet_provider=ifnet_provider,
+        DPlane_admin_provider=ifnet_admin_provider,
+    )
     ethernet_frame_debug = DplaneEthernetFrameDebugService(
         ifnet_provider=ifnet_provider,
         ifnet_admin_provider=ifnet_admin_provider,
-        npcap_library=dplane_npcap_library,
+        dplane_backend=active_dplane_backend,
     )
     dplane_packet_input = DPlane_PacketInputService(
         DPlane_ifnet_provider=ifnet_provider,
         DPlane_ifnet_admin_provider=ifnet_admin_provider,
-        DPlane_npcap_library=dplane_npcap_library,
+        DPlane_backend=active_dplane_backend,
     )
-    active_npcap_library = dplane_npcap_library or NpcapLibrary()
 
     def refresh_control_plane_and_dplane(ctx):
         from src.RM.commands import RM_refresh_connected_routes_from_interfaces
@@ -64,14 +66,15 @@ def build_default_registry(
                 ifnet_provider,
                 ifnet_admin_provider,
             ),
-            lambda current_ctx: active_npcap_library.list_devices(),
+            lambda current_ctx: active_dplane_backend.DPlane_list_packet_devices(),
             lambda current_ctx, request: _resolve_fib_packet_device(
                 current_ctx,
                 request,
                 ifnet_provider,
                 ifnet_admin_provider,
-                active_npcap_library,
+                active_dplane_backend,
             ),
+            active_dplane_backend,
         )
         return dplane_packet_input.DPlane_refresh(ctx)
 
@@ -111,7 +114,6 @@ def build_default_registry(
         provider=ifnet_provider,
         admin_provider=ifnet_admin_provider,
         modes=("hidden", "interface", "host-interface"),
-        register_interface_config_command=False,
     )
     RM_register_commands(
         registry,
@@ -120,14 +122,15 @@ def build_default_registry(
             ifnet_provider,
             ifnet_admin_provider,
         ),
-        RM_fib_devices_provider=lambda ctx: active_npcap_library.list_devices(),
+        RM_fib_devices_provider=lambda ctx: active_dplane_backend.DPlane_list_packet_devices(),
         RM_fib_device_resolver=lambda ctx, request: _resolve_fib_packet_device(
             ctx,
             request,
             ifnet_provider,
             ifnet_admin_provider,
-            active_npcap_library,
+            active_dplane_backend,
         ),
+        RM_fib_backend=active_dplane_backend,
         RM_modes=("hidden",),
     )
     FIB_register_commands(registry, FIB_modes=SHOW_MODES)
@@ -135,7 +138,7 @@ def build_default_registry(
         registry,
         ifnet_provider=ifnet_provider,
         ifnet_admin_provider=ifnet_admin_provider,
-        npcap_library=dplane_npcap_library,
+        dplane_backend=active_dplane_backend,
         modes=("hidden", "host-interface"),
         after_import_commit=refresh_control_plane_and_dplane,
     )
@@ -144,7 +147,7 @@ def build_default_registry(
         modes=ALL_MODES,
         ifnet_provider=ifnet_provider,
         ifnet_admin_provider=ifnet_admin_provider,
-        npcap_library=dplane_npcap_library,
+        dplane_backend=active_dplane_backend,
         dhcp_provider=ip_dhcp_provider,
         static_ipv4_provider=ip_static_ipv4_provider,
         after_vvrp_ipv4_change=refresh_control_plane_and_dplane,
@@ -258,9 +261,8 @@ def _resolve_fib_packet_device(
     request,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
-    npcap_library: NpcapLibrary,
+    dplane_backend: DPlane_Backend,
 ):
-    from src.DPlane.Windows.npcap import NpcapDevice, find_npcap_device_for_interface
     from src.IFNET.imports import imported_interfaces
     from src.IFNET.inventory import get_ifnet_manager
 
@@ -269,18 +271,9 @@ def _resolve_fib_packet_device(
         provider=ifnet_provider,
         admin_provider=ifnet_admin_provider,
     ).list_interfaces()
+    devices = dplane_backend.DPlane_list_packet_devices()
     for interface in imported_interfaces(ctx.state, interfaces):
         if interface.ifnet_index == request.out_if_index or interface.name == request.out_if_name:
-            return find_npcap_device_for_interface(
-                interface,
-                tuple(
-                    NpcapDevice(
-                        name=device.name,
-                        description=device.description,
-                        backend=device.backend or "npcap",
-                    )
-                    for device in npcap_library.list_devices()
-                ),
-            )
+            return dplane_backend.DPlane_find_packet_device(interface, devices)
     return None
 

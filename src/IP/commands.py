@@ -15,7 +15,7 @@ from src.CCmd.running_config import (
     set_host_interface_config_command,
     set_interface_config_command,
 )
-from src.DPlane.Windows.npcap import NpcapLibrary
+from src.DPlane import DPlane_Backend
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.imports import imported_interfaces
@@ -51,7 +51,7 @@ def IP_register_commands(
     modes: Sequence[str] = g_IP_DEFAULT_COMMAND_MODES,
     ifnet_provider: InterfaceProvider | None = None,
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
-    npcap_library: NpcapLibrary | None = None,
+    dplane_backend: DPlane_Backend | None = None,
     dhcp_provider: IP_DhcpClientProvider | None = None,
     static_ipv4_provider: IP_StaticIpv4Provider | None = None,
     after_vvrp_ipv4_change: Callable | None = None,
@@ -71,7 +71,7 @@ def IP_register_commands(
             ICMP_ctx=ctx,
             ICMP_ifnet_provider=ifnet_provider,
             ICMP_ifnet_admin_provider=ifnet_admin_provider,
-            ICMP_npcap_library=npcap_library,
+            ICMP_dplane_backend=dplane_backend,
         )
         return CommandResult(ok=result.ICMP_ok, message=result.ICMP_message)
 

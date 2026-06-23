@@ -21,28 +21,13 @@ class InterfaceAdminProvider(Protocol):
 
 
 class OsInterfaceAdminProvider:
-    def __init__(self) -> None:
-        self._ethernet = None
+    def __init__(self, dplane_backend=None) -> None:
+        from src.DPlane.interface_admin import DPlane_InterfaceAdminProvider
+
+        self._provider = DPlane_InterfaceAdminProvider(dplane_backend)
 
     def shutdown(self, interface: NetworkInterface) -> InterfaceAdminResult:
-        if interface.kind == "ethernet":
-            return self._ethernet_provider().shutdown(interface)
-        return InterfaceAdminResult(
-            ok=False,
-            message=f"% Unsupported interface type for shutdown: {interface.kind}",
-        )
+        return self._provider.shutdown(interface)
 
     def no_shutdown(self, interface: NetworkInterface) -> InterfaceAdminResult:
-        if interface.kind == "ethernet":
-            return self._ethernet_provider().no_shutdown(interface)
-        return InterfaceAdminResult(
-            ok=False,
-            message=f"% Unsupported interface type for no shutdown: {interface.kind}",
-        )
-
-    def _ethernet_provider(self):
-        if self._ethernet is None:
-            from .Ethernet.admin import EthernetAdminProvider
-
-            self._ethernet = EthernetAdminProvider()
-        return self._ethernet
+        return self._provider.no_shutdown(interface)

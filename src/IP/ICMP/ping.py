@@ -12,11 +12,7 @@ from typing import Callable, TextIO
 
 from src.ARP import ArpPacketError, ArpProtocol, arp_packet_from_ethernet, get_arp_table
 from src.CCmd.models import CliContext
-from src.DPlane.Windows.npcap import (
-    NpcapError,
-    NpcapLibrary,
-    NpcapPacketPort,
-)
+from src.DPlane import DPlane_Backend, DPlane_PacketDevice, DPlane_create_backend
 from src.ETHERNET import (
     ETHERTYPE_ARP,
     ETHERTYPE_IPV4,
@@ -233,8 +229,8 @@ class ICMP_VvrpPacketPinger:
         *,
         ICMP_ifnet_provider: InterfaceProvider | None = None,
         ICMP_ifnet_admin_provider: InterfaceAdminProvider | None = None,
-        ICMP_npcap_library: NpcapLibrary | None = None,
-        ICMP_port_factory: Callable[[str], object] | None = None,
+        ICMP_dplane_backend: DPlane_Backend | None = None,
+        ICMP_port_factory: Callable[[DPlane_PacketDevice], object] | None = None,
         ICMP_monotonic: Callable[[], float] = time.monotonic,
         ICMP_sleep: Callable[[float], None] = time.sleep,
         ICMP_identifier: int | None = None,
@@ -242,7 +238,10 @@ class ICMP_VvrpPacketPinger:
         self.ICMP_ctx = ICMP_ctx
         self.ICMP_ifnet_provider = ICMP_ifnet_provider
         self.ICMP_ifnet_admin_provider = ICMP_ifnet_admin_provider
-        self.ICMP_npcap_library = ICMP_npcap_library
+        self.ICMP_dplane_backend = ICMP_dplane_backend or DPlane_create_backend(
+            DPlane_ifnet_provider=ICMP_ifnet_provider,
+            DPlane_admin_provider=ICMP_ifnet_admin_provider,
+        )
         self.ICMP_port_factory = ICMP_port_factory or self._ICMP_default_port_factory
         self.ICMP_monotonic = ICMP_monotonic
         self.ICMP_sleep = ICMP_sleep
@@ -260,7 +259,7 @@ class ICMP_VvrpPacketPinger:
             ICMP_route = self._ICMP_resolve_forwarding(ICMP_resolved_address)
         except ValueError as ICMP_exc:
             return ICMP_PingResult(ICMP_ok=False, ICMP_message=f"% {ICMP_exc}")
-        except (InterfaceDiscoveryError, NpcapError) as ICMP_exc:
+        except (InterfaceDiscoveryError, RuntimeError) as ICMP_exc:
             return ICMP_PingResult(ICMP_ok=False, ICMP_message=f"% DPlane ping failed: {ICMP_exc}")
 
         if (
@@ -278,7 +277,7 @@ class ICMP_VvrpPacketPinger:
         ICMP_arp_protocol = ArpProtocol(get_arp_table(self.ICMP_ctx.state))
 
         try:
-            with self.ICMP_port_factory(ICMP_route.device.name) as ICMP_port:
+            with self.ICMP_port_factory(ICMP_route.device) as ICMP_port:
                 ICMP_port.set_filter(g_ICMP_src_PING_FILTER)
                 if ICMP_options.ICMP_brief:
                     ICMP_output.write("    ")
@@ -307,7 +306,7 @@ class ICMP_VvrpPacketPinger:
                 if ICMP_options.ICMP_brief:
                     ICMP_output.write("\n")
                     ICMP_output.flush()
-        except (OSError, NpcapError) as ICMP_exc:
+        except (OSError, RuntimeError) as ICMP_exc:
             return ICMP_PingResult(ICMP_ok=False, ICMP_message=f"% DPlane ping failed: {ICMP_exc}")
 
         ICMP_output.write(
@@ -328,7 +327,7 @@ class ICMP_VvrpPacketPinger:
             provider=self.ICMP_ifnet_provider,
             admin_provider=self.ICMP_ifnet_admin_provider,
         ).list_interfaces()
-        ICMP_devices = (self.ICMP_npcap_library or NpcapLibrary()).list_devices()
+        ICMP_devices = self.ICMP_dplane_backend.DPlane_list_packet_devices()
         ICMP_fib_entry = FIB_resolve_forwarding(
             self.ICMP_ctx.state,
             ICMP_interfaces,
@@ -520,8 +519,8 @@ class ICMP_VvrpPacketPinger:
             ICMP_port.send_frame(ICMP_reply.to_bytes(pad=True))
         return ICMP_packet
 
-    def _ICMP_default_port_factory(self, ICMP_device_name: str):
-        return NpcapPacketPort(ICMP_device_name, library=self.ICMP_npcap_library)
+    def _ICMP_default_port_factory(self, ICMP_device: DPlane_PacketDevice):
+        return self.ICMP_dplane_backend.DPlane_open_packet_port(ICMP_device)
 
 
 def ICMP_run_ping(
@@ -530,7 +529,7 @@ def ICMP_run_ping(
     ICMP_ctx: CliContext | None = None,
     ICMP_ifnet_provider: InterfaceProvider | None = None,
     ICMP_ifnet_admin_provider: InterfaceAdminProvider | None = None,
-    ICMP_npcap_library: NpcapLibrary | None = None,
+    ICMP_dplane_backend: DPlane_Backend | None = None,
     ICMP_pinger: ICMP_SocketPinger | ICMP_VvrpPacketPinger | None = None,
 ) -> ICMP_PingResult:
     try:
@@ -558,7 +557,7 @@ def ICMP_run_ping(
             ICMP_ctx,
             ICMP_ifnet_provider=ICMP_ifnet_provider,
             ICMP_ifnet_admin_provider=ICMP_ifnet_admin_provider,
-            ICMP_npcap_library=ICMP_npcap_library,
+            ICMP_dplane_backend=ICMP_dplane_backend,
         )
     return ICMP_active_pinger.ICMP_ping(
         ICMP_options,

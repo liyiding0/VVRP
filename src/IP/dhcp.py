@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import platform
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -22,33 +21,15 @@ class IP_DhcpClientProvider(Protocol):
 
 
 class IP_OsDhcpClientProvider:
-    def __init__(self, system: str | None = None) -> None:
-        self.system = (system or platform.system()).lower()
-        self._ethernet = None
+    def __init__(self, dplane_backend=None) -> None:
+        from src.DPlane.ip_config import DPlane_DhcpClientProvider
+
+        self._provider = DPlane_DhcpClientProvider(dplane_backend)
 
     def IP_enable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
-        return self._IP_apply(interface, enable=True)
+        return self._provider.IP_enable_dhcp(interface)
 
     def IP_disable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
-        return self._IP_apply(interface, enable=False)
-
-    def _IP_apply(self, interface: NetworkInterface, enable: bool) -> IP_DhcpClientResult:
-        if interface.kind == "ethernet":
-            provider = self._IP_ethernet_provider()
-            if enable:
-                return provider.IP_enable_dhcp(interface)
-            return provider.IP_disable_dhcp(interface)
-
-        return IP_DhcpClientResult(
-            ok=False,
-            message=f"% Unsupported interface type for DHCP client: {interface.kind}",
-        )
-
-    def _IP_ethernet_provider(self):
-        if self._ethernet is None:
-            from src.IFNET.Ethernet.dhcp import EthernetDhcpClientProvider
-
-            self._ethernet = EthernetDhcpClientProvider(system=self.system)
-        return self._ethernet
+        return self._provider.IP_disable_dhcp(interface)
 
 

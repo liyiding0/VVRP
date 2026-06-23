@@ -4,13 +4,8 @@ import threading
 
 from src.ARP import ArpPacketError, ArpProtocol, get_arp_table
 from src.CCmd.models import CliContext
-from src.DPlane.Windows.npcap import (
-    NpcapDevice,
-    NpcapError,
-    NpcapLibrary,
-    NpcapPacketPort,
-    find_npcap_device_for_interface,
-)
+from src.DPlane.backend import DPlane_create_backend
+from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
 from src.ETHERNET import (
     ETHERTYPE_ARP,
     ETHERTYPE_IPV4,
@@ -36,12 +31,15 @@ class DPlane_PacketInputService:
         self,
         DPlane_ifnet_provider: InterfaceProvider | None = None,
         DPlane_ifnet_admin_provider: InterfaceAdminProvider | None = None,
-        DPlane_npcap_library: NpcapLibrary | None = None,
+        DPlane_backend: DPlane_Backend | None = None,
         DPlane_port_factory=None,
     ) -> None:
         self.DPlane_ifnet_provider = DPlane_ifnet_provider
         self.DPlane_ifnet_admin_provider = DPlane_ifnet_admin_provider
-        self.DPlane_npcap_library = DPlane_npcap_library
+        self.DPlane_backend = DPlane_backend or DPlane_create_backend(
+            DPlane_ifnet_provider=DPlane_ifnet_provider,
+            DPlane_admin_provider=DPlane_ifnet_admin_provider,
+        )
         self.DPlane_port_factory = DPlane_port_factory or self._DPlane_default_port_factory
         self.DPlane_sessions: dict[str, _DPlane_PacketInputSession] = {}
 
@@ -49,11 +47,11 @@ class DPlane_PacketInputService:
         self.DPlane_stop()
         try:
             DPlane_bindings = self._DPlane_bindings(DPlane_ctx)
-        except (InterfaceDiscoveryError, NpcapError) as DPlane_exc:
+        except (InterfaceDiscoveryError, RuntimeError) as DPlane_exc:
             return f"DPlane packet input refresh failed: {DPlane_exc}"
 
         for DPlane_interface, DPlane_device in DPlane_bindings:
-            DPlane_port = self.DPlane_port_factory(DPlane_device.name)
+            DPlane_port = self.DPlane_port_factory(DPlane_device)
             DPlane_session = _DPlane_PacketInputSession(DPlane_ctx, DPlane_interface, DPlane_port)
             DPlane_session.DPlane_start()
             self.DPlane_sessions[DPlane_interface.name] = DPlane_session
@@ -69,14 +67,14 @@ class DPlane_PacketInputService:
     def _DPlane_bindings(
         self,
         DPlane_ctx: CliContext,
-    ) -> tuple[tuple[NetworkInterface, NpcapDevice], ...]:
+    ) -> tuple[tuple[NetworkInterface, DPlane_PacketDevice], ...]:
         DPlane_interfaces = get_ifnet_manager(
             DPlane_ctx.state,
             provider=self.DPlane_ifnet_provider,
             admin_provider=self.DPlane_ifnet_admin_provider,
         ).list_interfaces()
-        DPlane_devices = (self.DPlane_npcap_library or NpcapLibrary()).list_devices()
-        DPlane_output: list[tuple[NetworkInterface, NpcapDevice]] = []
+        DPlane_devices = self.DPlane_backend.DPlane_list_packet_devices()
+        DPlane_output: list[tuple[NetworkInterface, DPlane_PacketDevice]] = []
         for DPlane_interface in imported_interfaces(DPlane_ctx.state, DPlane_interfaces):
             if (
                 DPlane_interface.kind != "ethernet"
@@ -85,13 +83,13 @@ class DPlane_PacketInputService:
                 or not DPlane_interface.addresses_by_family("ipv4")
             ):
                 continue
-            DPlane_device = find_npcap_device_for_interface(DPlane_interface, DPlane_devices)
+            DPlane_device = self.DPlane_backend.DPlane_find_packet_device(DPlane_interface, DPlane_devices)
             if DPlane_device is not None:
                 DPlane_output.append((DPlane_interface, DPlane_device))
         return tuple(DPlane_output)
 
-    def _DPlane_default_port_factory(self, DPlane_device_name: str):
-        return NpcapPacketPort(DPlane_device_name, library=self.DPlane_npcap_library)
+    def _DPlane_default_port_factory(self, DPlane_device: DPlane_PacketDevice):
+        return self.DPlane_backend.DPlane_open_packet_port(DPlane_device)
 
 
 class _DPlane_PacketInputSession:

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import socket
+import errno
+import os
+import struct
 
 from src.DPlane.backend import DPlane_LegacyHostBackend
-from src.DPlane.models import DPlane_PacketDevice, DPlane_PlatformInfo
+from src.DPlane.models import DPlane_PacketDevice, DPlane_PlatformInfo, DPlane_Result
 from src.IFNET.models import NetworkInterface
 
 
@@ -112,3 +115,75 @@ class DPlane_LinuxRawSocketBackend(DPlane_LegacyHostBackend):
 
     def DPlane_open_packet_port(self, DPlane_device: DPlane_PacketDevice) -> DPlane_LinuxRawSocketPort:
         return DPlane_LinuxRawSocketPort(DPlane_device.name)
+
+    def DPlane_set_interface_enabled(
+        self,
+        DPlane_interface: NetworkInterface,
+        DPlane_enabled: bool,
+    ) -> DPlane_Result:
+        try:
+            DPlane_set_linux_interface_enabled(DPlane_interface, DPlane_enabled)
+        except PermissionError as DPlane_exc:
+            return DPlane_Result(ok=False, message=f"% permission denied: {DPlane_exc}")
+        except OSError as DPlane_exc:
+            return DPlane_Result(ok=False, message=f"% OS interface API failed: {DPlane_exc}")
+        return DPlane_Result(ok=True)
+
+
+def DPlane_set_linux_interface_enabled(
+    DPlane_interface: NetworkInterface,
+    DPlane_enabled: bool,
+) -> None:
+    if DPlane_interface.index is None:
+        raise OSError("missing OS interface index")
+
+    DPlane_af_netlink = getattr(socket, "AF_NETLINK", 16)
+    DPlane_netlink_route = getattr(socket, "NETLINK_ROUTE", 0)
+    DPlane_nlmsg_error = 2
+    DPlane_nlm_f_request = 1
+    DPlane_nlm_f_ack = 4
+    DPlane_rtm_setlink = 19
+    DPlane_iff_up = 1
+
+    DPlane_flags = DPlane_iff_up if DPlane_enabled else 0
+    DPlane_change = DPlane_iff_up
+    DPlane_ifinfomsg = struct.pack(
+        "=BBHiII",
+        socket.AF_UNSPEC,
+        0,
+        0,
+        DPlane_interface.index,
+        DPlane_flags,
+        DPlane_change,
+    )
+    DPlane_sequence = 1
+    DPlane_header = struct.pack(
+        "=IHHII",
+        16 + len(DPlane_ifinfomsg),
+        DPlane_rtm_setlink,
+        DPlane_nlm_f_request | DPlane_nlm_f_ack,
+        DPlane_sequence,
+        0,
+    )
+    DPlane_message = DPlane_header + DPlane_ifinfomsg
+
+    with socket.socket(DPlane_af_netlink, socket.SOCK_RAW, DPlane_netlink_route) as DPlane_socket:
+        DPlane_socket.bind((0, 0))
+        DPlane_socket.send(DPlane_message)
+        DPlane_response = DPlane_socket.recv(65535)
+
+    if len(DPlane_response) < 20:
+        raise OSError("short netlink response")
+
+    _, DPlane_message_type, _, _, _ = struct.unpack("=IHHII", DPlane_response[:16])
+    if DPlane_message_type != DPlane_nlmsg_error:
+        return
+
+    (DPlane_netlink_error,) = struct.unpack("=i", DPlane_response[16:20])
+    if DPlane_netlink_error == 0:
+        return
+
+    DPlane_error_number = -DPlane_netlink_error
+    if DPlane_error_number in {errno.EPERM, errno.EACCES}:
+        raise PermissionError(os.strerror(DPlane_error_number))
+    raise OSError(DPlane_error_number, os.strerror(DPlane_error_number))

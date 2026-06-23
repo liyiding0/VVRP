@@ -28,7 +28,7 @@ class TrieNode:
 class CommandRegistry:
     def __init__(self) -> None:
         self.root = TrieNode()
-        self._commands_by_key: dict[tuple[str, ...], CommandSpec] = {}
+        self._commands_by_key: dict[tuple[tuple[str, ...], tuple[str, ...]], CommandSpec] = {}
         self._roots_by_mode: dict[str, TrieNode] = {}
         self._context_initializers: list[Callable[[CliContext], None]] = []
         self._parameter_value_providers: dict[
@@ -65,20 +65,26 @@ class CommandRegistry:
         if not tokens:
             raise ValueError("Command pattern must contain at least one token")
 
-        key = tuple(token.key for token in tokens)
-        if key in self._commands_by_key:
-            raise ValueError(f"Duplicate command pattern: {pattern!r}")
+        token_key = tuple(token.key for token in tokens)
+        modes_key = self._normalize_modes(modes)
+        for existing_key, existing_command in self._commands_by_key.items():
+            existing_token_key, _ = existing_key
+            if existing_token_key != token_key:
+                continue
+            if "*" in existing_command.modes or "*" in modes_key:
+                raise ValueError(f"Duplicate command pattern: {pattern!r}")
+            if set(existing_command.modes) & set(modes_key):
+                raise ValueError(f"Duplicate command pattern: {pattern!r}")
 
         spec = CommandSpec(
             pattern=pattern,
             tokens=tokens,
             handler=handler,
             help_text=help_text,
-            modes=self._normalize_modes(modes),
+            modes=modes_key,
             hidden=hidden,
         )
-        self._insert_into_root(self.root, spec)
-        self._commands_by_key[key] = spec
+        self._commands_by_key[(token_key, modes_key)] = spec
         self._roots_by_mode.clear()
         return spec
 

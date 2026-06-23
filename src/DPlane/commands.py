@@ -9,6 +9,7 @@ from src.CCmd.registry import CommandRegistry
 from src.CCmd.running_config import (
     RUNNING_CONFIG_LOADING_STATE_KEY,
     remove_host_interface_config_command,
+    render_host_interface_config,
     set_host_interface_config_command,
 )
 from src.DPlane.backend import DPlane_create_backend
@@ -48,7 +49,6 @@ def register_dplane_commands(
     registry: CommandRegistry,
     ifnet_provider: InterfaceProvider | None = None,
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
-    npcap_library=None,
     dplane_backend: DPlane_Backend | None = None,
     modes: Sequence[str] = DEFAULT_DPLANE_COMMAND_MODES,
     after_import_commit: Callable | None = None,
@@ -56,7 +56,6 @@ def register_dplane_commands(
     DPlane_backend = dplane_backend or DPlane_create_backend(
         DPlane_ifnet_provider=ifnet_provider,
         DPlane_admin_provider=ifnet_admin_provider,
-        DPlane_npcap_library=npcap_library,
     )
 
     @registry.command(
@@ -77,7 +76,7 @@ def register_dplane_commands(
         except RuntimeError as exc:
             return CommandResult(ok=False, message=f"% DPlane interface discovery failed: {exc}")
 
-        return CommandResult(message=_format_dplane_interfaces_detail(ctx.state, interfaces, devices))
+        return CommandResult(message=_format_dplane_interfaces_detail(ctx.state, interfaces, devices, DPlane_backend))
 
     @registry.command(
         "show dplane interfaces brief",
@@ -97,7 +96,40 @@ def register_dplane_commands(
         except RuntimeError as exc:
             return CommandResult(ok=False, message=f"% DPlane interface discovery failed: {exc}")
 
-        return CommandResult(message=_format_dplane_interfaces_brief(ctx.state, interfaces, devices))
+        return CommandResult(message=_format_dplane_interfaces_brief(ctx.state, interfaces, devices, DPlane_backend))
+
+    @registry.command(
+        "show host interface",
+        help_text="Show host system interfaces",
+        modes=tuple(modes),
+    )
+    def show_host_interfaces(ctx, args):
+        result = _list_host_interfaces_result(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_format_host_interfaces_detail(result, ctx.state))
+
+    @registry.command(
+        "show host interface brief",
+        help_text="Show brief host system interface summary",
+        modes=tuple(modes),
+    )
+    def show_host_interfaces_brief(ctx, args):
+        result = _list_host_interfaces_result(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(result, CommandResult):
+            return result
+        return CommandResult(message=_format_host_interface_brief(result, ctx.state))
+
+    @registry.command(
+        f"show host interface <name:{HOST_INTERFACE_NAME_PATTERN}>",
+        help_text="Show host system interface detail",
+        modes=tuple(modes),
+    )
+    def show_host_interface_detail(ctx, args):
+        interface = _get_host_interface(ctx, ifnet_provider, ifnet_admin_provider, args["name"])
+        if isinstance(interface, CommandResult):
+            return interface
+        return CommandResult(message=_format_host_interface_detail(interface, ctx.state))
 
     @registry.command(
         f"host interface <name:{HOST_INTERFACE_NAME_PATTERN}>",
@@ -124,6 +156,18 @@ def register_dplane_commands(
             return ()
 
     registry.parameter_values(("host", "interface"), "name", host_interface_name_values)
+    registry.parameter_values(("show", "host", "interface"), "name", host_interface_name_values)
+
+    @registry.command(
+        "show this",
+        help_text="Show current host interface configuration",
+        modes=("host-interface",),
+    )
+    def show_this_host_interface(ctx, args):
+        rendered = render_host_interface_config(ctx, ctx.mode_label)
+        if not rendered:
+            rendered = f"host interface {_format_cli_token(ctx.mode_label)}\n quit\n"
+        return CommandResult(message=rendered.rstrip())
 
     @registry.command(
         "import",
@@ -217,6 +261,17 @@ def _list_host_interfaces(
     ).list_interfaces()
 
 
+def _list_host_interfaces_result(
+    ctx,
+    ifnet_provider: InterfaceProvider | None,
+    ifnet_admin_provider: InterfaceAdminProvider | None,
+) -> tuple[NetworkInterface, ...] | CommandResult:
+    try:
+        return _list_host_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    except InterfaceDiscoveryError as exc:
+        return CommandResult(ok=False, message=f"% {exc}")
+
+
 def _sync_import_config_from_active(ctx, interface_names) -> str:
     active_imports = imported_interface_names(ctx.state)
     for name in sorted(interface_names, key=str.casefold):
@@ -273,11 +328,12 @@ def _format_dplane_interfaces_detail(
     state: dict,
     interfaces: tuple[NetworkInterface, ...],
     devices: tuple[DPlane_PacketDevice, ...],
+    DPlane_backend: DPlane_Backend,
 ) -> str:
     if not interfaces:
         return "No IFNET interfaces found"
 
-    rows = _dplane_interface_rows(state, interfaces, devices)
+    rows = _dplane_interface_rows(state, interfaces, devices, DPlane_backend)
     blocks: list[str] = []
     for row in rows:
         block = [
@@ -292,12 +348,63 @@ def _format_dplane_interfaces_detail(
     return "\n\n".join(blocks)
 
 
+def _format_host_interface_brief(
+    interfaces: tuple[NetworkInterface, ...],
+    state: dict,
+) -> str:
+    if not interfaces:
+        return "No interfaces found"
+
+    lines = [
+        "PHY: Physical",
+        "*down: administratively down",
+        "(l): loopback",
+        "(s): spoofing",
+        "InUti/OutUti: input utility/output utility",
+        f"{'Interface':<28} {'PHY':<8} {'Protocol':<8} {'InUti':>5} {'OutUti':>6} {'inErrors':>8} {'outErrors':>9}",
+    ]
+    for interface in interfaces:
+        lines.append(
+            f"{interface.name:<28} "
+            f"{_display_host_phy(interface, state):<8} "
+            f"{_display_host_protocol(interface, state):<8} "
+            f"{'0%':>5} "
+            f"{'0%':>6} "
+            f"{0:>8} "
+            f"{0:>9}"
+        )
+    return "\n".join(lines)
+
+
+def _format_host_interfaces_detail(
+    interfaces: tuple[NetworkInterface, ...],
+    state: dict,
+) -> str:
+    if not interfaces:
+        return "No interfaces found"
+    return "\n\n".join(_format_host_interface_detail(interface, state) for interface in interfaces)
+
+
+def _format_host_interface_detail(interface: NetworkInterface, state: dict) -> str:
+    lines = [
+        f"{interface.name} is {_display_host_detail_state(interface, state)}, line protocol is {_display_host_protocol(interface, state)}",
+        f"  IFNET Index is {_display_ifnet_index(interface.ifnet_index)}",
+        f"  OS interface index is {_display_host_index(interface.index)}, type is {interface.kind}",
+        f"  Hardware address is {_display_value(interface.mac_address)}",
+        f"  MTU {_display_value(interface.mtu)} bytes, bandwidth {_display_speed(interface.speed_mbps)}",
+        f"  Internet address is {_join_addresses(interface.addresses_by_family('ipv4'))}",
+        f"  IPv6 address is {_join_addresses(interface.addresses_by_family('ipv6'))}",
+    ]
+    return "\n".join(lines)
+
+
 def _format_dplane_interfaces_brief(
     state: dict,
     interfaces: tuple[NetworkInterface, ...],
     devices: tuple[DPlane_PacketDevice, ...],
+    DPlane_backend: DPlane_Backend,
 ) -> str:
-    rows = _dplane_interface_rows(state, interfaces, devices)
+    rows = _dplane_interface_rows(state, interfaces, devices, DPlane_backend)
     lines = [
         f"{'Host Interface':<32} {'OS Index':<8} {'IFNET Index':<12} Status",
     ]
@@ -317,13 +424,14 @@ def _dplane_interface_rows(
     state: dict,
     interfaces: tuple[NetworkInterface, ...],
     devices: tuple[DPlane_PacketDevice, ...],
+    DPlane_backend: DPlane_Backend,
 ) -> tuple[DplaneInterfaceRow, ...]:
     active_imports = imported_interface_names(state)
     pending_imports = pending_import_names(state)
     imported_indices = imported_ifnet_index_map(state, interfaces)
     rows: list[DplaneInterfaceRow] = []
     for interface in interfaces:
-        device = _find_packet_device_for_interface(interface, devices)
+        device = DPlane_backend.DPlane_find_packet_device(interface, devices)
         if device is None:
             device_name = "-"
             status = "unmatched"
@@ -349,25 +457,66 @@ def _dplane_interface_rows(
     return tuple(rows)
 
 
-def _find_packet_device_for_interface(
-    interface: NetworkInterface,
-    devices: tuple[DPlane_PacketDevice, ...],
-) -> DPlane_PacketDevice | None:
-    for device in devices:
-        if interface.name == device.name or interface.name in (device.description or ""):
-            return device
-    try:
-        from src.DPlane.Windows.npcap import find_npcap_device_for_interface
-
-        return find_npcap_device_for_interface(interface, devices)  # type: ignore[arg-type]
-    except RuntimeError:
-        return None
-
-
 def _display_ifnet_index(ifnet_index: int | None) -> str:
     if ifnet_index is None:
         return "-"
     return f"0x{ifnet_index:x}"
+
+
+def _join_addresses(addresses) -> str:
+    if not addresses:
+        return "-"
+    return ", ".join(address.display for address in addresses)
+
+
+def _display_host_index(index: int | None) -> str:
+    if index is None:
+        return "-"
+    return str(index)
+
+
+def _display_host_state(interface: NetworkInterface) -> str:
+    return "up" if interface.is_up else "down"
+
+
+def _display_host_detail_state(interface: NetworkInterface, state: dict) -> str:
+    from src.IFNET.state import is_admin_down
+
+    if is_admin_down(state, interface.name):
+        return "administratively down"
+    return _display_host_state(interface)
+
+
+def _display_host_phy(interface: NetworkInterface, state: dict) -> str:
+    from src.IFNET.state import is_admin_down
+
+    if is_admin_down(state, interface.name):
+        return "*down"
+    if interface.kind == "loopback":
+        return f"{_display_host_state(interface)}(l)"
+    return _display_host_state(interface)
+
+
+def _display_host_protocol(interface: NetworkInterface, state: dict) -> str:
+    from src.IFNET.state import is_admin_down
+
+    if is_admin_down(state, interface.name):
+        return "down"
+    if interface.kind == "loopback" and interface.is_up:
+        return "up(s)"
+    return _display_host_state(interface)
+
+
+def _display_speed(speed_mbps: int | None) -> str:
+    if speed_mbps is None:
+        return "-"
+    return f"{speed_mbps} Mbps"
+
+
+def _display_value(value: object) -> str:
+    if value is None or value == "":
+        return "-"
+    return str(value)
 
 
 def _display_vvrp_import_state(name: str, active_imports: frozenset[str]) -> str:

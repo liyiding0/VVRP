@@ -7,7 +7,6 @@ from src.CCmd.models import CommandResult
 from src.CCmd.registry import CommandRegistry
 from src.CCmd.running_config import (
     _format_cli_token,
-    render_host_interface_config,
     remove_interface_config_command,
     render_interface_config,
     set_interface_config_command,
@@ -35,7 +34,6 @@ def register_ifnet_commands(
     provider: InterfaceProvider | None = None,
     admin_provider: InterfaceAdminProvider | None = None,
     modes: Sequence[str] = DEFAULT_IFNET_COMMAND_MODES,
-    register_interface_config_command: bool = True,
 ) -> None:
     @registry.command(
         "show interfaces",
@@ -107,64 +105,6 @@ def register_ifnet_commands(
     registry.parameter_values(("show", "interfaces", "brief"), "name", vvrp_interface_name_values)
 
     @registry.command(
-        "show host interface",
-        help_text="Show host system interfaces",
-        modes=tuple(modes),
-    )
-    def show_host_interfaces(ctx, args):
-        result = _list_interfaces(ctx, provider, admin_provider)
-        if isinstance(result, CommandResult):
-            return result
-        return CommandResult(message=_format_interfaces_detail(result, ctx.state))
-
-    @registry.command(
-        "show host interface brief",
-        help_text="Show brief host system interface summary",
-        modes=tuple(modes),
-    )
-    def show_host_interfaces_brief(ctx, args):
-        result = _list_interfaces(ctx, provider, admin_provider)
-        if isinstance(result, CommandResult):
-            return result
-        return CommandResult(message=_format_interface_brief(result, ctx.state))
-
-    @registry.command(
-        f"show host interface <name:{INTERFACE_NAME_PATTERN}>",
-        help_text="Show host system interface detail",
-        modes=tuple(modes),
-    )
-    def show_host_interface_detail(ctx, args):
-        name = args["name"]
-        interface = _get_interface(ctx, provider, admin_provider, name)
-        if isinstance(interface, CommandResult):
-            return interface
-        return CommandResult(message=_format_interface_detail(interface, ctx.state))
-
-    if register_interface_config_command:
-        @registry.command(
-            f"host interface <name:{INTERFACE_NAME_PATTERN}>",
-            help_text="Enter host interface view",
-            modes=("hidden", "host-interface"),
-        )
-        def interface_config(ctx, args):
-            interface = _get_interface(ctx, provider, admin_provider, args["name"])
-            if isinstance(interface, CommandResult):
-                return interface
-            if ctx.mode == "host-interface":
-                ctx.mode_stack[-1].label = interface.name
-            else:
-                ctx.push_mode("host-interface", interface.name)
-            return CommandResult()
-
-        def interface_name_values(ctx):
-            try:
-                return tuple(interface.name for interface in _manager(ctx, provider, admin_provider).list_interfaces())
-            except InterfaceDiscoveryError:
-                return ()
-
-        registry.parameter_values(("host", "interface"), "name", interface_name_values)
-
-    @registry.command(
         "shutdown",
         help_text="Administratively shut down current interface",
         modes=("interface",),
@@ -220,15 +160,9 @@ def register_ifnet_commands(
     @registry.command(
         "show this",
         help_text="Show current interface configuration",
-        modes=("interface", "host-interface"),
+        modes=("interface",),
     )
     def show_this(ctx, args):
-        if ctx.mode == "host-interface":
-            rendered = render_host_interface_config(ctx, ctx.mode_label)
-            if not rendered:
-                rendered = f"host interface {_format_cli_token(ctx.mode_label)}\n quit\n"
-            return CommandResult(message=rendered.rstrip())
-
         rendered = render_interface_config(ctx, ctx.mode_label)
         if not rendered:
             rendered = f"interface {_format_cli_token(ctx.mode_label)}\n quit\n"
@@ -383,15 +317,6 @@ def _format_interface_brief(
     return "\n".join(lines)
 
 
-def _format_interfaces_detail(
-    interfaces: tuple[NetworkInterface, ...],
-    state: dict,
-) -> str:
-    if not interfaces:
-        return "No interfaces found"
-    return "\n\n".join(_format_interface_detail(interface, state) for interface in interfaces)
-
-
 def _format_vvrp_interfaces_detail(
     interfaces: tuple[NetworkInterface, ...],
     state: dict,
@@ -399,19 +324,6 @@ def _format_vvrp_interfaces_detail(
     if not interfaces:
         return "No interfaces found"
     return "\n\n".join(_format_vvrp_interface_detail(interface, state) for interface in interfaces)
-
-
-def _format_interface_detail(interface: NetworkInterface, state: dict) -> str:
-    lines = [
-        f"{interface.name} is {_display_detail_state(interface, state)}, line protocol is {_display_protocol(interface, state)}",
-        f"  IFNET Index is {_display_ifnet_index(interface.ifnet_index)}",
-        f"  OS interface index is {_display_index(interface.index)}, type is {interface.kind}",
-        f"  Hardware address is {_display_value(interface.mac_address)}",
-        f"  MTU {_display_value(interface.mtu)} bytes, bandwidth {_display_speed(interface.speed_mbps)}",
-        f"  Internet address is {_join_addresses(interface.addresses_by_family('ipv4'))}",
-        f"  IPv6 address is {_join_addresses(interface.addresses_by_family('ipv6'))}",
-    ]
-    return "\n".join(lines)
 
 
 def _format_vvrp_interface_detail(interface: NetworkInterface, state: dict) -> str:
@@ -457,24 +369,12 @@ def _join_addresses(addresses: tuple[InterfaceAddress, ...]) -> str:
     return ", ".join(address.display for address in addresses)
 
 
-def _display_index(index: int | None) -> str:
-    if index is None:
-        return "-"
-    return str(index)
-
-
 def _display_ifnet_index(ifnet_index: int) -> str:
     return f"0x{ifnet_index:x}"
 
 
 def _display_state(interface: NetworkInterface) -> str:
     return "up" if interface.is_up else "down"
-
-
-def _display_detail_state(interface: NetworkInterface, state: dict) -> str:
-    if is_admin_down(state, interface.name):
-        return "administratively down"
-    return _display_state(interface)
 
 
 def _display_detail_state_upper(interface: NetworkInterface, state: dict) -> str:

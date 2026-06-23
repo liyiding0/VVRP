@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from ipaddress import IPv4Network
 from typing import Literal, Protocol
 
-from src.ETHERNET import RawEthernetPort
+from src.ETHERNET.port import RawEthernetPort
 from src.IFNET.models import NetworkInterface
 
 

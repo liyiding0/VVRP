@@ -10,7 +10,7 @@ from typing import Any
 
 from src.DPlane.packet import CapturedFrame
 from src.DPlane.backend import DPlane_LegacyHostBackend
-from src.DPlane.models import DPlane_PacketDevice, DPlane_PlatformInfo
+from src.DPlane.models import DPlane_PacketDevice, DPlane_PlatformInfo, DPlane_Result
 from src.IFNET.models import NetworkInterface
 
 
@@ -332,6 +332,21 @@ class DPlane_WindowsNpcapBackend(DPlane_LegacyHostBackend):
 
     def DPlane_open_packet_port(self, DPlane_device: DPlane_PacketDevice) -> NpcapPacketPort:
         return NpcapPacketPort(DPlane_device.name, library=self.DPlane_npcap_library)
+
+    def DPlane_set_interface_enabled(
+        self,
+        DPlane_interface: NetworkInterface,
+        DPlane_enabled: bool,
+    ) -> DPlane_Result:
+        try:
+            from src.DPlane.Windows.interface_windows import set_windows_network_adapter_enabled
+
+            set_windows_network_adapter_enabled(DPlane_interface, DPlane_enabled)
+        except PermissionError as DPlane_exc:
+            return DPlane_Result(ok=False, message=f"% permission denied: {DPlane_exc}")
+        except OSError as DPlane_exc:
+            return DPlane_Result(ok=False, message=f"% OS interface API failed: {DPlane_exc}")
+        return DPlane_Result(ok=True)
 
     def _DPlane_library(self) -> NpcapLibrary:
         return self.DPlane_npcap_library or NpcapLibrary()

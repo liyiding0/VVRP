@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.IFNET.admin import InterfaceAdminProvider, OsInterfaceAdminProvider
+from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceProvider, discover_interfaces
 from src.IFNET.models import NetworkInterface
 
@@ -99,7 +99,7 @@ class DPlane_LegacyHostBackend:
         DPlane_admin_provider: InterfaceAdminProvider | None = None,
     ) -> None:
         self.DPlane_ifnet_provider = DPlane_ifnet_provider
-        self.DPlane_admin_provider = DPlane_admin_provider or OsInterfaceAdminProvider()
+        self.DPlane_admin_provider = DPlane_admin_provider
         self._DPlane_platform = DPlane_detect_platform()
 
     @property
@@ -114,6 +114,11 @@ class DPlane_LegacyHostBackend:
         DPlane_interface: NetworkInterface,
         DPlane_enabled: bool,
     ) -> DPlane_Result:
+        if self.DPlane_admin_provider is None:
+            return DPlane_Result(
+                ok=False,
+                message=f"% unsupported DPlane interface admin backend: {self.DPlane_platform.kind}",
+            )
         if DPlane_enabled:
             DPlane_result = self.DPlane_admin_provider.no_shutdown(DPlane_interface)
         else:
@@ -124,13 +129,13 @@ class DPlane_LegacyHostBackend:
         self,
         DPlane_entry: DPlane_ForwardingEntry,
     ) -> DPlane_Result:
-        return DPlane_Result()
+        return DPlane_Result(ok=True)
 
     def DPlane_delete_forwarding_entry(
         self,
         DPlane_entry: DPlane_ForwardingEntry,
     ) -> DPlane_Result:
-        return DPlane_Result()
+        return DPlane_Result(ok=True)
 
 
 def DPlane_create_backend(

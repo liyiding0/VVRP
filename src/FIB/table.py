@@ -4,7 +4,6 @@ from dataclasses import dataclass, field, replace
 from ipaddress import IPv4Address
 
 from src.DPlane import DPlane_Backend, DPlane_ForwardingEntry, DPlane_PacketDevice
-from src.DPlane.Windows.npcap import NpcapDevice
 from src.IFNET.models import NetworkInterface
 
 from .models import FIBEntry, FIB_InstallRequest
@@ -126,7 +125,7 @@ def FIB_sync_active_routes(
 def FIB_resolve_forwarding(
     FIB_state: dict,
     FIB_host_interfaces: tuple[NetworkInterface, ...],
-    FIB_npcap_devices: tuple[NpcapDevice, ...],
+    FIB_packet_devices: tuple[DPlane_PacketDevice, ...],
     FIB_destination_ip: str,
 ) -> FIBEntry | None:
     FIB_entry = FIB_table(FIB_state).FIB_lookup(FIB_destination_ip)

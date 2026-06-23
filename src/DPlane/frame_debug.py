@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 from src.ARP import ArpPacketError, ArpProtocol, get_arp_table
 from src.CCmd.models import CliContext
+from src.DPlane.backend import DPlane_create_backend
+from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
 from src.ETHERNET import ETHERTYPE_ARP, debug_ethernet_frame, parse_ethernet_ii_frame
 from src.ETHERNET.frame import EthernetFrameError
 from src.IFNET.admin import InterfaceAdminProvider
@@ -13,8 +15,6 @@ from src.IFNET.imports import imported_interfaces
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import NetworkInterface
 
-from .Windows.npcap import NpcapDevice, NpcapError, NpcapLibrary, NpcapPacketPort, find_npcap_device_for_interface
-
 
 DEFAULT_FRAME_DEBUG_FILTER = "ether proto 0x0800 or ether proto 0x0806 or ether proto 0x86dd"
 
@@ -22,7 +22,7 @@ DEFAULT_FRAME_DEBUG_FILTER = "ether proto 0x0800 or ether proto 0x0806 or ether 
 @dataclass(frozen=True)
 class FrameDebugPortBinding:
     interface: NetworkInterface
-    device: NpcapDevice
+    device: DPlane_PacketDevice
     host_mac_address: str
 
 
@@ -31,13 +31,16 @@ class DplaneEthernetFrameDebugService:
         self,
         ifnet_provider: InterfaceProvider | None = None,
         ifnet_admin_provider: InterfaceAdminProvider | None = None,
-        npcap_library: NpcapLibrary | None = None,
+        dplane_backend: DPlane_Backend | None = None,
         port_factory=None,
         packet_filter: str = DEFAULT_FRAME_DEBUG_FILTER,
     ) -> None:
         self.ifnet_provider = ifnet_provider
         self.ifnet_admin_provider = ifnet_admin_provider
-        self.npcap_library = npcap_library
+        self.dplane_backend = dplane_backend or DPlane_create_backend(
+            DPlane_ifnet_provider=ifnet_provider,
+            DPlane_admin_provider=ifnet_admin_provider,
+        )
         self.port_factory = port_factory or self._default_port_factory
         self.packet_filter = packet_filter
         self._sessions: dict[str, _FrameDebugSession] = {}
@@ -53,7 +56,7 @@ class DplaneEthernetFrameDebugService:
         for binding in bindings:
             if binding.interface.name in self._sessions:
                 continue
-            port = self.port_factory(binding.device.name)
+            port = self.port_factory(binding.device)
             session = _FrameDebugSession(
                 ctx,
                 binding.interface,
@@ -66,7 +69,7 @@ class DplaneEthernetFrameDebugService:
             started += 1
 
         if not bindings:
-            return "no imported Npcap interfaces"
+            return "no imported DPlane packet interfaces"
         if started == 0:
             return f"{len(self._sessions)} listener(s) already running"
         return f"{len(self._sessions)} listener(s) running"
@@ -93,14 +96,14 @@ class DplaneEthernetFrameDebugService:
                 provider=self.ifnet_provider,
                 admin_provider=self.ifnet_admin_provider,
             ).list_interfaces()
-            devices = (self.npcap_library or NpcapLibrary()).list_devices()
-        except (InterfaceDiscoveryError, NpcapError) as exc:
+            devices = self.dplane_backend.DPlane_list_packet_devices()
+        except (InterfaceDiscoveryError, RuntimeError) as exc:
             raise RuntimeError(str(exc)) from exc
 
         output: list[FrameDebugPortBinding] = []
         host_mac_by_name = {interface.name: interface.mac_address for interface in interfaces}
         for interface in imported_interfaces(ctx.state, interfaces):
-            device = find_npcap_device_for_interface(interface, devices)
+            device = self.dplane_backend.DPlane_find_packet_device(interface, devices)
             if device is not None:
                 output.append(
                     FrameDebugPortBinding(
@@ -111,8 +114,8 @@ class DplaneEthernetFrameDebugService:
                 )
         return tuple(output)
 
-    def _default_port_factory(self, device_name: str):
-        return NpcapPacketPort(device_name, library=self.npcap_library)
+    def _default_port_factory(self, device: DPlane_PacketDevice):
+        return self.dplane_backend.DPlane_open_packet_port(device)
 
 
 class _FrameDebugSession:

@@ -44,6 +44,7 @@ from src.IFNET.Ethernet.dhcp import EthernetDhcpClientProvider
 from src.IFNET.Ethernet.static import EthernetStaticIpv4Provider
 from src.IFNET.Loopback import is_loopback_interface
 from src.IFNET.Loopback.static import LoopbackStaticIpv4Provider
+from src.DPlane import DPlane_Result
 from src.DPlane.Windows.npcap import NpcapDevice
 from src.IFNET import (
     InterfaceAddress,
@@ -51,6 +52,7 @@ from src.IFNET import (
     NetworkInterface,
     register_ifnet_commands,
 )
+from src.DPlane import register_dplane_commands
 from src.IFNET.discovery import (
     assign_ifnet_indices,
     _interface_index,
@@ -659,6 +661,89 @@ class FakeNpcapLibrary:
         return self.devices
 
 
+class FakeDPlaneBackend:
+    def __init__(self, devices: tuple[NpcapDevice, ...]):
+        self.devices = devices
+
+    @property
+    def DPlane_platform(self):
+        from src.DPlane import DPlane_PlatformInfo
+
+        return DPlane_PlatformInfo(kind="windows", system="Windows")
+
+    def DPlane_list_host_interfaces(self):
+        return ()
+
+    def DPlane_list_packet_devices(self):
+        return self.devices
+
+    def DPlane_find_packet_device(self, DPlane_interface, DPlane_devices=None):
+        from src.DPlane.Windows.npcap import find_npcap_device_for_interface
+
+        return find_npcap_device_for_interface(
+            DPlane_interface,
+            tuple(DPlane_devices if DPlane_devices is not None else self.devices),
+        )
+
+    def DPlane_open_packet_port(self, DPlane_device):
+        class FakeDPlanePort:
+            def open(self) -> None:
+                return None
+
+            def close(self) -> None:
+                return None
+
+            def recv_frame(self):
+                return None
+
+            def send_frame(self, frame) -> None:
+                return None
+
+            def set_filter(self, expression: str) -> None:
+                return None
+
+            def __enter__(self):
+                self.open()
+                return self
+
+            def __exit__(self, exc_type, exc, traceback) -> None:
+                self.close()
+
+        return FakeDPlanePort()
+
+    def DPlane_set_interface_enabled(self, DPlane_interface, DPlane_enabled):
+        from src.DPlane import DPlane_Result
+
+        return DPlane_Result(ok=True)
+
+    def DPlane_install_forwarding_entry(self, DPlane_entry):
+        from src.DPlane import DPlane_Result
+
+        return DPlane_Result(ok=True)
+
+    def DPlane_delete_forwarding_entry(self, DPlane_entry):
+        from src.DPlane import DPlane_Result
+
+        return DPlane_Result(ok=True)
+
+
+def register_host_interface_commands_for_test(
+    registry: CommandRegistry,
+    provider=None,
+    admin_provider=None,
+    modes=("hidden", "interface", "host-interface"),
+) -> None:
+    register_dplane_commands(
+        registry,
+        ifnet_provider=provider,
+        ifnet_admin_provider=admin_provider,
+        dplane_backend=FakeDPlaneBackend(
+            (NpcapDevice(name=r"\Device\NPF_eth3", description="eth3"),)
+        ),
+        modes=modes,
+    )
+
+
 class FakePingPacketPort:
     def __init__(self, frames: tuple[bytes | None, ...] = ()):
         self.frames = list(frames)
@@ -827,9 +912,9 @@ class IFNETCommandTests(unittest.TestCase):
         }
 
         with (
-            patch("src.IFNET.discovery.platform.system", return_value="Windows"),
+            patch("src.DPlane.interface_discovery.platform.system", return_value="Windows"),
             patch(
-                "src.IFNET.discovery._windows_interface_index_map",
+                "src.DPlane.interface_discovery._windows_interface_index_map",
                 return_value={
                     "eth4": {
                         "index": 40,
@@ -856,9 +941,9 @@ class IFNETCommandTests(unittest.TestCase):
         }
 
         with (
-            patch("src.IFNET.discovery.platform.system", return_value="Windows"),
+            patch("src.DPlane.interface_discovery.platform.system", return_value="Windows"),
             patch(
-                "src.IFNET.discovery._windows_interface_index_map",
+                "src.DPlane.interface_discovery._windows_interface_index_map",
                 return_value={
                     "eth4": {
                         "index": 70,
@@ -880,7 +965,10 @@ class IFNETCommandTests(unittest.TestCase):
 
     def test_show_interfaces_brief_lists_fake_provider(self):
         registry = CommandRegistry()
-        register_ifnet_commands(registry, provider=FakeInterfaceProvider(fake_interfaces()))
+        register_host_interface_commands_for_test(
+            registry,
+            provider=FakeInterfaceProvider(fake_interfaces()),
+        )
         output = io.StringIO()
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
@@ -908,7 +996,10 @@ class IFNETCommandTests(unittest.TestCase):
 
     def test_show_interfaces_detail_uses_fake_provider(self):
         registry = CommandRegistry()
-        register_ifnet_commands(registry, provider=FakeInterfaceProvider(fake_interfaces()))
+        register_host_interface_commands_for_test(
+            registry,
+            provider=FakeInterfaceProvider(fake_interfaces()),
+        )
         output = io.StringIO()
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
@@ -926,7 +1017,10 @@ class IFNETCommandTests(unittest.TestCase):
 
     def test_show_interfaces_without_brief_shows_all_details(self):
         registry = CommandRegistry()
-        register_ifnet_commands(registry, provider=FakeInterfaceProvider(fake_interfaces()))
+        register_host_interface_commands_for_test(
+            registry,
+            provider=FakeInterfaceProvider(fake_interfaces()),
+        )
         output = io.StringIO()
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
@@ -944,16 +1038,19 @@ class IFNETCommandTests(unittest.TestCase):
 
     def test_show_interfaces_unknown_name(self):
         registry = CommandRegistry()
-        register_ifnet_commands(registry, provider=FakeInterfaceProvider(fake_interfaces()))
+        register_host_interface_commands_for_test(
+            registry,
+            provider=FakeInterfaceProvider(fake_interfaces()),
+        )
         output = io.StringIO()
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
 
         outcome = dispatch_line(ctx, registry, "show host interface missing0")
 
-        self.assertTrue(outcome.executed)
-        self.assertEqual("% Interface not found: missing0", outcome.message)
-        self.assertIn("% Interface not found: missing0", output.getvalue())
+        self.assertFalse(outcome.executed)
+        self.assertEqual("% Invalid input", outcome.message)
+        self.assertIn("% Invalid input", output.getvalue())
 
     def test_show_vvrp_interfaces_lists_only_imported_interfaces(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
@@ -1074,11 +1171,11 @@ class IFNETCommandTests(unittest.TestCase):
     def test_default_registry_has_ifnet_commands(self):
         parser = CommandParser(build_default_registry())
 
-        for mode in ("hidden", "interface", "host-interface"):
+        for mode in ("hidden", "host-interface"):
             self.assertTrue(parser.parse("show host interface", mode=mode).executable, mode)
             self.assertTrue(parser.parse("show host interface brief", mode=mode).executable, mode)
             self.assertTrue(parser.parse("show host interface eth3", mode=mode).executable, mode)
-        for mode in ("user", "privileged", "config"):
+        for mode in ("user", "privileged", "config", "interface"):
             self.assertEqual(ParseStatus.INVALID, parser.parse("show host interface", mode=mode).status, mode)
         for mode in ("user", "privileged", "config", "hidden", "interface", "host-interface"):
             self.assertTrue(parser.parse("show interfaces", mode=mode).executable, mode)
@@ -1110,7 +1207,7 @@ class IFNETCommandTests(unittest.TestCase):
     def test_default_registry_has_dplane_interface_show_in_hidden_mode(self):
         registry = build_default_registry(
             ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
-            dplane_npcap_library=FakeNpcapLibrary(
+            dplane_backend=FakeDPlaneBackend(
                 (
                     NpcapDevice(
                         name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
@@ -1299,8 +1396,10 @@ class IFNETCommandTests(unittest.TestCase):
 
         output.truncate(0)
         output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "_").executed)
         self.assertTrue(dispatch_line(ctx, registry, "show host interface eth2").executed)
         self.assertIn("Hardware address is AA:BB:CC:DD:EE:FF", output.getvalue())
+        self.assertTrue(dispatch_line(ctx, registry, "quit").executed)
 
         output.truncate(0)
         output.seek(0)
@@ -1359,8 +1458,10 @@ class IFNETCommandTests(unittest.TestCase):
 
         output.truncate(0)
         output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "_").executed)
         self.assertTrue(dispatch_line(ctx, registry, "show host interface eth2").executed)
         self.assertIn("MTU 1500 bytes", output.getvalue())
+        self.assertTrue(dispatch_line(ctx, registry, "quit").executed)
 
         output.truncate(0)
         output.seek(0)
@@ -1401,7 +1502,7 @@ class IFNETCommandTests(unittest.TestCase):
     def test_host_interface_import_requires_match_and_commit(self):
         registry = build_default_registry(
             ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
-            dplane_npcap_library=FakeNpcapLibrary(
+            dplane_backend=FakeDPlaneBackend(
                 (
                     NpcapDevice(
                         name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
@@ -1490,7 +1591,7 @@ class IFNETCommandTests(unittest.TestCase):
     def test_host_interface_import_rejects_unmatched_interfaces(self):
         registry = build_default_registry(
             ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
-            dplane_npcap_library=FakeNpcapLibrary(()),
+            dplane_backend=FakeDPlaneBackend(()),
         )
         ctx = CliContext(output=io.StringIO())
         ctx.push_mode("hidden")
@@ -1510,7 +1611,7 @@ class IFNETCommandTests(unittest.TestCase):
         interface_guid = "FD33D129-8AEC-4C32-B9FB-7057F7FF0782"
         registry = build_default_registry(
             ifnet_provider=FakeInterfaceProvider((fake_ethernet_without_ipv4("eth4", index=7),)),
-            dplane_npcap_library=FakeNpcapLibrary(
+            dplane_backend=FakeDPlaneBackend(
                 (
                     NpcapDevice(
                         name=rf"\Device\NPF_{{{interface_guid}}}",
@@ -1540,12 +1641,30 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertIn("1.1.1.0/24", text)
         self.assertIn("eth4", text)
 
+    def test_ip_address_change_with_default_dplane_backend_does_not_raise(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet_without_ipv4("eth0", index=7),)),
+            dplane_backend=FakeDPlaneBackend((NpcapDevice(name=r"\Device\NPF_eth0", description="eth0"),)),
+        )
+        ctx = CliContext(output=io.StringIO())
+        registry.initialize_context(ctx)
+        ctx.push_mode("hidden")
+
+        self.assertTrue(dispatch_line(ctx, registry, "host interface eth0").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "import").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "commit").executed)
+        self.assertTrue(dispatch_line(ctx, registry, "interface eth0").executed)
+        outcome = dispatch_line(ctx, registry, "ip address 1.1.1.1 24")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual("", outcome.message)
+
     def test_host_interface_import_writes_and_loads_running_config(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "saved-configuration"
             registry = build_default_registry(
                 ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
-                dplane_npcap_library=FakeNpcapLibrary(
+                dplane_backend=FakeDPlaneBackend(
                     (
                         NpcapDevice(
                             name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
@@ -1596,7 +1715,7 @@ class IFNETCommandTests(unittest.TestCase):
             restored = CliContext(output=io.StringIO())
             restored_registry = build_default_registry(
                 ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
-                dplane_npcap_library=FakeNpcapLibrary(
+                dplane_backend=FakeDPlaneBackend(
                     (
                         NpcapDevice(
                             name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
@@ -1627,6 +1746,11 @@ class IFNETCommandTests(unittest.TestCase):
             provider=provider,
             admin_provider=admin_provider,
             modes=("user", "privileged", "config", "interface", "hidden"),
+        )
+        register_host_interface_commands_for_test(
+            registry,
+            provider=provider,
+            admin_provider=admin_provider,
         )
         output = io.StringIO()
         ctx = CliContext(output=output)
@@ -1659,6 +1783,11 @@ class IFNETCommandTests(unittest.TestCase):
             admin_provider=admin_provider,
             modes=("user", "privileged", "config", "interface", "hidden"),
         )
+        register_host_interface_commands_for_test(
+            registry,
+            provider=provider,
+            admin_provider=admin_provider,
+        )
         ctx = CliContext(output=io.StringIO())
         stage_import_interface(ctx.state, "VMware Network Adapter VMnet1")
         commit_imports(ctx.state)
@@ -1688,6 +1817,11 @@ class IFNETCommandTests(unittest.TestCase):
             admin_provider=admin_provider,
             modes=("user", "privileged", "config", "interface", "hidden"),
         )
+        register_host_interface_commands_for_test(
+            registry,
+            provider=provider,
+            admin_provider=admin_provider,
+        )
         output = io.StringIO()
         ctx = CliContext(output=output)
         ctx.push_mode("interface", "eth3")
@@ -1703,11 +1837,17 @@ class IFNETCommandTests(unittest.TestCase):
     def test_shutdown_rejects_loopback_interface(self):
         registry = CommandRegistry()
         admin_provider = FakeAdminProvider()
+        provider = FakeInterfaceProvider(fake_interfaces())
         register_ifnet_commands(
             registry,
-            provider=FakeInterfaceProvider(fake_interfaces()),
+            provider=provider,
             admin_provider=admin_provider,
             modes=("user", "privileged", "config", "interface", "hidden"),
+        )
+        register_host_interface_commands_for_test(
+            registry,
+            provider=provider,
+            admin_provider=admin_provider,
         )
         output = io.StringIO()
         ctx = CliContext(output=output)
@@ -1735,6 +1875,11 @@ class IFNETCommandTests(unittest.TestCase):
             admin_provider=admin_provider,
             modes=("user", "privileged", "config", "interface", "hidden"),
         )
+        register_host_interface_commands_for_test(
+            registry,
+            provider=FakeInterfaceProvider(fake_interfaces()),
+            admin_provider=admin_provider,
+        )
         ctx = CliContext(output=io.StringIO())
         ctx.push_mode("interface", "missing0")
 
@@ -1751,11 +1896,17 @@ class IFNETCommandTests(unittest.TestCase):
             ok=False,
             message="% OS interface API failed: access denied",
         )
+        provider = FakeInterfaceProvider(fake_interfaces())
         register_ifnet_commands(
             registry,
-            provider=FakeInterfaceProvider(fake_interfaces()),
+            provider=provider,
             admin_provider=admin_provider,
             modes=("user", "privileged", "config", "interface", "hidden"),
+        )
+        register_host_interface_commands_for_test(
+            registry,
+            provider=provider,
+            admin_provider=admin_provider,
         )
         output = io.StringIO()
         ctx = CliContext(output=output)
@@ -1779,6 +1930,11 @@ class IFNETCommandTests(unittest.TestCase):
             provider=provider,
             admin_provider=admin_provider,
             modes=("user", "privileged", "config", "interface", "hidden"),
+        )
+        register_host_interface_commands_for_test(
+            registry,
+            provider=provider,
+            admin_provider=admin_provider,
         )
         output = io.StringIO()
         ctx = CliContext(output=output)
@@ -1828,13 +1984,13 @@ class IFNETCommandTests(unittest.TestCase):
 
     def test_missing_psutil_returns_cli_error(self):
         registry = CommandRegistry()
-        register_ifnet_commands(registry)
+        register_host_interface_commands_for_test(registry)
         output = io.StringIO()
         ctx = CliContext(output=output)
         ctx.push_mode("hidden")
 
         with patch(
-            "src.IFNET.discovery.importlib.import_module",
+            "src.DPlane.interface_discovery.importlib.import_module",
             side_effect=ImportError("No module named psutil"),
         ):
             outcome = dispatch_line(ctx, registry, "show host interface")
@@ -1846,32 +2002,20 @@ class IFNETCommandTests(unittest.TestCase):
     def test_ethernet_admin_backend_dispatches_to_windows_api(self):
         interface = fake_interfaces()[0]
 
-        with patch("src.IFNET.Ethernet.admin._set_windows_interface_enabled") as api:
+        with patch("src.DPlane.interface_admin.DPlane_set_interface_enabled") as api:
             result = EthernetAdminProvider(system="Windows").shutdown(interface)
 
         self.assertTrue(result.ok)
-        api.assert_called_once_with(interface, False)
+        api.assert_called_once_with(interface, False, "windows")
 
-        with patch("src.IFNET.Ethernet.admin._set_windows_interface_enabled") as api:
+        with patch("src.DPlane.interface_admin.DPlane_set_interface_enabled") as api:
             result = EthernetAdminProvider(system="Windows").no_shutdown(interface)
 
         self.assertTrue(result.ok)
-        api.assert_called_once_with(interface, True)
-
-    def test_windows_admin_wrapper_uses_device_level_backend(self):
-        interface = fake_interfaces()[0]
-
-        with patch(
-            "src.IFNET.Ethernet.windows.set_windows_network_adapter_enabled"
-        ) as api:
-            from src.IFNET.Ethernet.admin import _set_windows_interface_enabled
-
-            _set_windows_interface_enabled(interface, False)
-
-        api.assert_called_once_with(interface, False)
+        api.assert_called_once_with(interface, True, "windows")
 
     def test_windows_identity_requires_ifindex(self):
-        from src.IFNET.Ethernet.windows import _adapter_identity_for_interface
+        from src.DPlane.Windows.interface_windows import _adapter_identity_for_interface
 
         interface = replace(
             fake_interfaces()[0],
@@ -1884,11 +2028,11 @@ class IFNETCommandTests(unittest.TestCase):
     def test_ethernet_admin_backend_dispatches_to_linux_api(self):
         interface = fake_interfaces()[0]
 
-        with patch("src.IFNET.Ethernet.admin._set_linux_interface_enabled") as api:
+        with patch("src.DPlane.interface_admin.DPlane_set_interface_enabled") as api:
             result = EthernetAdminProvider(system="Linux").shutdown(interface)
 
         self.assertTrue(result.ok)
-        api.assert_called_once_with(interface, False)
+        api.assert_called_once_with(interface, False, "linux")
 
     def test_ethernet_admin_backend_reports_unsupported_os(self):
         result = EthernetAdminProvider(system="FreeBSD").shutdown(fake_interfaces()[0])
@@ -1898,8 +2042,11 @@ class IFNETCommandTests(unittest.TestCase):
 
     def test_ethernet_admin_backend_reports_permission_errors(self):
         with patch(
-            "src.IFNET.Ethernet.admin._set_windows_interface_enabled",
-            side_effect=PermissionError("Administrator privileges are required"),
+            "src.DPlane.interface_admin.DPlane_set_interface_enabled",
+            return_value=DPlane_Result(
+                ok=False,
+                message="% permission denied: Administrator privileges are required",
+            ),
         ):
             result = EthernetAdminProvider(system="Windows").shutdown(fake_interfaces()[0])
 
@@ -2308,20 +2455,23 @@ class DhcpClientCommandTests(unittest.TestCase):
         interface = fake_interfaces()[0]
 
         with patch(
-            "src.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp",
-            return_value="% DHCP client enabled; lease renewal pending",
+            "src.DPlane.ip_config.DPlane_set_dhcp",
+            return_value=IP_DhcpClientResult(
+                ok=True,
+                message="% DHCP client enabled; lease renewal pending",
+            ),
         ) as api:
             result = EthernetDhcpClientProvider(system="Windows").IP_enable_dhcp(interface)
 
         self.assertTrue(result.ok)
         self.assertIn("lease renewal pending", result.message)
-        api.assert_called_once_with(interface, True)
+        api.assert_called_once_with(interface, True, "windows")
 
-        with patch("src.IFNET.Ethernet.dhcp._set_windows_ethernet_dhcp") as api:
+        with patch("src.DPlane.ip_config.DPlane_set_dhcp") as api:
             result = EthernetDhcpClientProvider(system="Windows").IP_disable_dhcp(interface)
 
         self.assertTrue(result.ok)
-        api.assert_called_once_with(interface, False)
+        api.assert_called_once_with(interface, False, "windows")
 
     def test_ethernet_dhcp_backend_reports_unsupported_linux(self):
         result = EthernetDhcpClientProvider(system="Linux").IP_enable_dhcp(fake_interfaces()[0])
@@ -2330,7 +2480,7 @@ class DhcpClientCommandTests(unittest.TestCase):
         self.assertIn("unsupported OS API backend for DHCP client: linux", result.message)
 
     def test_windows_dhcp_updates_msft_netipinterface_with_put(self):
-        from src.IFNET.Ethernet.windows import _set_msft_netipinterface_dhcp
+        from src.DPlane.Windows.interface_windows import _set_msft_netipinterface_dhcp
 
         class FakeIpInterface:
             def __init__(self):
@@ -2351,7 +2501,7 @@ class DhcpClientCommandTests(unittest.TestCase):
         self.assertEqual(2, ip_interface.put_calls)
 
     def test_windows_dhcp_invokes_wmi_instance_method_directly(self):
-        from src.IFNET.Ethernet.windows import _call_wmi_instance_method
+        from src.DPlane.Windows.interface_windows import _call_wmi_instance_method
 
         class FakeAdapterConfiguration:
             def __init__(self):
@@ -2369,7 +2519,7 @@ class DhcpClientCommandTests(unittest.TestCase):
         self.assertEqual(["EnableDHCP"], adapter_config.calls)
 
     def test_windows_dhcp_accepts_eager_wmi_method_return_value(self):
-        from src.IFNET.Ethernet.windows import _call_wmi_instance_method
+        from src.DPlane.Windows.interface_windows import _call_wmi_instance_method
 
         class FakeAdapterConfiguration:
             EnableDHCP = 0
@@ -2704,23 +2854,23 @@ class StaticIpv4CommandTests(unittest.TestCase):
         interface = fake_interfaces()[0]
         address = IP_StaticIpv4Address("1.1.1.1", 8)
 
-        with patch("src.IFNET.Ethernet.static._set_windows_ethernet_static_ipv4") as api:
+        with patch("src.DPlane.ip_config.DPlane_set_static_ipv4") as api:
             result = EthernetStaticIpv4Provider(system="Windows").IP_set_static_ipv4(
                 interface,
                 address,
             )
 
         self.assertTrue(result.ok)
-        api.assert_called_once_with(interface, address)
+        api.assert_called_once_with(interface, address, "windows")
 
-        with patch("src.IFNET.Ethernet.static._remove_windows_ethernet_static_ipv4") as api:
+        with patch("src.DPlane.ip_config.DPlane_remove_static_ipv4") as api:
             result = EthernetStaticIpv4Provider(system="Windows").IP_remove_static_ipv4(
                 interface,
                 address,
             )
 
         self.assertTrue(result.ok)
-        api.assert_called_once_with(interface, address)
+        api.assert_called_once_with(interface, address, "windows")
 
     def test_ethernet_static_backend_reports_unsupported_linux(self):
         result = EthernetStaticIpv4Provider(system="Linux").IP_set_static_ipv4(
@@ -2735,26 +2885,26 @@ class StaticIpv4CommandTests(unittest.TestCase):
         interface = fake_interfaces()[1]
         address = IP_StaticIpv4Address("10.10.10.1", 32)
 
-        with patch("src.IFNET.Loopback.static._set_windows_loopback_static_ipv4") as api:
+        with patch("src.DPlane.ip_config.DPlane_set_static_ipv4") as api:
             result = LoopbackStaticIpv4Provider(system="Windows").IP_set_static_ipv4(
                 interface,
                 address,
             )
 
         self.assertTrue(result.ok)
-        api.assert_called_once_with(interface, address)
+        api.assert_called_once_with(interface, address, "windows")
 
-        with patch("src.IFNET.Loopback.static._remove_windows_loopback_static_ipv4") as api:
+        with patch("src.DPlane.ip_config.DPlane_remove_static_ipv4") as api:
             result = LoopbackStaticIpv4Provider(system="Windows").IP_remove_static_ipv4(
                 interface,
                 address,
             )
 
         self.assertTrue(result.ok)
-        api.assert_called_once_with(interface, address)
+        api.assert_called_once_with(interface, address, "windows")
 
     def test_windows_static_ipv4_class_method_helper_passes_inputs(self):
-        from src.IFNET.Ethernet.windows import _call_wmi_class_method
+        from src.DPlane.Windows.interface_windows import _call_wmi_class_method
 
         class FakeInParameters:
             def SpawnInstance_(self):
@@ -2791,7 +2941,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertEqual(8, service.call[2].PrefixLength)
 
     def test_windows_static_ipv4_builds_unicast_iphelper_row(self):
-        from src.IFNET.Ethernet.windows import AF_INET, _unicast_ipv4_row
+        from src.DPlane.Windows.interface_windows import AF_INET, _unicast_ipv4_row
 
         row = _unicast_ipv4_row(fake_ethernet("eth3"), IP_StaticIpv4Address("1.1.1.1", 24))
 
@@ -2801,7 +2951,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertEqual(24, row.OnLinkPrefixLength)
 
     def test_windows_static_ipv4_uses_iphelper_create(self):
-        from src.IFNET.Ethernet.windows import _create_unicast_ipv4_address
+        from src.DPlane.Windows.interface_windows import _create_unicast_ipv4_address
 
         class FakeIphlpapi:
             def InitializeUnicastIpAddressEntry(self, row):
@@ -2814,14 +2964,14 @@ class StaticIpv4CommandTests(unittest.TestCase):
         iphlpapi = FakeIphlpapi()
         interface = fake_ethernet("eth3")
 
-        with patch("src.IFNET.Ethernet.windows._iphlpapi", return_value=iphlpapi):
+        with patch("src.DPlane.Windows.interface_windows._iphlpapi", return_value=iphlpapi):
             _create_unicast_ipv4_address(interface, IP_StaticIpv4Address("1.1.1.1", 24))
 
         self.assertEqual([1, 1, 1, 1], list(iphlpapi.row.Address.Ipv4.sin_addr.S_un_b))
         self.assertEqual(24, iphlpapi.row.OnLinkPrefixLength)
 
     def test_windows_adapter_configuration_queries_use_interface_index(self):
-        from src.IFNET.Ethernet.windows import _wmi_adapter_configuration_queries
+        from src.DPlane.Windows.interface_windows import _wmi_adapter_configuration_queries
 
         interface = fake_ethernet("eth3")
 
@@ -2830,7 +2980,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertIn("WHERE InterfaceIndex = 2", queries[0])
 
     def test_windows_secondary_static_ipv4_uses_iphelper_create(self):
-        from src.IFNET.Ethernet.windows import set_windows_static_ipv4
+        from src.DPlane.Windows.interface_windows import set_windows_static_ipv4
 
         class FakeIphlpapi:
             def InitializeUnicastIpAddressEntry(self, row):
@@ -2846,16 +2996,16 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
         with (
             patch(
-                "src.IFNET.Ethernet.windows._wmi_ipv4_interface_for_interface",
+                "src.DPlane.Windows.interface_windows._wmi_ipv4_interface_for_interface",
                 return_value=(object(), object()),
             ),
-            patch("src.IFNET.Ethernet.windows._set_msft_netipinterface_dhcp"),
+            patch("src.DPlane.Windows.interface_windows._set_msft_netipinterface_dhcp"),
             patch(
-                "src.IFNET.Ethernet.windows._wmi_manual_ipv4_addresses",
+                "src.DPlane.Windows.interface_windows._wmi_manual_ipv4_addresses",
                 return_value=(),
             ),
-            patch("src.IFNET.Ethernet.windows._wmi_service", return_value=object()),
-            patch("src.IFNET.Ethernet.windows._iphlpapi", return_value=iphlpapi),
+            patch("src.DPlane.Windows.interface_windows._wmi_service", return_value=object()),
+            patch("src.DPlane.Windows.interface_windows._iphlpapi", return_value=iphlpapi),
         ):
             set_windows_static_ipv4(interface, address)
 
@@ -2863,7 +3013,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         self.assertEqual(24, iphlpapi.row.OnLinkPrefixLength)
 
     def test_windows_static_ipv4_delete_helper_accepts_eager_return_value(self):
-        from src.IFNET.Ethernet.windows import _delete_wmi_instance
+        from src.DPlane.Windows.interface_windows import _delete_wmi_instance
 
         class FakeAddress:
             Delete_ = 0
@@ -2871,7 +3021,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         _delete_wmi_instance(FakeAddress(), "MSFT_NetIPAddress.Delete_")
 
     def test_windows_static_ipv4_manual_match_helpers(self):
-        from src.IFNET.Ethernet.windows import (
+        from src.DPlane.Windows.interface_windows import (
             _wmi_ipv4_address_is_manual,
             _wmi_ipv4_address_matches,
         )
@@ -3094,7 +3244,7 @@ class ConfigurationTests(unittest.TestCase):
             registry = build_default_registry(
                 ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
                 ip_static_ipv4_provider=static_provider,
-                dplane_npcap_library=FakeNpcapLibrary(
+                dplane_backend=FakeDPlaneBackend(
                     (
                         NpcapDevice(
                             name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
@@ -3144,7 +3294,7 @@ class ConfigurationTests(unittest.TestCase):
             )
             registry = build_default_registry(
                 ifnet_provider=FakeInterfaceProvider(fake_interfaces()),
-                dplane_npcap_library=FakeNpcapLibrary(
+                dplane_backend=FakeDPlaneBackend(
                     (
                         NpcapDevice(
                             name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
@@ -3365,7 +3515,7 @@ class PingTests(unittest.TestCase):
         pinger = ICMP_VvrpPacketPinger(
             ctx,
             ICMP_ifnet_provider=provider,
-            ICMP_npcap_library=FakeNpcapLibrary((NpcapDevice(name=r"\Device\NPF_eth3", description="eth3"),)),
+            ICMP_dplane_backend=FakeDPlaneBackend((NpcapDevice(name=r"\Device\NPF_eth3", description="eth3"),)),
             ICMP_port_factory=lambda device_name: port,
             ICMP_monotonic=clock.monotonic,
             ICMP_sleep=clock.sleep,
@@ -3411,7 +3561,7 @@ class PingTests(unittest.TestCase):
         self.assertIs(ctx.output, kwargs["ICMP_output"])
         self.assertIs(ctx, kwargs["ICMP_ctx"])
         self.assertIn("ICMP_ifnet_provider", kwargs)
-        self.assertIn("ICMP_npcap_library", kwargs)
+        self.assertIn("ICMP_dplane_backend", kwargs)
         self.assertIn("pong", ctx.output.getvalue())
 
 
