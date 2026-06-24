@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from ipaddress import IPv4Network
 
-from src.DPlane import DPlane_PacketDevice
-
 
 @dataclass(frozen=True)
 class FIBEntry:
@@ -14,7 +12,6 @@ class FIBEntry:
     source_ip: str
     source_mac: str
     next_hop_ip: str
-    device: DPlane_PacketDevice
     mtu: int | None = None
     flags: str = "D"
 

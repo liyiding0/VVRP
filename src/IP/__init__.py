@@ -1,7 +1,8 @@
 """IP services and command registrations for VVRP."""
 
 from .commands import IP_register_commands
-from .dhcp import IP_DhcpClientProvider, IP_DhcpClientResult, IP_OsDhcpClientProvider
+from .dhcp import IP_DhcpClientProvider, IP_DhcpClientResult
+from .ipv4 import IP_build_ipv4_packet, IP_parse_ipv4_packet
 from .ICMP.ping import (
     ICMP_SocketPinger,
     ICMP_PingOptions,
@@ -18,7 +19,6 @@ from .ICMP.ping import (
     g_ICMP_PING_ARGUMENT_PATTERN,
 )
 from .static import (
-    IP_OsStaticIpv4Provider,
     IP_StaticIpv4Address,
     IP_StaticIpv4Provider,
     IP_StaticIpv4Result,
@@ -37,13 +37,12 @@ __all__ = [
     "IP_DhcpClientResult",
     "g_ICMP_PING_ARGUMENT_PATTERN",
     "ICMP_SocketPinger",
-    "IP_OsDhcpClientProvider",
-    "IP_OsStaticIpv4Provider",
     "ICMP_PingOptions",
     "ICMP_PingReply",
     "ICMP_PingResult",
     "ICMP_VvrpPacketPinger",
     "ICMP_build_ipv4_packet",
+    "IP_build_ipv4_packet",
     "IP_StaticIpv4Address",
     "IP_StaticIpv4Provider",
     "IP_StaticIpv4Result",
@@ -55,6 +54,7 @@ __all__ = [
     "IP_has_secondary_static_ipv4",
     "ICMP_parse_ping_arguments",
     "IP_parse_ipv4_mask",
+    "IP_parse_ipv4_packet",
     "IP_parse_static_ipv4_address",
     "IP_primary_static_ipv4_from_interface",
     "IP_register_commands",

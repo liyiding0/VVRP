@@ -13,6 +13,12 @@
 
 ```powershell
 python -m pip install -e .
+python -m src.VVRP
+```
+
+Legacy compatibility:
+
+```powershell
 python -m src.CCmd
 ```
 

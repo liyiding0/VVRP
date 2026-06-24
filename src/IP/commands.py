@@ -15,7 +15,6 @@ from src.CCmd.running_config import (
     set_host_interface_config_command,
     set_interface_config_command,
 )
-from src.DPlane import DPlane_Backend
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.imports import imported_interfaces
@@ -23,10 +22,9 @@ from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import InterfaceAddress, NetworkInterface
 from src.IFNET.state import is_admin_down, set_interface_addresses
 
-from .dhcp import IP_DhcpClientProvider, IP_OsDhcpClientProvider
+from .dhcp import IP_DhcpClientProvider
 from .ICMP.ping import g_ICMP_PING_ARGUMENT_PATTERN, ICMP_run_ping
 from .static import (
-    IP_OsStaticIpv4Provider,
     IP_StaticIpv4Address,
     IP_StaticIpv4Provider,
     IP_StaticIpv4ValidationError,
@@ -51,13 +49,13 @@ def IP_register_commands(
     modes: Sequence[str] = g_IP_DEFAULT_COMMAND_MODES,
     ifnet_provider: InterfaceProvider | None = None,
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
-    dplane_backend: DPlane_Backend | None = None,
     dhcp_provider: IP_DhcpClientProvider | None = None,
     static_ipv4_provider: IP_StaticIpv4Provider | None = None,
     after_vvrp_ipv4_change: Callable | None = None,
+    socket_forwarder_provider: Callable | None = None,
 ) -> None:
-    active_dhcp_provider = dhcp_provider or IP_OsDhcpClientProvider()
-    active_static_ipv4_provider = static_ipv4_provider or IP_OsStaticIpv4Provider()
+    active_dhcp_provider = dhcp_provider or _IP_NoopDhcpClientProvider()
+    active_static_ipv4_provider = static_ipv4_provider or _IP_NoopStaticIpv4Provider()
 
     @registry.command(
         f"ping <arguments...:{g_ICMP_PING_ARGUMENT_PATTERN}>",
@@ -71,7 +69,11 @@ def IP_register_commands(
             ICMP_ctx=ctx,
             ICMP_ifnet_provider=ifnet_provider,
             ICMP_ifnet_admin_provider=ifnet_admin_provider,
-            ICMP_dplane_backend=dplane_backend,
+            ICMP_socket_forwarder=(
+                socket_forwarder_provider(ctx)
+                if socket_forwarder_provider is not None
+                else None
+            ),
         )
         return CommandResult(ok=result.ICMP_ok, message=result.ICMP_message)
 
@@ -1259,6 +1261,34 @@ def _IP_display_mtu(mtu: int | None) -> str:
     if mtu is None:
         return "-"
     return f"{mtu} bytes"
+
+
+class _IP_NoopDhcpClientProvider:
+    def IP_enable_dhcp(self, interface: NetworkInterface):
+        from .dhcp import IP_DhcpClientResult
+
+        return IP_DhcpClientResult(ok=False, message="% DHCP provider is not available")
+
+    def IP_disable_dhcp(self, interface: NetworkInterface):
+        from .dhcp import IP_DhcpClientResult
+
+        return IP_DhcpClientResult(ok=False, message="% DHCP provider is not available")
+
+
+class _IP_NoopStaticIpv4Provider:
+    def IP_set_static_ipv4(self, interface: NetworkInterface, address: IP_StaticIpv4Address):
+        from .static import IP_StaticIpv4Result
+
+        return IP_StaticIpv4Result(ok=False, message="% static IPv4 provider is not available")
+
+    def IP_remove_static_ipv4(
+        self,
+        interface: NetworkInterface,
+        address: IP_StaticIpv4Address | None = None,
+    ):
+        from .static import IP_StaticIpv4Result
+
+        return IP_StaticIpv4Result(ok=False, message="% static IPv4 provider is not available")
 
 
 

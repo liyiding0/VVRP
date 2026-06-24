@@ -61,27 +61,6 @@ class IP_StaticIpv4ValidationError(ValueError):
     pass
 
 
-class IP_OsStaticIpv4Provider:
-    def __init__(self, dplane_backend=None) -> None:
-        from src.DPlane.ip_config import DPlane_StaticIpv4Provider
-
-        self._provider = DPlane_StaticIpv4Provider(dplane_backend)
-
-    def IP_set_static_ipv4(
-        self,
-        interface: NetworkInterface,
-        address: IP_StaticIpv4Address,
-    ) -> IP_StaticIpv4Result:
-        return self._provider.IP_set_static_ipv4(interface, address)
-
-    def IP_remove_static_ipv4(
-        self,
-        interface: NetworkInterface,
-        address: IP_StaticIpv4Address | None = None,
-    ) -> IP_StaticIpv4Result:
-        return self._provider.IP_remove_static_ipv4(interface, address)
-
-
 def IP_parse_static_ipv4_address(
     address_text: str,
     mask_text: str,

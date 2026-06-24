@@ -20,16 +20,5 @@ class IP_DhcpClientProvider(Protocol):
         """Disable DHCP client address allocation on an interface."""
 
 
-class IP_OsDhcpClientProvider:
-    def __init__(self, dplane_backend=None) -> None:
-        from src.DPlane.ip_config import DPlane_DhcpClientProvider
-
-        self._provider = DPlane_DhcpClientProvider(dplane_backend)
-
-    def IP_enable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
-        return self._provider.IP_enable_dhcp(interface)
-
-    def IP_disable_dhcp(self, interface: NetworkInterface) -> IP_DhcpClientResult:
-        return self._provider.IP_disable_dhcp(interface)
 
 

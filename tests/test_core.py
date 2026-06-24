@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import importlib.util
+import os
 import subprocess
 import struct
 import sys
@@ -33,6 +34,8 @@ from src.CCmd.interactive import (
 )
 from src.CCmd.models import TokenStatus
 from src.CCmd.running_config import (
+    default_saved_configuration_path,
+    default_runtime_directory,
     load_saved_configuration,
     render_running_configuration,
     set_interface_config_command,
@@ -173,6 +176,8 @@ class ParserTests(unittest.TestCase):
                 ("fib", "Show IPv4 FIB entries"),
                 ("interfaces", "Show VVRP interfaces"),
                 ("ip", "Show IP information"),
+                ("running-configuration", "Show current running configuration"),
+                ("saved-configuration", "Show saved configuration"),
                 ("version", "Show software version"),
                 ("<cr>", "Show command group"),
             ],
@@ -216,7 +221,19 @@ class ParserTests(unittest.TestCase):
 
         self.assertEqual(ParseStatus.VALID_UNIQUE, result.status)
         self.assertEqual("show ?", result.complete_command)
-        self.assertEqual(("arp", "fib", "interfaces", "ip", "version", "<cr>"), result.candidates)
+        self.assertEqual(
+            (
+                "arp",
+                "fib",
+                "interfaces",
+                "ip",
+                "running-configuration",
+                "saved-configuration",
+                "version",
+                "<cr>",
+            ),
+            result.candidates,
+        )
 
     def test_question_mark_suffix_keeps_prefix_token_style(self):
         parser = CommandParser(build_default_registry())
@@ -332,10 +349,10 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(ParseStatus.VALID_UNIQUE, exact.status)
         self.assertTrue(exact.executable)
 
-    def test_ambiguous_token_does_not_complete_before_space(self):
+    def test_ambiguous_top_level_token_does_not_complete_before_space(self):
         parser = CommandParser(build_default_registry())
 
-        self.assertEqual("show ", parser.complete_before_space("s", mode="privileged"))
+        self.assertIsNone(parser.complete_before_space("s", mode="privileged"))
 
     def test_help_candidates_are_filtered_by_mode(self):
         parser = CommandParser(build_default_registry())
@@ -428,8 +445,10 @@ class DispatchTests(unittest.TestCase):
         parser = CommandParser(build_default_registry())
         help_text = format_help(parser.help_candidates("show ", mode="user"))
 
-        self.assertIn("interfaces  Show VVRP interfaces", help_text)
-        self.assertIn("version     Show software version", help_text)
+        self.assertIn("interfaces             Show VVRP interfaces", help_text)
+        self.assertIn("running-configuration  Show current running configuration", help_text)
+        self.assertIn("saved-configuration    Show saved configuration", help_text)
+        self.assertIn("version                Show software version", help_text)
 
 
 class InteractiveTests(unittest.TestCase):
@@ -1231,7 +1250,9 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertTrue(parser.parse("save", mode="host-interface").executable)
         self.assertTrue(parser.parse("save", mode="interface").executable)
         self.assertTrue(parser.parse("save", mode="config").executable)
-        for mode in ("user", "privileged", "hidden"):
+        self.assertTrue(parser.parse("save", mode="privileged").executable)
+        self.assertTrue(parser.parse("save", mode="hidden").executable)
+        for mode in ("user",):
             self.assertEqual(ParseStatus.INVALID, parser.parse("save", mode=mode).status, mode)
         for mode in ("user", "privileged", "config", "interface"):
             self.assertEqual(
@@ -3043,6 +3064,30 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_default_saved_configuration_path_is_runtime_root_relative(self):
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(Path.cwd() / "src")
+            ctx = CliContext(output=io.StringIO())
+
+            config_path = set_saved_configuration_path(ctx)
+
+            self.assertEqual(default_saved_configuration_path(), config_path)
+            self.assertEqual("saved-configuration", config_path.name)
+            self.assertEqual(default_runtime_directory(), config_path.parent)
+        finally:
+            os.chdir(original_cwd)
+
+    def test_runtime_directory_can_be_configured_by_environment(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"VVRP_RUNTIME_DIR": temp_dir}):
+                ctx = CliContext(output=io.StringIO())
+
+                config_path = set_saved_configuration_path(ctx)
+
+                self.assertEqual(Path(temp_dir) / "saved-configuration", config_path)
+                self.assertEqual(Path(temp_dir), default_runtime_directory())
+
     def test_hostname_command_updates_running_config_and_save_writes_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "saved-configuration"
@@ -3088,6 +3133,24 @@ class ConfigurationTests(unittest.TestCase):
             output.seek(0)
             self.assertTrue(dispatch_line(ctx, registry, "show saved-configuration").executed)
             self.assertEqual("hostname R9\n", output.getvalue())
+
+    def test_show_configuration_commands_are_available_in_user_mode(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "saved-configuration"
+            config_path.write_text("hostname R9\n", encoding="utf-8")
+            registry = build_default_registry()
+            output = io.StringIO()
+            ctx = CliContext(output=output)
+            set_saved_configuration_path(ctx, config_path)
+            registry.initialize_context(ctx)
+
+            self.assertTrue(dispatch_line(ctx, registry, "show saved-configuration").executed)
+            self.assertEqual("hostname R9\n", output.getvalue())
+
+            output.truncate(0)
+            output.seek(0)
+            self.assertTrue(dispatch_line(ctx, registry, "show running-configuration").executed)
+            self.assertEqual("", output.getvalue())
 
     def test_interface_static_ipv4_updates_running_config_and_save_writes_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -3451,7 +3514,7 @@ class PingTests(unittest.TestCase):
         self.assertIn("Reply from 192.0.2.10", text)
         self.assertIn("1 packet(s) transmitted", text)
 
-    def test_vvrp_packet_ping_uses_imported_interface_mac_and_npcap(self):
+    def test_vvrp_packet_ping_waits_for_sock_fwd_without_dplane_access(self):
         ctx = CliContext(output=io.StringIO())
         stage_import_interface(ctx.state, "eth3")
         commit_imports(ctx.state)
@@ -3478,64 +3541,17 @@ class PingTests(unittest.TestCase):
             ),
             (NpcapDevice(name=r"\Device\NPF_eth3", description="eth3"),),
         )
-        clock = FakeClock()
-        target_ip = "192.0.2.1"
-        target_mac = "66:77:88:99:aa:bb"
-        payload = bytes(range(32, 32 + 56))
-
-        arp_reply = ArpPacket(
-            operation=ARP_REPLY,
-            sender_mac=target_mac,
-            sender_ip=target_ip,
-            target_mac="02:00:00:00:00:01",
-            target_ip="192.0.2.10",
-        )
-        arp_reply_frame = build_ethernet_ii_frame(
-            destination="02:00:00:00:00:01",
-            source=target_mac,
-            ethertype=ETHERTYPE_ARP,
-            payload=arp_reply.to_bytes(),
-        )
-        icmp_reply = _build_icmp_echo_reply(0x1234, 1, payload)
-        ipv4_reply = ICMP_build_ipv4_packet(
-            target_ip,
-            "192.0.2.10",
-            1,
-            icmp_reply,
-            ICMP_ttl=64,
-            ICMP_identification=0x4321,
-        )
-        icmp_reply_frame = build_ethernet_ii_frame(
-            destination="02:00:00:00:00:01",
-            source=target_mac,
-            ethertype=ETHERTYPE_IPV4,
-            payload=ipv4_reply,
-        )
-        port = FakePingPacketPort((arp_reply_frame, icmp_reply_frame))
         pinger = ICMP_VvrpPacketPinger(
             ctx,
             ICMP_ifnet_provider=provider,
-            ICMP_dplane_backend=FakeDPlaneBackend((NpcapDevice(name=r"\Device\NPF_eth3", description="eth3"),)),
-            ICMP_port_factory=lambda device_name: port,
-            ICMP_monotonic=clock.monotonic,
-            ICMP_sleep=clock.sleep,
             ICMP_identifier=0x1234,
         )
         output = io.StringIO()
 
         result = ICMP_run_ping("-c 1 -m 0 192.0.2.1", ICMP_output=output, ICMP_pinger=pinger)
 
-        self.assertTrue(result.ICMP_ok)
-        self.assertEqual(["ether proto 0x0806 or ether proto 0x0800"], port.filters)
-        self.assertEqual(2, len(port.sent))
-        arp_request = parse_ethernet_ii_frame(port.sent[0])
-        self.assertEqual(ETHERTYPE_ARP, arp_request.ethertype)
-        self.assertEqual("02:00:00:00:00:01", arp_request.source)
-        icmp_request = parse_ethernet_ii_frame(port.sent[1])
-        self.assertEqual(ETHERTYPE_IPV4, icmp_request.ethertype)
-        self.assertEqual("02:00:00:00:00:01", icmp_request.source)
-        self.assertEqual(target_mac, icmp_request.destination)
-        self.assertIn("Reply from 192.0.2.1", output.getvalue())
+        self.assertFalse(result.ICMP_ok)
+        self.assertIn("FWD", result.ICMP_message)
 
     def test_ping_command_is_available_in_all_modes(self):
         registry = build_default_registry()
@@ -3561,7 +3577,7 @@ class PingTests(unittest.TestCase):
         self.assertIs(ctx.output, kwargs["ICMP_output"])
         self.assertIs(ctx, kwargs["ICMP_ctx"])
         self.assertIn("ICMP_ifnet_provider", kwargs)
-        self.assertIn("ICMP_dplane_backend", kwargs)
+        self.assertNotIn("ICMP_dplane_backend", kwargs)
         self.assertIn("pong", ctx.output.getvalue())
 
 
@@ -3773,8 +3789,8 @@ class ModeTests(unittest.TestCase):
 
         self.assertEqual(ParseStatus.VALID_UNIQUE, user_result.status)
         self.assertEqual("show", user_result.complete_command)
-        self.assertEqual(ParseStatus.VALID_UNIQUE, privileged_result.status)
-        self.assertEqual("show", privileged_result.complete_command)
+        self.assertEqual(ParseStatus.AMBIGUOUS, privileged_result.status)
+        self.assertEqual(("save", "show"), privileged_result.candidates)
         self.assertEqual(ParseStatus.AMBIGUOUS, config_result.status)
         self.assertEqual(("save", "show"), config_result.candidates)
 

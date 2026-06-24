@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from src.ARP import ArpTable, register_arp_commands
-from src.DPlane import DPlane_Backend, DPlane_create_backend, register_dplane_commands
-from src.DPlane.frame_debug import DplaneEthernetFrameDebugService
-from src.DPlane.input import DPlane_PacketInputService
+from src.DPlane import DPlane_Backend, register_dplane_commands
 from src.ETHERNET import register_ethernet_commands
 from src.FIB import FIB_register_commands
 from src.IFNET import register_ifnet_commands
@@ -13,6 +11,7 @@ from src.IP import IP_register_commands
 from src.IP.dhcp import IP_DhcpClientProvider
 from src.IP.static import IP_StaticIpv4Provider
 from src.RM import RM_register_commands
+from src.VVRP import VVRP_Runtime, VVRP_create_runtime
 
 from .models import CommandResult
 from .parser import CommandParser
@@ -39,44 +38,17 @@ def build_default_registry(
     arp_table: ArpTable | None = None,
     dplane_backend: DPlane_Backend | None = None,
     enable_host_interface_config: bool = False,
+    runtime: VVRP_Runtime | None = None,
 ) -> CommandRegistry:
     registry = CommandRegistry()
-    active_dplane_backend = dplane_backend or DPlane_create_backend(
-        DPlane_ifnet_provider=ifnet_provider,
-        DPlane_admin_provider=ifnet_admin_provider,
+    active_runtime = runtime or VVRP_create_runtime(
+        VVRP_ifnet_provider=ifnet_provider,
+        VVRP_ifnet_admin_provider=ifnet_admin_provider,
+        VVRP_dhcp_provider=ip_dhcp_provider,
+        VVRP_static_ipv4_provider=ip_static_ipv4_provider,
+        VVRP_arp_table=arp_table,
+        VVRP_dplane_backend=dplane_backend,
     )
-    ethernet_frame_debug = DplaneEthernetFrameDebugService(
-        ifnet_provider=ifnet_provider,
-        ifnet_admin_provider=ifnet_admin_provider,
-        dplane_backend=active_dplane_backend,
-    )
-    dplane_packet_input = DPlane_PacketInputService(
-        DPlane_ifnet_provider=ifnet_provider,
-        DPlane_ifnet_admin_provider=ifnet_admin_provider,
-        DPlane_backend=active_dplane_backend,
-    )
-
-    def refresh_control_plane_and_dplane(ctx):
-        from src.RM.commands import RM_refresh_connected_routes_from_interfaces
-
-        RM_refresh_connected_routes_from_interfaces(
-            ctx,
-            lambda current_ctx: _list_vvrp_interfaces_for_rm(
-                current_ctx,
-                ifnet_provider,
-                ifnet_admin_provider,
-            ),
-            lambda current_ctx: active_dplane_backend.DPlane_list_packet_devices(),
-            lambda current_ctx, request: _resolve_fib_packet_device(
-                current_ctx,
-                request,
-                ifnet_provider,
-                ifnet_admin_provider,
-                active_dplane_backend,
-            ),
-            active_dplane_backend,
-        )
-        return dplane_packet_input.DPlane_refresh(ctx)
 
     @registry.command("show", help_text="Show command group", modes=SHOW_MODES)
     def show(ctx, args):
@@ -96,7 +68,7 @@ def build_default_registry(
     @registry.command(
         "show running-configuration",
         help_text="Show current running configuration",
-        modes=("privileged", "config", "interface", "host-interface", "hidden"),
+        modes=("user", "privileged", "config", "interface", "host-interface", "hidden"),
     )
     def show_running_configuration(ctx, args):
         return CommandResult(message=render_running_configuration(ctx).rstrip())
@@ -104,67 +76,54 @@ def build_default_registry(
     @registry.command(
         "show saved-configuration",
         help_text="Show saved configuration",
-        modes=("privileged", "config", "interface", "host-interface", "hidden"),
+        modes=("user", "privileged", "config", "interface", "host-interface", "hidden"),
     )
     def show_saved_configuration(ctx, args):
         return CommandResult(message=read_saved_configuration(ctx).rstrip())
 
     register_ifnet_commands(
         registry,
-        provider=ifnet_provider,
-        admin_provider=ifnet_admin_provider,
+        provider=active_runtime.VVRP_ifnet_provider,
+        admin_provider=active_runtime.VVRP_ifnet_admin_provider,
         modes=("hidden", "interface", "host-interface"),
     )
     RM_register_commands(
         registry,
-        RM_interfaces_provider=lambda ctx: _list_vvrp_interfaces_for_rm(
-            ctx,
-            ifnet_provider,
-            ifnet_admin_provider,
-        ),
-        RM_fib_devices_provider=lambda ctx: active_dplane_backend.DPlane_list_packet_devices(),
-        RM_fib_device_resolver=lambda ctx, request: _resolve_fib_packet_device(
-            ctx,
-            request,
-            ifnet_provider,
-            ifnet_admin_provider,
-            active_dplane_backend,
-        ),
-        RM_fib_backend=active_dplane_backend,
+        RM_interfaces_provider=lambda ctx: active_runtime.VVRP_list_imported_interfaces(ctx),
         RM_modes=("hidden",),
     )
     FIB_register_commands(registry, FIB_modes=SHOW_MODES)
     register_dplane_commands(
         registry,
-        ifnet_provider=ifnet_provider,
-        ifnet_admin_provider=ifnet_admin_provider,
-        dplane_backend=active_dplane_backend,
+        ifnet_provider=active_runtime.VVRP_ifnet_provider,
+        ifnet_admin_provider=active_runtime.VVRP_ifnet_admin_provider,
+        dplane_backend=active_runtime.VVRP_dplane_backend,
         modes=("hidden", "host-interface"),
-        after_import_commit=refresh_control_plane_and_dplane,
+        after_import_commit=active_runtime.VVRP_refresh_control_plane,
     )
     IP_register_commands(
         registry,
         modes=ALL_MODES,
-        ifnet_provider=ifnet_provider,
-        ifnet_admin_provider=ifnet_admin_provider,
-        dplane_backend=active_dplane_backend,
-        dhcp_provider=ip_dhcp_provider,
-        static_ipv4_provider=ip_static_ipv4_provider,
-        after_vvrp_ipv4_change=refresh_control_plane_and_dplane,
+        ifnet_provider=active_runtime.VVRP_ifnet_provider,
+        ifnet_admin_provider=active_runtime.VVRP_ifnet_admin_provider,
+        dhcp_provider=active_runtime.VVRP_dhcp_provider,
+        static_ipv4_provider=active_runtime.VVRP_static_ipv4_provider,
+        after_vvrp_ipv4_change=active_runtime.VVRP_refresh_control_plane,
+        socket_forwarder_provider=active_runtime.VVRP_socket_forwarder,
     )
     register_arp_commands(
         registry,
-        table=arp_table,
+        table=active_runtime.VVRP_arp_table,
         modes=SHOW_MODES,
     )
     register_ethernet_commands(
         registry,
         modes=("privileged", "config", "hidden"),
-        ifnet_provider=ifnet_provider,
-        ifnet_admin_provider=ifnet_admin_provider,
-        frame_debug_start=ethernet_frame_debug.start,
-        frame_debug_stop=ethernet_frame_debug.stop,
-        frame_debug_status=ethernet_frame_debug.status,
+        ifnet_provider=active_runtime.VVRP_ifnet_provider,
+        ifnet_admin_provider=active_runtime.VVRP_ifnet_admin_provider,
+        frame_debug_start=active_runtime.VVRP_ethernet_frame_debug.start,
+        frame_debug_stop=active_runtime.VVRP_ethernet_frame_debug.stop,
+        frame_debug_status=active_runtime.VVRP_ethernet_frame_debug.status,
     )
 
     @registry.command(
@@ -224,7 +183,7 @@ def build_default_registry(
     @registry.command(
         "save",
         help_text="Save current configuration",
-        modes=("config", "interface", "host-interface"),
+        modes=("privileged", "config", "interface", "hidden", "host-interface"),
     )
     def save_command(ctx, args):
         try:
@@ -238,42 +197,4 @@ def build_default_registry(
         return CommandResult(message="Bye.", exit_requested=True)
 
     return registry
-
-
-def _list_vvrp_interfaces_for_rm(
-    ctx,
-    ifnet_provider: InterfaceProvider | None,
-    ifnet_admin_provider: InterfaceAdminProvider | None,
-):
-    from src.IFNET.imports import imported_interfaces
-    from src.IFNET.inventory import get_ifnet_manager
-
-    interfaces = get_ifnet_manager(
-        ctx.state,
-        provider=ifnet_provider,
-        admin_provider=ifnet_admin_provider,
-    ).list_interfaces()
-    return imported_interfaces(ctx.state, interfaces)
-
-
-def _resolve_fib_packet_device(
-    ctx,
-    request,
-    ifnet_provider: InterfaceProvider | None,
-    ifnet_admin_provider: InterfaceAdminProvider | None,
-    dplane_backend: DPlane_Backend,
-):
-    from src.IFNET.imports import imported_interfaces
-    from src.IFNET.inventory import get_ifnet_manager
-
-    interfaces = get_ifnet_manager(
-        ctx.state,
-        provider=ifnet_provider,
-        admin_provider=ifnet_admin_provider,
-    ).list_interfaces()
-    devices = dplane_backend.DPlane_list_packet_devices()
-    for interface in imported_interfaces(ctx.state, interfaces):
-        if interface.ifnet_index == request.out_if_index or interface.name == request.out_if_name:
-            return dplane_backend.DPlane_find_packet_device(interface, devices)
-    return None
 

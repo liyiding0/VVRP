@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
 from typing import Any
 
@@ -15,11 +16,22 @@ RUNNING_CONFIG_PATH_STATE_KEY = SAVED_CONFIGURATION_PATH_STATE_KEY
 RUNNING_CONFIG_LOADING_STATE_KEY = "ccmd.saved_configuration.loading"
 
 
+def default_saved_configuration_path() -> Path:
+    return default_runtime_directory() / DEFAULT_SAVED_CONFIGURATION_FILE
+
+
+def default_runtime_directory() -> Path:
+    configured = os.environ.get("VVRP_RUNTIME_DIR")
+    if configured:
+        return Path(configured)
+    return Path(__file__).parent.parent.parent
+
+
 def set_saved_configuration_path(
     ctx: CliContext,
     path: str | Path | None = None,
 ) -> Path:
-    config_path = Path(path or DEFAULT_SAVED_CONFIGURATION_FILE)
+    config_path = _resolve_configuration_path(path)
     ctx.state[SAVED_CONFIGURATION_PATH_STATE_KEY] = config_path
     _config_store(ctx)
     return config_path
@@ -367,6 +379,15 @@ def _saved_configuration_path(ctx: CliContext) -> Path:
 
 def _running_config_path(ctx: CliContext) -> Path:
     return _saved_configuration_path(ctx)
+
+
+def _resolve_configuration_path(path: str | Path | None) -> Path:
+    if path is None:
+        return default_saved_configuration_path()
+    config_path = Path(path)
+    if config_path.is_absolute():
+        return config_path
+    return default_runtime_directory() / config_path
 
 
 def _enter_config_mode(ctx: CliContext) -> None:

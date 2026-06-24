@@ -161,7 +161,7 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertEqual("192.168.211.0/24", str(RM_routes[0].destination))
         self.assertEqual("eth4", RM_routes[0].interface.name)
 
-    def test_ip_address_event_creates_connected_active_route_for_fib(self):
+    def test_ip_address_event_creates_connected_active_route_without_fib_sync(self):
         RM_state = {}
         RM_IM_bus = VVRP_EventBus()
         RM_IM_table = RM_IM_InterfaceTable()
@@ -170,7 +170,6 @@ class RoutingModuleTests(unittest.TestCase):
             RM_IM_bus,
             RM_state,
             RM_IM_table,
-            RM_fib_devices=(NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),),
         )
 
         RM_IM_bus.VVRP_publish(RM_IM_InterfaceChanged(routing_ethernet("eth4", address="0.0.0.0")))
@@ -189,18 +188,7 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertEqual("192.168.211.0/24", str(RM_active_routes[0].destination))
         self.assertIs(RM_table, RM_route_table(RM_state))
 
-        FIB_entry = FIB_resolve_forwarding(
-            RM_state,
-            (),
-            (NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),),
-            "192.168.211.1",
-        )
-
-        self.assertIsNotNone(FIB_entry)
-        self.assertEqual("eth4", FIB_entry.out_if_name)
-        self.assertEqual("192.168.211.100", FIB_entry.source_ip)
-        self.assertEqual(1, len(FIB_table(RM_state).FIB_entries()))
-        self.assertEqual("00:E0:4C:11:22:33", FIB_entry.source_mac)
+        self.assertEqual(0, len(FIB_table(RM_state).FIB_entries()))
 
     def test_fib_sync_installs_only_active_routes(self):
         FIB_state = {}
@@ -297,9 +285,6 @@ class RoutingModuleTests(unittest.TestCase):
             RM_interfaces_provider=lambda RM_ctx: (
                 routing_ethernet("eth4", "192.168.211.100", 24),
             ),
-            RM_fib_devices_provider=lambda RM_ctx: (
-                NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),
-            ),
         )
         RM_output = __import__("io").StringIO()
         RM_ctx = CliContext(output=RM_output)
@@ -316,17 +301,14 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertIn("Direct", RM_text)
         self.assertIn("192.168.211.100", RM_text)
         self.assertIn("eth4", RM_text)
-        self.assertEqual(1, len(FIB_table(RM_ctx.state).FIB_entries()))
+        self.assertEqual(0, len(FIB_table(RM_ctx.state).FIB_entries()))
 
-    def test_show_ip_routing_table_installs_active_routes_into_fib(self):
+    def test_show_ip_routing_table_does_not_install_active_routes_into_fib(self):
         RM_registry = CommandRegistry()
         RM_register_commands(
             RM_registry,
             RM_interfaces_provider=lambda RM_ctx: (
                 routing_ethernet("eth4", "192.168.211.100", 24),
-            ),
-            RM_fib_devices_provider=lambda RM_ctx: (
-                NpcapDevice(name=r"\Device\NPF_eth4", description="eth4"),
             ),
         )
         from src.FIB import FIB_register_commands
@@ -342,22 +324,16 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertTrue(dispatch_line(RM_ctx, RM_registry, "show fib").executed)
 
         RM_text = RM_output.getvalue()
-        self.assertIn("192.168.211.0/24", RM_text)
-        self.assertIn("eth4", RM_text)
+        self.assertIn("No FIB entries found", RM_text)
+        self.assertNotIn("192.168.211.0/24", RM_text)
 
-    def test_show_ip_routing_table_installs_fib_with_dplane_resolver(self):
+    def test_explicit_fib_sync_installs_routes_after_rm_table_refresh(self):
         RM_registry = CommandRegistry()
-        device = NpcapDevice(
-            name=r"\Device\NPF_{FD33D129-8AEC-4C32-B9FB-7057F7FF0782}",
-            description="Intel(R) Ethernet Connection (14) I219-V",
-        )
         RM_register_commands(
             RM_registry,
             RM_interfaces_provider=lambda RM_ctx: (
                 routing_ethernet("eth4", "1.1.1.1", 24),
             ),
-            RM_fib_devices_provider=lambda RM_ctx: (device,),
-            RM_fib_device_resolver=lambda RM_ctx, request: device if request.out_if_index == 0 else None,
         )
         from src.FIB import FIB_register_commands
 
@@ -367,6 +343,7 @@ class RoutingModuleTests(unittest.TestCase):
         RM_registry.initialize_context(RM_ctx)
 
         self.assertTrue(dispatch_line(RM_ctx, RM_registry, "show ip routing-table").executed)
+        FIB_sync_active_routes(RM_ctx.state, RM_route_table(RM_ctx.state).RM_active_routes())
         RM_output.truncate(0)
         RM_output.seek(0)
         self.assertTrue(dispatch_line(RM_ctx, RM_registry, "show fib").executed)

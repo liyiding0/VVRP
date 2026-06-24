@@ -105,38 +105,24 @@ def RM_register_route_event_handlers(
     RM_state: dict,
     RM_im_table: RM_IM_InterfaceTable,
     RM_table: RM_RouteTable | None = None,
-    RM_fib_devices: tuple = (),
-    RM_fib_backend=None,
+    **RM_ignored_legacy_kwargs,
 ) -> RM_RouteTable:
     RM_active_table = RM_table or RM_route_table(RM_state)
-
-    def RM_sync_fib() -> None:
-        from src.FIB import FIB_sync_active_routes
-
-        FIB_sync_active_routes(
-            RM_state,
-            RM_active_table.RM_active_routes(),
-            RM_fib_devices,
-            RM_fib_backend,
-        )
 
     def RM_handle_interface_changed(RM_event: RM_IM_InterfaceChanged) -> None:
         RM_interface = RM_im_table.RM_IM_get(RM_event.interface.name)
         if RM_interface is None:
             return
         RM_sync_connected_routes_for_interface(RM_state, RM_active_table, RM_interface)
-        RM_sync_fib()
 
     def RM_handle_interface_deleted(RM_event: RM_IM_InterfaceDeleted) -> None:
         RM_active_table.RM_replace_routes_for_interface_source(RM_event.name, "connected", ())
-        RM_sync_fib()
 
     def RM_handle_address_added(RM_event: RM_IM_InterfaceAddressAdded) -> None:
         RM_interface = RM_im_table.RM_IM_get(RM_event.name)
         if RM_interface is None:
             return
         RM_sync_connected_routes_for_interface(RM_state, RM_active_table, RM_interface)
-        RM_sync_fib()
 
     RM_bus.VVRP_subscribe(RM_IM_InterfaceChanged, RM_handle_interface_changed)
     RM_bus.VVRP_subscribe(RM_IM_InterfaceDeleted, RM_handle_interface_deleted)

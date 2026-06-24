@@ -23,10 +23,8 @@ RM_SHOW_MODES = ("hidden",)
 def RM_register_commands(
     RM_registry: CommandRegistry,
     RM_interfaces_provider: Callable | None = None,
-    RM_fib_devices_provider: Callable | None = None,
-    RM_fib_device_resolver: Callable | None = None,
-    RM_fib_backend=None,
     RM_modes: Sequence[str] = RM_SHOW_MODES,
+    **RM_ignored_legacy_kwargs,
 ) -> None:
     @RM_registry.command(
         "show rm interface",
@@ -96,9 +94,6 @@ def RM_register_commands(
         RM_table = RM_get_route_table(
             RM_ctx,
             RM_interfaces_provider,
-            RM_fib_devices_provider,
-            RM_fib_device_resolver,
-            RM_fib_backend,
         )
         if isinstance(RM_table, CommandResult):
             return RM_table
@@ -113,9 +108,6 @@ def RM_register_commands(
         RM_table = RM_get_route_table(
             RM_ctx,
             RM_interfaces_provider,
-            RM_fib_devices_provider,
-            RM_fib_device_resolver,
-            RM_fib_backend,
         )
         if isinstance(RM_table, CommandResult):
             return RM_table
@@ -141,65 +133,21 @@ def RM_get_im_interfaces(
 def RM_get_route_table(
     RM_ctx,
     RM_interfaces_provider: Callable | None,
-    RM_fib_devices_provider: Callable | None = None,
-    RM_fib_device_resolver: Callable | None = None,
-    RM_fib_backend=None,
 ) -> RM_RouteTable | CommandResult:
     RM_existing_table = RM_ctx.state.get("rm.route_table")
     if isinstance(RM_existing_table, RM_RouteTable):
-        RM_sync_fib_from_route_table(
-            RM_ctx,
-            RM_existing_table,
-            RM_fib_devices_provider,
-            RM_fib_device_resolver,
-            RM_fib_backend,
-        )
         return RM_existing_table
     RM_interfaces = RM_get_im_interfaces(RM_ctx, RM_interfaces_provider)
     if isinstance(RM_interfaces, CommandResult):
         return RM_interfaces
     RM_table = RM_route_table_from_routes(RM_connected_routes_from_im(RM_ctx.state, RM_interfaces))
     RM_ctx.state["rm.route_table"] = RM_table
-    RM_sync_fib_from_route_table(
-        RM_ctx,
-        RM_table,
-        RM_fib_devices_provider,
-        RM_fib_device_resolver,
-        RM_fib_backend,
-    )
     return RM_table
-
-
-def RM_sync_fib_from_route_table(
-    RM_ctx,
-    RM_table: RM_RouteTable,
-    RM_fib_devices_provider: Callable | None,
-    RM_fib_device_resolver: Callable | None,
-    RM_fib_backend,
-) -> None:
-    if RM_fib_devices_provider is None:
-        return
-    from src.FIB import FIB_sync_active_routes
-
-    RM_fib_devices = tuple(RM_fib_devices_provider(RM_ctx))
-    RM_device_resolver = None
-    if RM_fib_device_resolver is not None:
-        RM_device_resolver = lambda RM_request: RM_fib_device_resolver(RM_ctx, RM_request)
-    FIB_sync_active_routes(
-        RM_ctx.state,
-        RM_table.RM_active_routes(),
-        RM_fib_devices,
-        RM_fib_backend,
-        RM_device_resolver,
-    )
 
 
 def RM_refresh_connected_routes_from_interfaces(
     RM_ctx,
     RM_interfaces_provider: Callable | None,
-    RM_fib_devices_provider: Callable | None = None,
-    RM_fib_device_resolver: Callable | None = None,
-    RM_fib_backend=None,
 ) -> RM_RouteTable | CommandResult:
     RM_interfaces = RM_get_im_interfaces(RM_ctx, RM_interfaces_provider)
     if isinstance(RM_interfaces, CommandResult):
@@ -212,13 +160,6 @@ def RM_refresh_connected_routes_from_interfaces(
     for RM_interface in RM_interfaces:
         RM_im_table.RM_IM_upsert(RM_interface)
     RM_sync_connected_routes_from_im_table(RM_ctx.state, RM_im_table, RM_table)
-    RM_sync_fib_from_route_table(
-        RM_ctx,
-        RM_table,
-        RM_fib_devices_provider,
-        RM_fib_device_resolver,
-        RM_fib_backend,
-    )
     return RM_table
 
 

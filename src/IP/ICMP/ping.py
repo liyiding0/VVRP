@@ -12,7 +12,6 @@ from typing import Callable, TextIO
 
 from src.ARP import ArpPacketError, ArpProtocol, arp_packet_from_ethernet, get_arp_table
 from src.CCmd.models import CliContext
-from src.DPlane import DPlane_Backend, DPlane_PacketDevice, DPlane_create_backend
 from src.ETHERNET import (
     ETHERTYPE_ARP,
     ETHERTYPE_IPV4,
@@ -26,6 +25,7 @@ from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import InterfaceAddress, NetworkInterface
+from src.SOCK import SOCK_AF_INET, SOCK_SOCK_RAW, SOCK_sendto, SOCK_socket
 from src.IP.ICMP.packet import (
     ICMP_build_echo_request,
     ICMP_checksum,
@@ -229,8 +229,7 @@ class ICMP_VvrpPacketPinger:
         *,
         ICMP_ifnet_provider: InterfaceProvider | None = None,
         ICMP_ifnet_admin_provider: InterfaceAdminProvider | None = None,
-        ICMP_dplane_backend: DPlane_Backend | None = None,
-        ICMP_port_factory: Callable[[DPlane_PacketDevice], object] | None = None,
+        ICMP_socket_forwarder=None,
         ICMP_monotonic: Callable[[], float] = time.monotonic,
         ICMP_sleep: Callable[[float], None] = time.sleep,
         ICMP_identifier: int | None = None,
@@ -238,11 +237,7 @@ class ICMP_VvrpPacketPinger:
         self.ICMP_ctx = ICMP_ctx
         self.ICMP_ifnet_provider = ICMP_ifnet_provider
         self.ICMP_ifnet_admin_provider = ICMP_ifnet_admin_provider
-        self.ICMP_dplane_backend = ICMP_dplane_backend or DPlane_create_backend(
-            DPlane_ifnet_provider=ICMP_ifnet_provider,
-            DPlane_admin_provider=ICMP_ifnet_admin_provider,
-        )
-        self.ICMP_port_factory = ICMP_port_factory or self._ICMP_default_port_factory
+        self.ICMP_socket_forwarder = ICMP_socket_forwarder
         self.ICMP_monotonic = ICMP_monotonic
         self.ICMP_sleep = ICMP_sleep
         self.ICMP_identifier = (
@@ -260,66 +255,26 @@ class ICMP_VvrpPacketPinger:
         except ValueError as ICMP_exc:
             return ICMP_PingResult(ICMP_ok=False, ICMP_message=f"% {ICMP_exc}")
         except (InterfaceDiscoveryError, RuntimeError) as ICMP_exc:
-            return ICMP_PingResult(ICMP_ok=False, ICMP_message=f"% DPlane ping failed: {ICMP_exc}")
+            return ICMP_PingResult(ICMP_ok=False, ICMP_message=f"% VVRP ping failed: {ICMP_exc}")
 
-        if (
-            ICMP_route.mtu is not None
-            and ICMP_options.ICMP_packet_size + g_ICMP_IPV4_HEADER_LENGTH + 8 > ICMP_route.mtu
-        ):
-            return ICMP_PingResult(
-                ICMP_ok=False,
-                ICMP_message=f"% Packet size exceeds interface MTU: {ICMP_route.out_if_name}",
-            )
-
-        ICMP_sent = 0
-        ICMP_received = 0
-        ICMP_rtts: list[int] = []
-        ICMP_arp_protocol = ArpProtocol(get_arp_table(self.ICMP_ctx.state))
-
-        try:
-            with self.ICMP_port_factory(ICMP_route.device) as ICMP_port:
-                ICMP_port.set_filter(g_ICMP_src_PING_FILTER)
-                if ICMP_options.ICMP_brief:
-                    ICMP_output.write("    ")
-                    ICMP_output.flush()
-                for ICMP_sequence in range(1, ICMP_options.ICMP_count + 1):
-                    ICMP_sent += 1
-                    ICMP_reply = self._ICMP_send_one(
-                        ICMP_port,
-                        ICMP_route,
-                        ICMP_arp_protocol,
-                        ICMP_options,
-                        ICMP_resolved_address,
-                        ICMP_sequence,
-                    )
-                    if ICMP_reply.ICMP_ok:
-                        ICMP_received += 1
-                        if ICMP_reply.ICMP_rtt_ms is not None:
-                            ICMP_rtts.append(ICMP_reply.ICMP_rtt_ms)
-                    if ICMP_options.ICMP_brief:
-                        ICMP_output.write(ICMP_format_ping_reply(ICMP_reply, ICMP_brief=True))
-                    else:
-                        ICMP_output.write(ICMP_format_ping_reply(ICMP_reply) + "\n")
-                    ICMP_output.flush()
-                    if ICMP_sequence < ICMP_options.ICMP_count and ICMP_options.ICMP_interval_seconds > 0:
-                        self.ICMP_sleep(ICMP_options.ICMP_interval_seconds)
-                if ICMP_options.ICMP_brief:
-                    ICMP_output.write("\n")
-                    ICMP_output.flush()
-        except (OSError, RuntimeError) as ICMP_exc:
-            return ICMP_PingResult(ICMP_ok=False, ICMP_message=f"% DPlane ping failed: {ICMP_exc}")
-
-        ICMP_output.write(
-            ICMP_format_ping_statistics(
-                ICMP_options.ICMP_target,
-                ICMP_sent,
-                ICMP_received,
-                ICMP_rtts,
-            )
-            + "\n"
+        ICMP_payload = _ICMP_payload(ICMP_options.ICMP_packet_size)
+        ICMP_packet = ICMP_build_echo_packet(self.ICMP_identifier, 1, ICMP_payload)
+        ICMP_socket = SOCK_socket(
+            self.ICMP_ctx.state,
+            SOCK_AF_INET,
+            SOCK_SOCK_RAW,
+            g_ICMP_IPV4_PROTOCOL_ICMP,
+            SOCK_forwarder=self.ICMP_socket_forwarder,
         )
-        ICMP_output.flush()
-        return ICMP_PingResult(ICMP_ok=ICMP_received > 0)
+        ICMP_socket.SOCK_bind((ICMP_route.source_ip, 0))
+        ICMP_result = SOCK_sendto(
+            ICMP_socket,
+            ICMP_packet,
+            (ICMP_resolved_address, 0),
+            SOCK_ttl=ICMP_options.ICMP_ttl,
+            SOCK_identification=self.ICMP_identifier,
+        )
+        return ICMP_PingResult(ICMP_ok=ICMP_result.SOCK_ok, ICMP_message=ICMP_result.SOCK_message)
 
     def _ICMP_resolve_forwarding(self, ICMP_target_ip: str) -> FIBEntry:
         ICMP_interfaces = get_ifnet_manager(
@@ -327,11 +282,10 @@ class ICMP_VvrpPacketPinger:
             provider=self.ICMP_ifnet_provider,
             admin_provider=self.ICMP_ifnet_admin_provider,
         ).list_interfaces()
-        ICMP_devices = self.ICMP_dplane_backend.DPlane_list_packet_devices()
         ICMP_fib_entry = FIB_resolve_forwarding(
             self.ICMP_ctx.state,
             ICMP_interfaces,
-            ICMP_devices,
+            (),
             ICMP_target_ip,
         )
         if ICMP_fib_entry is None:
@@ -519,17 +473,13 @@ class ICMP_VvrpPacketPinger:
             ICMP_port.send_frame(ICMP_reply.to_bytes(pad=True))
         return ICMP_packet
 
-    def _ICMP_default_port_factory(self, ICMP_device: DPlane_PacketDevice):
-        return self.ICMP_dplane_backend.DPlane_open_packet_port(ICMP_device)
-
-
 def ICMP_run_ping(
     ICMP_arguments: str,
     ICMP_output: TextIO | None = None,
     ICMP_ctx: CliContext | None = None,
     ICMP_ifnet_provider: InterfaceProvider | None = None,
     ICMP_ifnet_admin_provider: InterfaceAdminProvider | None = None,
-    ICMP_dplane_backend: DPlane_Backend | None = None,
+    ICMP_socket_forwarder=None,
     ICMP_pinger: ICMP_SocketPinger | ICMP_VvrpPacketPinger | None = None,
 ) -> ICMP_PingResult:
     try:
@@ -557,7 +507,7 @@ def ICMP_run_ping(
             ICMP_ctx,
             ICMP_ifnet_provider=ICMP_ifnet_provider,
             ICMP_ifnet_admin_provider=ICMP_ifnet_admin_provider,
-            ICMP_dplane_backend=ICMP_dplane_backend,
+            ICMP_socket_forwarder=ICMP_socket_forwarder,
         )
     return ICMP_active_pinger.ICMP_ping(
         ICMP_options,
