@@ -8,6 +8,9 @@ from datetime import datetime
 BASE = os.path.dirname(os.path.dirname(__file__))
 CTX = os.path.join(BASE, "context", "sessions")
 COMMITS = os.path.join(BASE, "context", "commits")
+MAX_DIFF_SUMMARY_LINES = 80
+MAX_DIFF_SUMMARY_CHARS = 20000
+MAX_CODEX_OUTPUT_CHARS = 20000
 
 
 def _git(args):
@@ -51,7 +54,14 @@ def get_diff_stat():
         return ""
 
 
-def get_diff_summary(max_lines=80):
+def _truncate_text(value, max_chars):
+    if len(value) <= max_chars:
+        return value
+    omitted = len(value) - max_chars
+    return value[:max_chars] + f"\n... truncated {omitted} characters ..."
+
+
+def get_diff_summary(max_lines=MAX_DIFF_SUMMARY_LINES, max_chars=MAX_DIFF_SUMMARY_CHARS):
     try:
         output = _git(["diff", "--", "."])
     except Exception:
@@ -59,8 +69,8 @@ def get_diff_summary(max_lines=80):
 
     lines = output.splitlines()
     if len(lines) > max_lines:
-        return "\n".join(lines[:max_lines] + [f"... truncated {len(lines) - max_lines} lines ..."])
-    return output
+        output = "\n".join(lines[:max_lines] + [f"... truncated {len(lines) - max_lines} lines ..."])
+    return _truncate_text(output, max_chars)
 
 
 def infer_architecture(changed_files):
@@ -96,7 +106,7 @@ def log_codex_event(
         "changed_files": files,
         "note": note,
         "decisions": decisions or [],
-        "codex_output": output,
+        "codex_output": _truncate_text(output, MAX_CODEX_OUTPUT_CHARS),
         "git_commit": commit,
         "git_branch": get_git_branch(),
         "git_dirty_files": get_changed_files(),

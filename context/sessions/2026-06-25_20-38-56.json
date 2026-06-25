@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-25_20-38-56",
+  "prompt": "Open DPlane packet port before FWD Ethernet send",
+  "changed_files": [
+    "src/VVRP/runtime.py",
+    "tests/test_core.py"
+  ],
+  "note": "Runtime now opens the DPlane/Npcap packet port before handing it to FWD Ethernet output, fixing send_frame failures caused by unopened ports.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "59c0647be72ca26060c6fbce1171b2fc68f936e2",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "rc/VVRP/runtime.py",
+    "tests/test_core.py"
+  ],
+  "diff_stat": "src/VVRP/runtime.py |  4 +++-\n tests/test_core.py  | 50 ++++++++++++++++++++++++++++++++++++++++++++++++++\n 2 files changed, 53 insertions(+), 1 deletion(-)",
+  "diff_summary": "diff --git a/src/VVRP/runtime.py b/src/VVRP/runtime.py\nindex 2929044..28533bd 100644\n--- a/src/VVRP/runtime.py\n+++ b/src/VVRP/runtime.py\n@@ -86,7 +86,9 @@ class VVRP_Runtime:\n         )\n         if VVRP_device is None:\n             raise RuntimeError(f\"FWD Ethernet device not found: {VVRP_interface.name}\")\n-        return self.VVRP_dplane_backend.DPlane_open_packet_port(VVRP_device)\n+        VVRP_port = self.VVRP_dplane_backend.DPlane_open_packet_port(VVRP_device)\n+        VVRP_port.open()\n+        return VVRP_port\n \n \n def VVRP_create_runtime(\ndiff --git a/tests/test_core.py b/tests/test_core.py\nindex 090bc40..6031783 100644\n--- a/tests/test_core.py\n+++ b/tests/test_core.py\n@@ -89,6 +89,7 @@ from src.IP.static import (\n     IP_parse_static_ipv4_address,\n     IP_validate_static_ipv4_address_for_interface,\n )\n+from src.VVRP import VVRP_Runtime\n \n \n def build_registry(calls: list[tuple[str, dict[str, str]]] | None = None) -> CommandRegistry:\n@@ -746,6 +747,55 @@ class FakeDPlaneBackend:\n         return DPlane_Result(ok=True)\n \n \n+class VVRPRuntimeTests(unittest.TestCase):\n+    def test_ethernet_port_is_opened_before_fwd_uses_it(self):\n+        class TrackingPort:\n+            def __init__(self):\n+                self.opened = False\n+\n+            def open(self):\n+                self.opened = True\n+\n+            def close(self):\n+                return None\n+\n+            def recv_frame(self):\n+                return None\n+\n+            def send_frame(self, frame):\n+                if not self.opened:\n+                    raise RuntimeError(\"port is not open\")\n+\n+            def set_filter(self, expression):\n+                return None\n+\n+        class TrackingDPlaneBackend(FakeDPlaneBackend):\n+            def __init__(self):\n+                super().__init__((NpcapDevice(name=r\"\\Device\\NPF_eth0\", description=\"eth0\"),))\n+                self.port = TrackingPort()\n+\n+            def DPlane_open_packet_port(self, DPlane_device):\n+                return self.port\n+\n+        backend = TrackingDPlaneBackend()\n+        runtime = VVRP_Runtime(VVRP_dplane_backend=backend)\n+        interface = NetworkInterface(\n+            name=\"eth0\",\n+            kind=\"ethernet\",\n+            index=1,\n+            is_up=True,\n+            mac_address=\"02:00:00:00:00:01\",\n+            speed_mbps=1000,\n+            ifnet_index=1,\n+            mtu=1500,\n+        )\n+\n+        port = runtime.VVRP_ethernet_port(interface)\n+\n+        self.assertIs(port, backend.port)\n+        self.assertTrue(port.opened)\n+\n+\n... truncated 3 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "VVRP",
+      "tests"
+    ]
+  }
+}

@@ -101,6 +101,14 @@ class ArpTableTests(unittest.TestCase):
         self.assertIsNone(table.lookup("10.0.0.2", "eth2", now=131))
         self.assertIsNotNone(table.lookup("10.0.0.3", "eth2", now=10000))
 
+    def test_ignores_unspecified_ipv4_sender(self):
+        table = ArpTable(default_age_seconds=30)
+
+        entry = table.learn("0.0.0.0", "66:77:88:99:aa:bb", "eth2", now=100)
+
+        self.assertIsNone(entry)
+        self.assertEqual((), table.entries(now=100))
+
 
 class ArpProtocolTests(unittest.TestCase):
     def test_build_request_uses_broadcast_ethernet_frame(self):
@@ -168,6 +176,29 @@ class ArpProtocolTests(unittest.TestCase):
 
         self.assertIsNone(reply)
         self.assertIsNotNone(protocol.table.lookup("10.0.0.2", "eth2"))
+
+    def test_handle_arp_probe_does_not_learn_unspecified_sender(self):
+        protocol = ArpProtocol()
+        request = ArpPacket(
+            operation=ARP_REQUEST,
+            sender_mac="66:77:88:99:aa:bb",
+            sender_ip="0.0.0.0",
+            target_mac=ZERO_MAC,
+            target_ip="10.0.0.99",
+        )
+
+        reply = protocol.handle_frame(
+            fake_interface(),
+            EthernetFrame(
+                destination=BROADCAST_MAC,
+                source="66:77:88:99:aa:bb",
+                ethertype=ETHERTYPE_ARP,
+                payload=request.to_bytes(),
+            ),
+        )
+
+        self.assertIsNone(reply)
+        self.assertEqual((), protocol.table.entries())
 
 
 class ArpCommandTests(unittest.TestCase):

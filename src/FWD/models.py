@@ -25,6 +25,15 @@ class FWD_OutputHandler(Protocol):
         """Send one network-layer packet through a concrete interface type."""
 
 
+class FWD_InputHandler(Protocol):
+    def FWD_handle_frame(
+        self,
+        FWD_interface: NetworkInterface,
+        FWD_frame: bytes,
+    ) -> None:
+        """Receive one raw link-layer frame from a concrete interface type."""
+
+
 class FWD_RawFramePort(Protocol):
     def send_frame(self, FWD_frame: bytes) -> None:
         """Send one raw link-layer frame."""

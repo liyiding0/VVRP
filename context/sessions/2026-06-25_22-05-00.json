@@ -1,0 +1,29 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-25_22-05-00",
+  "prompt": "Split Codex timeline into paged HTML archive",
+  "changed_files": [
+    "tools\\timeline.py",
+    "context\\replays\\timeline.html",
+    "context\\replays\\timeline.zip"
+  ],
+  "note": "Changed timeline generation from one huge self-contained HTML file to paged HTML under context/replays/timeline plus a compressed timeline.zip archive. The legacy timeline.html is now a small redirect page so GitHub push is not blocked by oversized generated output.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "ff5fe2ccc52ece4d8c1b27e10beaccb7f2e50018",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.html",
+    "tools/timeline.py",
+    "context/replays/timeline.zip",
+    "context/replays/timeline/"
+  ],
+  "diff_stat": "context/replays/timeline.html | 1145 +----------------------------------------\n tools/timeline.py             |  139 ++++-\n 2 files changed, 132 insertions(+), 1152 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.html b/context/replays/timeline.html\nindex 5477ca5..f5a153a 100644\n--- a/context/replays/timeline.html\n+++ b/context/replays/timeline.html\n@@ -2,1151 +2,10 @@\n <html lang=\"en\">\n <head>\n   <meta charset=\"utf-8\">\n-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n+  <meta http-equiv=\"refresh\" content=\"0; url=timeline/index.html\">\n   <title>Codex Development Timeline</title>\n-  <style>\n-    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }\n-    header { padding: 28px 36px; background: #111827; color: white; }\n-    h1 { margin: 0; font-size: 28px; }\n-    main { max-width: 980px; margin: 0 auto; padding: 28px; }\n-    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }\n-    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }\n-    h2 { margin: 10px 0 8px; font-size: 20px; }\n-    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }\n-    ul { margin: 0; padding-left: 22px; }\n-    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }\n-    summary { cursor: pointer; color: #1f4f9a; }\n-  </style>\n </head>\n <body>\n-  <header>\n-    <h1>Codex Development Timeline</h1>\n-    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>\n-  </header>\n-  <main>\n-    \n-            <article class=\"card\">\n-              <div class=\"meta\">\n-                <span>2026-06-22_20-32-43</span>\n-                <span></span>\n-                <span>86cfa0a</span>\n-              </div>\n-              <h2>Add Codex development replay tool</h2>\n-              <p>renamed replay script so development sessions can be replayed</p>\n-              <h3>Files</h3>\n-              <ul><li>tools/replay.py</li><li>tools/replay.py.txt</li></ul>\n-              <h3>Decisions</h3>\n-              <ul><li>None recorded</li></ul>\n-              <h3>Architecture</h3>\n-              <p>No module tags</p>\n-              <details>\n-                <summary>Diff stat</summary>\n-                <pre></pre>\n-              </details>\n-            </article>\n-            \n-            <article class=\"card\">\n-              <div class=\"meta\">\n-                <span>2026-06-22_20-37-30</span>\n-                <span>codex/restructure-source-layout</span>\n-                <span>86cfa0a</span>\n-              </div>\n-              <h2>Upgrade Codex replay tools to v1.0</h2>\n-              <p>adds diff capture, decision replay, architecture tags, and timeline UI</p>\n-              <h3>Files</h3>\n-              <ul><li>tools/codex_logger.py</li><li>tools/replay.py</li><li>tools/timeline.py</li><li>tools/README.md</li></ul>\n-              <h3>Decisions</h3>\n-              <ul><li>Capture dirty working tree metadata instead of requiring a commit</li><li>Generate static HTML timeline under context/replays for local viewing</li><li>Infer touched architecture modules from changed file paths</li></ul>\n-              <h3>Architecture</h3>\n-              <p>tools</p>\n-              <details>\n-                <summary>Diff stat</summary>\n-                <pre></pre>\n-              </details>\n-            </article>\n-            \n-            <article class=\"card\">\n-              <div class=\"meta\">\n-                <span>2026-06-22_20-43-35</span>\n-                <span>codex/restructure-source-layout</span>\n-                <span>772849f</span>\n-              </div>\n-              <h2>Commit and push VVRP restructure branch to GitHub</h2>\n-              <p>pushed codex/restructure-source-layout to origin</p>\n... truncated 1277 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "context",
+      "tools"
+    ]
+  }
+}

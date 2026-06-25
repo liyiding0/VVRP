@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    nav { margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a, nav strong { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; }
+    nav a { color: #1f4f9a; text-decoration: none; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <strong>3</strong> <a href="page-004.html">4</a> <a href="page-005.html">5</a></nav>
+    
+            <article class="card" id="20">
+              <div class="meta">
+                <span>2026-06-23_17-41-27</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Change RM to FIB handoff to install requests</h2>
+              <p>Keeps FIB independent from RM interface models while preserving packet forwarding behavior.</p>
+              <h3>Files</h3>
+              <ul><li>src/FIB/models.py</li><li>src/FIB/table.py</li><li>src/FIB/__init__.py</li><li>src/IP/ICMP/ping.py</li><li>src/RM/IM/models.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>RM active routes are translated into FIB_InstallRequest descriptors before entering FIB.</li><li>FIBEntry no longer stores RMRoute, RM_IM_Interface, or NetworkInterface objects.</li><li>ICMP builds a local packet-path interface adapter from FIBEntry fields instead of requiring FIB to own an interface object.</li></ul>
+              <h3>Architecture</h3>
+              <p>FIB, IP, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 212 ++++++++++++++++++++++++++-
+ src/CCmd/examples.py          |   4 +
+ src/DPlane/__init__.py        |   9 +-
+ src/DPlane/backend.py         |  38 ++++-
+ src/DPlane/models.py          |  22 +++
+ src/FIB/__init__.py           |  17 ++-
+ src/FIB/models.py             |  27 +++-
+ src/FIB/table.py              | 166 ++++++++++++++++++++--
+ src/IP/ICMP/ping.py           |  55 ++++++--
+ src/IP/commands.py            | 180 +++++++++++++++++++++++
+ src/RM/__init__.py            |  20 ++-
+ src/RM/commands.py            | 142 +++++++++++++++++++
+ src/RM/routes.py              | 100 +++++++++++--
+ tests/test_core.py            | 109 +++++++++++++-
+ tests/test_routing.py         | 322 +++++++++++++++++++++++++++++++++++++++++-
+ 15 files changed, 1361 insertions(+), 62 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="21">
+              <div class="meta">
+                <span>2026-06-23_17-47-10</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Fix interactive CLI history permission failure</h2>
+              <p>Fixes interactive sessions where pressing Enter raised a history PermissionError and commands appeared to produce no output.</p>
+              <h3>Files</h3>
+              <ul><li>src/CCmd/interactive.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>PromptToolkit history now falls back to in-memory history when the default history file cannot be opened.</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 247 +++++++++++++++++++++++++++++++-
+ src/CCmd/examples.py          |   4 +
+ src/CCmd/interactive.py       |  11 +-
+ src/DPlane/__init__.py        |   9 +-
+ src/DPlane/backend.py         |  38 ++++-
+ src/DPlane/models.py          |  22 +++
+ src/FIB/__init__.py           |  17 ++-
+ src/FIB/models.py             |  27 +++-
+ src/FIB/table.py              | 166 ++++++++++++++++++++--
+ src/IP/ICMP/ping.py           |  55 ++++++--
+ src/IP/commands.py            | 180 +++++++++++++++++++++++
+ src/RM/__init__.py            |  20 ++-
+ src/RM/commands.py            | 142 +++++++++++++++++++
+ src/RM/routes.py              | 100 +++++++++++--
+ tests/test_core.py            | 109 +++++++++++++-
+ tests/test_routing.py         | 322 +++++++++++++++++++++++++++++++++++++++++-
+ 16 files changed, 1405 insertions(+), 64 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="22">
+              <div class="meta">
+                <span>2026-06-23_18-09-17</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Fix python -m CCmd empty command output</h2>
+              <p>Fixes show dplane interfaces brief producing no output under python -m CCmd.</p>
+              <h3>Files</h3>
+              <ul><li>src/CCmd/__main__.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>When CCmd is launched from the src directory, bootstrap back to the canonical src.CCmd package so CommandResult identity stays consistent.</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 283 ++++++++++++++++++++++++++++++++++++-
+ src/CCmd/__main__.py          |  14 +-
+ src/CCmd/examples.py          |   4 +
+ src/CCmd/interactive.py       |  11 +-
+ src/DPlane/__init__.py        |   9 +-
+ src/DPlane/backend.py         |  38 ++++-
+ src/DPlane/models.py          |  22 +++
+ src/FIB/__init__.py           |  17 ++-
+ src/FIB/models.py             |  27 +++-
+ src/FIB/table.py              | 166 ++++++++++++++++++++--
+ src/IP/ICMP/ping.py           |  55 ++++++--
+ src/IP/commands.py            | 180 +++++++++++++++++++++++
+ src/RM/__init__.py            |  20 ++-
+ src/RM/commands.py            | 142 +++++++++++++++++++
+ src/RM/routes.py              | 100 +++++++++++--
+ tests/test_core.py            | 128 ++++++++++++++++-
+ tests/test_routing.py         | 322 +++++++++++++++++++++++++++++++++++++++++-
+ 17 files changed, 1472 insertions(+), 66 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="23">
+              <div class="meta">
+                <span>2026-06-23_18-13-51</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Suppress ICMP responder stop read-error noise</h2>
+              <p>Fixes no import commit printing PacketReceivePacket read error while stopping the responder.</p>
+              <h3>Files</h3>
+              <ul><li>src/IP/ICMP/responder.py</li><li>tests/test_icmp.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Treat Npcap read errors after ICMP responder stop is requested as normal shutdown, not CLI-facing failures.</li></ul>
+              <h3>Architecture</h3>
+              <p>IP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 320 ++++++++++++++++++++++++++++++++++++++++-
+ src/CCmd/__main__.py          |  14 +-
+ src/CCmd/examples.py          |   4 +
+ src/CCmd/interactive.py       |  11 +-
+ src/DPlane/__init__.py        |   9 +-
+ src/DPlane/backend.py         |  38 ++++-
+ src/DPlane/models.py          |  22 +++
+ src/FIB/__init__.py           |  17 ++-
+ src/FIB/models.py             |  27 +++-
+ src/FIB/table.py              | 166 ++++++++++++++++++++--
+ src/IP/ICMP/ping.py           |  55 ++++++--
+ src/IP/ICMP/responder.py      |   6 +-
+ src/IP/commands.py            | 180 +++++++++++++++++++++++
+ src/RM/__init__.py            |  20 ++-
+ src/RM/commands.py            | 142 +++++++++++++++++++
+ src/RM/routes.py              | 100 +++++++++++--
+ tests/test_core.py            | 128 ++++++++++++++++-
+ tests/test_icmp.py            |  52 +++++++
+ tests/test_routing.py         | 322 +++++++++++++++++++++++++++++++++++++++++-
+ 19 files changed, 1566 insertions(+), 67 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="24">
+              <div class="meta">
+                <span>2026-06-23_18-22-12</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Move packet input ownership from ICMP to DPlane</h2>
+              <p>Replaces the default ICMP responder refresh path with DPlane_PacketInputService while keeping a compatibility wrapper for old ICMP_ResponderService imports.</p>
+              <h3>Files</h3>
+              <ul><li>src/DPlane/input.py</li><li>src/IP/ICMP/input.py</li><li>src/IP/ICMP/ipv4.py</li><li>src/IP/ICMP/responder.py</li><li>src/CCmd/examples.py</li><li>tests/test_icmp.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>DPlane owns per-interface packet input sessions; ICMP exposes pure IPv4 echo handling and no longer owns interface/Npcap listener lifecycle.</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, DPlane, IP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 359 +++++++++++++++++++++++++++++++++++++++++-
+ src/CCmd/__main__.py          |  14 +-
+ src/CCmd/examples.py          |  18 ++-
+ src/CCmd/interactive.py       |  11 +-
+ src/DPlane/__init__.py        |   9 +-
+ src/DPlane/backend.py         |  38 ++++-
+ src/DPlane/models.py          |  22 +++
+ src/FIB/__init__.py           |  17 +-
+ src/FIB/models.py             |  27 +++-
+ src/FIB/table.py              | 166 +++++++++++++++++--
+ src/IP/ICMP/__init__.py       |  14 +-
+ src/IP/ICMP/ping.py           |  55 +++++--
+ src/IP/ICMP/responder.py      | 219 ++------------------------
+ src/IP/commands.py            | 180 +++++++++++++++++++++
+ src/RM/__init__.py            |  20 ++-
+ src/RM/commands.py            | 142 +++++++++++++++++
+ src/RM/routes.py              | 100 ++++++++++--
+ tests/test_core.py            | 128 ++++++++++++++-
+ tests/test_icmp.py            |  74 +++++++--
+ tests/test_routing.py         | 322 ++++++++++++++++++++++++++++++++++++-
+ 20 files changed, 1645 insertions(+), 290 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="25">
+              <div class="meta">
+                <span>2026-06-23_18-24-34</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Remove obsolete ICMP responder compatibility wrapper</h2>
+              <p>Removes the stale ICMP responder tail after the DPlane packet input refactor.</p>
+              <h3>Files</h3>
+              <ul><li>src/IP/ICMP/responder.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Delete the old ICMP_ResponderService name because packet input ownership has moved to DPlane and the project does not need compatibility for this new internal API.</li></ul>
+              <h3>Architecture</h3>
+              <p>IP</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 399 +++++++++++++++++++++++++++++++++++++++++-
+ src/CCmd/__main__.py          |  14 +-
+ src/CCmd/examples.py          |  18 +-
+ src/CCmd/interactive.py       |  11 +-
+ src/DPlane/__init__.py        |   9 +-
+ src/DPlane/backend.py         |  38 +++-
+ src/DPlane/models.py          |  22 +++
+ src/FIB/__init__.py           |  17 +-
+ src/FIB/models.py             |  27 ++-
+ src/FIB/table.py              | 166 ++++++++++++++++--
+ src/IP/ICMP/__init__.py       |  14 +-
+ src/IP/ICMP/ping.py           |  55 ++++--
+ src/IP/ICMP/responder.py      | 218 -----------------------
+ src/IP/commands.py            | 180 +++++++++++++++++++
+ src/RM/__init__.py            |  20 ++-
+ src/RM/commands.py            | 142 +++++++++++++++
+ src/RM/routes.py              | 100 +++++++++--
+ tests/test_core.py            | 128 +++++++++++++-
+ tests/test_icmp.py            |  74 ++++++--
+ tests/test_routing.py         | 322 +++++++++++++++++++++++++++++++++-
+ 20 files changed, 1671 insertions(+), 303 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="26">
+              <div class="meta">
+                <span>2026-06-23_18-31-16</span>
+                <span>main</span>
+                <span>c639b6d</span>
+              </div>
+              <h2>Count code lines and push RM FIB DPlane work</h2>
+              <p>Python line count: src 9976, tests 4340, tools 280, total 14596 lines. Commit c639b6d pushed to origin/main.</p>
+              <h3>Files</h3>
+              <ul><li>src</li><li>tests</li><li>context</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Committed the accumulated RM RIB, FIB, show command, DPlane packet input, and CLI fixes to main and pushed through proxy 127.0.0.1:12334.</li></ul>
+              <h3>Architecture</h3>
+              <p>context, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+            <article class="card" id="27">
+              <div class="meta">
+                <span>2026-06-23_20-50-41</span>
+                <span>main</span>
+                <span>c639b6d</span>
+              </div>
+              <h2>Clarify unmatched interface import commit behavior</h2>
+              <p>Prevents failed unmatched imports from looking like a successful commit.</p>
+              <h3>Files</h3>
+              <ul><li>src/DPlane/commands.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Unmatched host interfaces remain blocked at import, and commit now reports no pending import changes instead of Commit complete when no stage exists.</li></ul>
+              <h3>Architecture</h3>
+              <p>DPlane, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 22 +++++++++++++++++++++-
+ src/DPlane/commands.py        | 15 +++++++++++++++
+ tests/test_core.py            |  5 +++++
+ 3 files changed, 41 insertions(+), 1 deletion(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="28">
+              <div class="meta">
+                <span>2026-06-23_20-58-19</span>
+                <span>main</span>
+                <span>c639b6d</span>
+              </div>
+              <h2>Fix connected route FIB installation after IP configuration</h2>
+              <p>Fixes Direct routes visible in show ip routing-table but missing from show fib, and avoids requiring show ip routing-table before ping can use the route.</p>
+              <h3>Files</h3>
+              <ul><li>src/FIB/models.py</li><li>src/FIB/table.py</li><li>src/RM/commands.py</li><li>src/CCmd/examples.py</li><li>tests/test_core.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>FIB install requests now carry interface OS identity for Npcap GUID matching, and IP/import callbacks refresh RM connected routes plus FIB immediately.</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, FIB, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 45 ++++++++++++++++++++++++++++++++++++++++++-
+ src/CCmd/examples.py          | 18 +++++++++++++++--
+ src/DPlane/commands.py        | 15 +++++++++++++++
+ src/FIB/models.py             |  2 ++
+ src/FIB/table.py              | 33 +++++++++++++++++++++++++++++++
+ src/RM/commands.py            | 26 ++++++++++++++++++++++++-
+ tests/test_core.py            | 43 +++++++++++++++++++++++++++++++++++++++++
+ tests/test_routing.py         | 42 +++++++++++++++++++++++++++++++++++++++-
+ 8 files changed, 219 insertions(+), 5 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="29">
+              <div class="meta">
+                <span>2026-06-23_21-14-00</span>
+                <span>main</span>
+                <span>c639b6d</span>
+              </div>
+              <h2>Keep OS interface identity inside DPlane adapter layer</h2>
+              <p>Enforces the architecture rule that OS-specific adapter identity is hidden by DPlane and not exposed through IFNET, RM, or FIB models.</p>
+              <h3>Files</h3>
+              <ul><li>src/IFNET/models.py</li><li>src/IFNET/discovery.py</li><li>src/IFNET/inventory.py</li><li>src/IFNET/Ethernet/windows.py</li><li>src/RM/IM/models.py</li><li>src/RM/IM/table.py</li><li>src/FIB/models.py</li><li>src/FIB/table.py</li><li>src/DPlane/Windows/npcap.py</li><li>src/CCmd/examples.py</li><li>tests/test_core.py</li><li>tests/test_dplane_npcap.py</li><li>tests/test_ethernet.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Removed OS identity fields from IFNET and above; FIB requests carry IFNET-facing identifiers only, while DPlane resolves Windows/Npcap GUIDs internally.</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, DPlane, FIB, IFNET, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html |  73 ++++++++++++++++++++++++++-
+ src/CCmd/examples.py          |  64 +++++++++++++++++++++++-
+ src/DPlane/Windows/npcap.py   | 114 +++++++++++++++++++++++++++++++++++++++++-
+ src/DPlane/commands.py        |  15 ++++++
+ src/FIB/table.py              |  12 ++++-
+ src/IFNET/Ethernet/windows.py |  16 +-----
+ src/IFNET/discovery.py        |  36 +------------
+ src/IFNET/inventory.py        |   2 -
+ src/IFNET/models.py           |   2 -
+ src/IP/ICMP/ping.py           |   1 -
+ src/RM/IM/models.py           |   2 -
+ src/RM/IM/table.py            |   2 -
+ src/RM/commands.py            |  58 +++++++++++++++++++--
+ tests/test_core.py            |  65 +++++++++++++++++-------
+ tests/test_dplane_npcap.py    |  23 +++++++--
+ tests/test_ethernet.py        |   8 ++-
+ tests/test_icmp.py            |   1 -
+ tests/test_routing.py         |  32 +++++++++++-
+ 18 files changed, 431 insertions(+), 95 deletions(-)</pre>
+              </details>
+            </article>
+            
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <strong>3</strong> <a href="page-004.html">4</a> <a href="page-005.html">5</a></nav>
+  </main>
+</body>
+</html>

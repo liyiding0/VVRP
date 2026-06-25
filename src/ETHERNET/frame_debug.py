@@ -7,33 +7,33 @@ from src.ARP import ArpPacketError, ArpProtocol, get_arp_table
 from src.CCmd.models import CliContext
 from src.DPlane.backend import DPlane_create_backend
 from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
-from src.ETHERNET import ETHERTYPE_ARP, debug_ethernet_frame, parse_ethernet_ii_frame
-from src.ETHERNET.frame import EthernetFrameError
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.imports import imported_interfaces
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import NetworkInterface
 
+from .debug import debug_ethernet_frame
+from .frame import ETHERTYPE_ARP, EthernetFrameError, parse_ethernet_ii_frame
 
-DEFAULT_FRAME_DEBUG_FILTER = "ether proto 0x0800 or ether proto 0x0806 or ether proto 0x86dd"
+g_ETHERNET_FRAME_DEBUG_FILTER = "ether proto 0x0800 or ether proto 0x0806 or ether proto 0x86dd"
 
 
 @dataclass(frozen=True)
-class FrameDebugPortBinding:
+class ETHERNET_FrameDebugPortBinding:
     interface: NetworkInterface
     device: DPlane_PacketDevice
     host_mac_address: str
 
 
-class DplaneEthernetFrameDebugService:
+class ETHERNET_FrameDebugService:
     def __init__(
         self,
         ifnet_provider: InterfaceProvider | None = None,
         ifnet_admin_provider: InterfaceAdminProvider | None = None,
         dplane_backend: DPlane_Backend | None = None,
         port_factory=None,
-        packet_filter: str = DEFAULT_FRAME_DEBUG_FILTER,
+        packet_filter: str = g_ETHERNET_FRAME_DEBUG_FILTER,
     ) -> None:
         self.ifnet_provider = ifnet_provider
         self.ifnet_admin_provider = ifnet_admin_provider
@@ -43,7 +43,7 @@ class DplaneEthernetFrameDebugService:
         )
         self.port_factory = port_factory or self._default_port_factory
         self.packet_filter = packet_filter
-        self._sessions: dict[str, _FrameDebugSession] = {}
+        self._sessions: dict[str, _ETHERNET_FrameDebugSession] = {}
 
     def start(self, ctx: CliContext) -> str:
         bindings = self._bindings(ctx)
@@ -57,7 +57,7 @@ class DplaneEthernetFrameDebugService:
             if binding.interface.name in self._sessions:
                 continue
             port = self.port_factory(binding.device)
-            session = _FrameDebugSession(
+            session = _ETHERNET_FrameDebugSession(
                 ctx,
                 binding.interface,
                 binding.host_mac_address,
@@ -89,7 +89,7 @@ class DplaneEthernetFrameDebugService:
         names = ", ".join(sorted(self._sessions))
         return f"listeners running on {names}"
 
-    def _bindings(self, ctx: CliContext) -> tuple[FrameDebugPortBinding, ...]:
+    def _bindings(self, ctx: CliContext) -> tuple[ETHERNET_FrameDebugPortBinding, ...]:
         try:
             interfaces = get_ifnet_manager(
                 ctx.state,
@@ -100,13 +100,13 @@ class DplaneEthernetFrameDebugService:
         except (InterfaceDiscoveryError, RuntimeError) as exc:
             raise RuntimeError(str(exc)) from exc
 
-        output: list[FrameDebugPortBinding] = []
+        output: list[ETHERNET_FrameDebugPortBinding] = []
         host_mac_by_name = {interface.name: interface.mac_address for interface in interfaces}
         for interface in imported_interfaces(ctx.state, interfaces):
             device = self.dplane_backend.DPlane_find_packet_device(interface, devices)
             if device is not None:
                 output.append(
-                    FrameDebugPortBinding(
+                    ETHERNET_FrameDebugPortBinding(
                         interface=interface,
                         device=device,
                         host_mac_address=host_mac_by_name.get(interface.name, interface.mac_address),
@@ -118,7 +118,7 @@ class DplaneEthernetFrameDebugService:
         return self.dplane_backend.DPlane_open_packet_port(device)
 
 
-class _FrameDebugSession:
+class _ETHERNET_FrameDebugSession:
     def __init__(
         self,
         ctx: CliContext,

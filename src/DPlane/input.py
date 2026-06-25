@@ -1,19 +1,11 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 
-from src.ARP import ArpPacketError, ArpProtocol, get_arp_table
 from src.CCmd.models import CliContext
 from src.DPlane.backend import DPlane_create_backend
 from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
-from src.ETHERNET import (
-    ETHERTYPE_ARP,
-    ETHERTYPE_IPV4,
-    EthernetFrame,
-    debug_ethernet_frame,
-    parse_ethernet_ii_frame,
-)
-from src.ETHERNET.frame import EthernetFrameError
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.imports import imported_interfaces
@@ -33,6 +25,7 @@ class DPlane_PacketInputService:
         DPlane_ifnet_admin_provider: InterfaceAdminProvider | None = None,
         DPlane_backend: DPlane_Backend | None = None,
         DPlane_port_factory=None,
+        DPlane_frame_handler_factory: Callable[[CliContext, object], object] | None = None,
     ) -> None:
         self.DPlane_ifnet_provider = DPlane_ifnet_provider
         self.DPlane_ifnet_admin_provider = DPlane_ifnet_admin_provider
@@ -41,6 +34,9 @@ class DPlane_PacketInputService:
             DPlane_admin_provider=DPlane_ifnet_admin_provider,
         )
         self.DPlane_port_factory = DPlane_port_factory or self._DPlane_default_port_factory
+        self.DPlane_frame_handler_factory = (
+            DPlane_frame_handler_factory or self._DPlane_default_frame_handler_factory
+        )
         self.DPlane_sessions: dict[str, _DPlane_PacketInputSession] = {}
 
     def DPlane_refresh(self, DPlane_ctx: CliContext) -> str:
@@ -52,7 +48,13 @@ class DPlane_PacketInputService:
 
         for DPlane_interface, DPlane_device in DPlane_bindings:
             DPlane_port = self.DPlane_port_factory(DPlane_device)
-            DPlane_session = _DPlane_PacketInputSession(DPlane_ctx, DPlane_interface, DPlane_port)
+            DPlane_frame_handler = self.DPlane_frame_handler_factory(DPlane_ctx, DPlane_port)
+            DPlane_session = _DPlane_PacketInputSession(
+                DPlane_ctx,
+                DPlane_interface,
+                DPlane_port,
+                DPlane_frame_handler,
+            )
             DPlane_session.DPlane_start()
             self.DPlane_sessions[DPlane_interface.name] = DPlane_session
         if not DPlane_bindings:
@@ -91,12 +93,27 @@ class DPlane_PacketInputService:
     def _DPlane_default_port_factory(self, DPlane_device: DPlane_PacketDevice):
         return self.DPlane_backend.DPlane_open_packet_port(DPlane_device)
 
+    def _DPlane_default_frame_handler_factory(self, DPlane_ctx: CliContext, DPlane_port):
+        from src.FWD import FWD_default_input_dispatcher
+
+        return FWD_default_input_dispatcher(
+            DPlane_ctx,
+            FWD_ethernet_send_frame=DPlane_port.send_frame,
+        )
+
 
 class _DPlane_PacketInputSession:
-    def __init__(self, DPlane_ctx: CliContext, DPlane_interface: NetworkInterface, DPlane_port) -> None:
+    def __init__(
+        self,
+        DPlane_ctx: CliContext,
+        DPlane_interface: NetworkInterface,
+        DPlane_port,
+        DPlane_frame_handler,
+    ) -> None:
         self.DPlane_ctx = DPlane_ctx
         self.DPlane_interface = DPlane_interface
         self.DPlane_port = DPlane_port
+        self.DPlane_frame_handler = DPlane_frame_handler
         self.DPlane_stop_event = threading.Event()
         self.DPlane_thread = threading.Thread(
             target=self._DPlane_run,
@@ -124,16 +141,10 @@ class _DPlane_PacketInputSession:
                 DPlane_raw = self.DPlane_port.recv_frame()
                 if DPlane_raw is None:
                     continue
-                try:
-                    DPlane_frame = parse_ethernet_ii_frame(DPlane_raw)
-                except EthernetFrameError:
-                    continue
-                if not _DPlane_frame_belongs_to_interface(DPlane_frame, self.DPlane_interface):
-                    continue
-                if DPlane_frame.ethertype == ETHERTYPE_ARP:
-                    self._DPlane_handle_arp(DPlane_frame)
-                elif DPlane_frame.ethertype == ETHERTYPE_IPV4:
-                    self._DPlane_handle_ipv4(DPlane_frame)
+                self.DPlane_frame_handler.FWD_handle_frame(
+                    self.DPlane_interface,
+                    DPlane_raw,
+                )
         except Exception as DPlane_exc:
             if not self.DPlane_stop_event.is_set():
                 self.DPlane_ctx.write(
@@ -145,50 +156,3 @@ class _DPlane_PacketInputSession:
             except Exception:
                 pass
 
-    def _DPlane_handle_arp(self, DPlane_frame: EthernetFrame) -> None:
-        try:
-            DPlane_reply = ArpProtocol(get_arp_table(self.DPlane_ctx.state)).handle_frame(
-                self.DPlane_interface,
-                DPlane_frame,
-            )
-        except (ArpPacketError, ValueError):
-            return
-        if DPlane_reply is None:
-            return
-        debug_ethernet_frame(self.DPlane_ctx, self.DPlane_interface.name, "tx", DPlane_reply)
-        self.DPlane_port.send_frame(DPlane_reply.to_bytes(pad=True))
-
-    def _DPlane_handle_ipv4(self, DPlane_frame: EthernetFrame) -> None:
-        from src.IP.ICMP.input import ICMP_handle_ipv4_packet
-
-        DPlane_reply_packet = ICMP_handle_ipv4_packet(self.DPlane_interface, DPlane_frame.payload)
-        if DPlane_reply_packet is None:
-            return
-        DPlane_reply_frame = EthernetFrame(
-            destination=DPlane_frame.source,
-            source=self.DPlane_interface.mac_address,
-            ethertype=ETHERTYPE_IPV4,
-            payload=DPlane_reply_packet,
-        )
-        debug_ethernet_frame(self.DPlane_ctx, self.DPlane_interface.name, "tx", DPlane_reply_frame)
-        self.DPlane_port.send_frame(DPlane_reply_frame.to_bytes(pad=True))
-
-
-def _DPlane_frame_belongs_to_interface(
-    DPlane_frame: EthernetFrame,
-    DPlane_interface: NetworkInterface,
-) -> bool:
-    DPlane_mac = DPlane_interface.mac_address.lower()
-    DPlane_source = DPlane_frame.source.lower()
-    DPlane_destination = DPlane_frame.destination.lower()
-    return DPlane_source != DPlane_mac and (
-        DPlane_destination == DPlane_mac or _DPlane_is_group_address(DPlane_destination)
-    )
-
-
-def _DPlane_is_group_address(DPlane_mac_address: str) -> bool:
-    try:
-        DPlane_first_octet = int(DPlane_mac_address.split(":", 1)[0], 16)
-    except (ValueError, IndexError):
-        return False
-    return bool(DPlane_first_octet & 1)

@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-25_21-29-20",
+  "prompt": "Add active ARP resolution for Ethernet forwarding",
+  "changed_files": [
+    "src/FWD/ethernet.py",
+    "tests/test_fwd.py"
+  ],
+  "note": "Ethernet FWD output now sends an ARP request when adjacency is missing, waits for the ARP table to learn the reply via input path, then sends the IPv4 frame. Cross-subnet next-hop resolution continues to use FIB next_hop_ip when present.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "59c0647be72ca26060c6fbce1171b2fc68f936e2",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.html",
+    "src/DPlane/frame_debug.py",
+    "src/DPlane/input.py",
+    "src/ETHERNET/__init__.py",
+    "src/FWD/__init__.py",
+    "src/FWD/ethernet.py",
+    "src/FWD/models.py",
+    "src/IP/ICMP/input.py",
+    "src/IP/ICMP/ping.py",
+    "src/VVRP/runtime.py",
+    "tests/test_core.py",
+    "tests/test_ethernet.py",
+    "tests/test_fwd.py",
+    "context/commits/59c0647be72c.json",
+    "context/sessions/2026-06-25_20-38-56.json",
+    "context/sessions/2026-06-25_21-07-03.json",
+    "context/sessions/2026-06-25_21-15-48.json",
+    "context/sessions/2026-06-25_21-19-13.json",
+    "src/ETHERNET/frame_debug.py",
+    "src/ETHERNET/input.py",
+    "src/FWD/input.py",
+    "src/IP/ICMP/replies.py"
+  ],
+  "diff_stat": "context/replays/timeline.html | 109 +++++++++++++++++++++-\n src/DPlane/frame_debug.py     | 204 ------------------------------------------\n src/DPlane/input.py           | 100 +++++++--------------\n src/FWD/__init__.py           |   7 +-\n src/FWD/ethernet.py           |  58 +++++++++++-\n src/FWD/models.py             |   9 ++\n src/IP/ICMP/input.py          |  23 ++++-\n src/IP/ICMP/ping.py           |  87 +++++++++++++++++-\n src/VVRP/runtime.py           |   8 +-\n tests/test_core.py            | 117 +++++++++++++++++++++++-\n tests/test_ethernet.py        |   6 +-\n tests/test_fwd.py             | 129 ++++++++++++++++++++++++--\n 12 files changed, 563 insertions(+), 294 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.html b/context/replays/timeline.html\nindex 5477ca5..77c212f 100644\n--- a/context/replays/timeline.html\n+++ b/context/replays/timeline.html\n@@ -1146,7 +1146,114 @@\n               </details>\n             </article>\n             \n+            <article class=\"card\">\n+              <div class=\"meta\">\n+                <span>2026-06-25_20-38-56</span>\n+                <span>main</span>\n+                <span>59c0647</span>\n+              </div>\n+              <h2>Open DPlane packet port before FWD Ethernet send</h2>\n+              <p>Runtime now opens the DPlane/Npcap packet port before handing it to FWD Ethernet output, fixing send_frame failures caused by unopened ports.</p>\n+              <h3>Files</h3>\n+              <ul><li>src/VVRP/runtime.py</li><li>tests/test_core.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>None recorded</li></ul>\n+              <h3>Architecture</h3>\n+              <p>VVRP, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>src/VVRP/runtime.py |  4 +++-\n+ tests/test_core.py  | 50 ++++++++++++++++++++++++++++++++++++++++++++++++++\n+ 2 files changed, 53 insertions(+), 1 deletion(-)</pre>\n+              </details>\n+            </article>\n+            \n+            <article class=\"card\">\n+              <div class=\"meta\">\n+                <span>2026-06-25_21-07-03</span>\n+                <span>main</span>\n+                <span>59c0647</span>\n+              </div>\n+              <h2>Deliver ICMP echo replies from DPlane input to VVRP ping</h2>\n+              <p>Added ICMP echo reply inbox in VVRP state; DPlane input now records echo replies for local VVRP addresses, and VVRP ping waits for matching replies and prints VRP-style output/statistics.</p>\n+              <h3>Files</h3>\n+              <ul><li>src/DPlane/input.py</li><li>src/IP/ICMP/input.py</li><li>src/IP/ICMP/ping.py</li><li>src/IP/ICMP/replies.py</li><li>tests/test_core.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>None recorded</li></ul>\n+              <h3>Architecture</h3>\n+              <p>DPlane, IP, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>context/replays/timeline.html |  24 ++++++++-\n+ src/DPlane/input.py           |   6 ++-\n+ src/IP/ICMP/input.py          |  23 ++++++++-\n+ src/IP/ICMP/ping.py           |  87 ++++++++++++++++++++++++++++++-\n+ src/VVRP/runtime.py           |   4 +-\n+ tests/test_core.py            | 117 +++++++++++++++++++++++++++++++++++++++++-\n+ 6 files changed, 252 insertions(+), 9 deletions(-)</pre>\n+              </details>\n+            </article>\n+            \n+            <article class=\"card\">\n+              <div class=\"meta\">\n+                <span>2026-06-25_21-15-48</span>\n+                <span>main</span>\n+                <span>59c0647</span>\n+              </div>\n+              <h2>Move Ethernet frame handling out of DPlane</h2>\n+              <p>DPlane packet input now only receives raw frames and delegates to an injected Ethernet input handler. Ethernet owns frame parsing, ARP dispatch, IPv4/ICMP delivery, and frame debug processing.</p>\n+              <h3>Files</h3>\n+              <ul><li>src/DPlane/input.py</li><li>src/ETHERNET/input.py</li><li>src/ETHERNET/frame_debug.py</li><li>src/VVRP/runtime.py</li><li>tests/test_ethernet.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>None recorded</li></ul>\n+              <h3>Architecture</h3>\n+              <p>DPlane, ETHERNET, VVRP, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>context/replays/timeline.html |  50 ++++++++++-\n+ src/DPlane/frame_debug.py     | 204 ------------------------------------------\n+ src/DPlane/input.py           |  97 ++++++--------------\n+ src/IP/ICMP/input.py          |  23 ++++-\n+ src/IP/ICMP/ping.py           |  87 +++++++++++++++++-\n+ src/VVRP/runtime.py           |   8 +-\n+ tests/test_core.py            | 117 +++++++++++++++++++++++-\n+ tests/test_ethernet.py        |   6 +-\n... truncated 1105 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "FWD",
+      "tests"
+    ]
+  }
+}

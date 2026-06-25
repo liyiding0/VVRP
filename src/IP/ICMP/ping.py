@@ -31,6 +31,7 @@ from src.IP.ICMP.packet import (
     ICMP_checksum,
     ICMP_parse_echo,
 )
+from src.IP.ICMP.replies import ICMP_wait_echo_reply
 
 
 g_ICMP_PING_ARGUMENT_PATTERN = r".+"
@@ -258,7 +259,6 @@ class ICMP_VvrpPacketPinger:
             return ICMP_PingResult(ICMP_ok=False, ICMP_message=f"% VVRP ping failed: {ICMP_exc}")
 
         ICMP_payload = _ICMP_payload(ICMP_options.ICMP_packet_size)
-        ICMP_packet = ICMP_build_echo_packet(self.ICMP_identifier, 1, ICMP_payload)
         ICMP_socket = SOCK_socket(
             self.ICMP_ctx.state,
             SOCK_AF_INET,
@@ -267,6 +267,61 @@ class ICMP_VvrpPacketPinger:
             SOCK_forwarder=self.ICMP_socket_forwarder,
         )
         ICMP_socket.SOCK_bind((ICMP_route.source_ip, 0))
+        ICMP_sent = 0
+        ICMP_received = 0
+        ICMP_rtts: list[int] = []
+        if ICMP_options.ICMP_brief:
+            ICMP_output.write("    ")
+            ICMP_output.flush()
+
+        for ICMP_sequence in range(1, ICMP_options.ICMP_count + 1):
+            ICMP_sent += 1
+            ICMP_reply = self._ICMP_send_socket_one(
+                ICMP_socket,
+                ICMP_route,
+                ICMP_options,
+                ICMP_resolved_address,
+                ICMP_sequence,
+                ICMP_payload,
+            )
+            if ICMP_reply.ICMP_ok:
+                ICMP_received += 1
+                if ICMP_reply.ICMP_rtt_ms is not None:
+                    ICMP_rtts.append(ICMP_reply.ICMP_rtt_ms)
+            if ICMP_options.ICMP_brief:
+                ICMP_output.write(ICMP_format_ping_reply(ICMP_reply, ICMP_brief=True))
+            else:
+                ICMP_output.write(ICMP_format_ping_reply(ICMP_reply) + "\n")
+            ICMP_output.flush()
+            if ICMP_sequence < ICMP_options.ICMP_count and ICMP_options.ICMP_interval_seconds > 0:
+                self.ICMP_sleep(ICMP_options.ICMP_interval_seconds)
+        if ICMP_options.ICMP_brief:
+            ICMP_output.write("\n")
+            ICMP_output.flush()
+
+        ICMP_output.write(
+            ICMP_format_ping_statistics(
+                ICMP_options.ICMP_target,
+                ICMP_sent,
+                ICMP_received,
+                ICMP_rtts,
+            )
+            + "\n"
+        )
+        ICMP_output.flush()
+        return ICMP_PingResult(ICMP_ok=ICMP_received > 0)
+
+    def _ICMP_send_socket_one(
+        self,
+        ICMP_socket,
+        ICMP_route: FIBEntry,
+        ICMP_options: ICMP_PingOptions,
+        ICMP_resolved_address: str,
+        ICMP_sequence: int,
+        ICMP_payload: bytes,
+    ) -> ICMP_PingReply:
+        ICMP_packet = ICMP_build_echo_packet(self.ICMP_identifier, ICMP_sequence, ICMP_payload)
+        ICMP_started = self.ICMP_monotonic()
         ICMP_result = SOCK_sendto(
             ICMP_socket,
             ICMP_packet,
@@ -274,7 +329,35 @@ class ICMP_VvrpPacketPinger:
             SOCK_ttl=ICMP_options.ICMP_ttl,
             SOCK_identification=self.ICMP_identifier,
         )
-        return ICMP_PingResult(ICMP_ok=ICMP_result.SOCK_ok, ICMP_message=ICMP_result.SOCK_message)
+        if not ICMP_result.SOCK_ok:
+            return ICMP_PingReply(
+                ICMP_ok=False,
+                ICMP_sequence=ICMP_sequence,
+                ICMP_message=ICMP_result.SOCK_message or "Request time out",
+            )
+        ICMP_reply = ICMP_wait_echo_reply(
+            self.ICMP_ctx.state,
+            ICMP_source=ICMP_resolved_address,
+            ICMP_destination=ICMP_route.source_ip,
+            ICMP_identifier=self.ICMP_identifier,
+            ICMP_sequence=ICMP_sequence,
+            ICMP_timeout_seconds=ICMP_options.ICMP_timeout_seconds,
+        )
+        if ICMP_reply is None:
+            return ICMP_PingReply(
+                ICMP_ok=False,
+                ICMP_sequence=ICMP_sequence,
+                ICMP_message="Request time out",
+            )
+        ICMP_rtt_ms = max(0, int(round((self.ICMP_monotonic() - ICMP_started) * 1000)))
+        return ICMP_PingReply(
+            ICMP_ok=True,
+            ICMP_sequence=ICMP_sequence,
+            ICMP_address=ICMP_reply.ICMP_source,
+            ICMP_bytes_received=len(ICMP_reply.ICMP_payload),
+            ICMP_ttl=ICMP_reply.ICMP_ttl,
+            ICMP_rtt_ms=ICMP_rtt_ms,
+        )
 
     def _ICMP_resolve_forwarding(self, ICMP_target_ip: str) -> FIBEntry:
         ICMP_interfaces = get_ifnet_manager(

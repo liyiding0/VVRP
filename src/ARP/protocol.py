@@ -70,7 +70,7 @@ class ArpProtocol:
         interface: NetworkInterface,
         packet: ArpPacket,
         now: float | None = None,
-    ) -> ArpEntry:
+    ) -> ArpEntry | None:
         return self.table.learn(
             packet.sender_ip,
             packet.sender_mac,

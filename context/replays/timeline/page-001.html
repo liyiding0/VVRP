@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    nav { margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a, nav strong { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; }
+    nav a { color: #1f4f9a; text-decoration: none; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    <nav><strong>1</strong> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a></nav>
+    
+            <article class="card" id="0">
+              <div class="meta">
+                <span>2026-06-22_20-32-43</span>
+                <span></span>
+                <span>86cfa0a</span>
+              </div>
+              <h2>Add Codex development replay tool</h2>
+              <p>renamed replay script so development sessions can be replayed</p>
+              <h3>Files</h3>
+              <ul><li>tools/replay.py</li><li>tools/replay.py.txt</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>No module tags</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+            <article class="card" id="1">
+              <div class="meta">
+                <span>2026-06-22_20-37-30</span>
+                <span>codex/restructure-source-layout</span>
+                <span>86cfa0a</span>
+              </div>
+              <h2>Upgrade Codex replay tools to v1.0</h2>
+              <p>adds diff capture, decision replay, architecture tags, and timeline UI</p>
+              <h3>Files</h3>
+              <ul><li>tools/codex_logger.py</li><li>tools/replay.py</li><li>tools/timeline.py</li><li>tools/README.md</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Capture dirty working tree metadata instead of requiring a commit</li><li>Generate static HTML timeline under context/replays for local viewing</li><li>Infer touched architecture modules from changed file paths</li></ul>
+              <h3>Architecture</h3>
+              <p>tools</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+            <article class="card" id="2">
+              <div class="meta">
+                <span>2026-06-22_20-43-35</span>
+                <span>codex/restructure-source-layout</span>
+                <span>772849f</span>
+              </div>
+              <h2>Commit and push VVRP restructure branch to GitHub</h2>
+              <p>pushed codex/restructure-source-layout to origin</p>
+              <h3>Files</h3>
+              <ul><li>context/commits/86cfa0ac97d0.json</li><li>context/replays/timeline.html</li><li>context/sessions/2026-06-22_20-32-43.json</li><li>context/sessions/2026-06-22_20-37-30.json</li><li>tools/codex_logger.py</li><li>tools/replay.py</li><li>tools/timeline.py</li><li>tools/README.md</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Push via user-specified proxy 127.0.0.1:7890</li><li>Keep post-push log local until a later explicit submit request</li></ul>
+              <h3>Architecture</h3>
+              <p>context, tools</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+            <article class="card" id="3">
+              <div class="meta">
+                <span>2026-06-22_20-47-44</span>
+                <span>main</span>
+                <span>73ac1f0</span>
+              </div>
+              <h2>Merge VVRP restructure branch into main</h2>
+              <p>main now contains source layout restructure and Codex replay tools</p>
+              <h3>Files</h3>
+              <ul><li>README.md</li><li>pyproject.toml</li><li>src</li><li>tests</li><li>tools</li><li>context</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Fast-forward merge codex/restructure-source-layout into main without PR</li><li>Push main through proxy 127.0.0.1:7890</li></ul>
+              <h3>Architecture</h3>
+              <p>context, tests, tools</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+            <article class="card" id="4">
+              <div class="meta">
+                <span>2026-06-22_20-48-32</span>
+                <span>main</span>
+                <span>73ac1f0</span>
+              </div>
+              <h2>Explain IFNET RM import boundary and VVRP EventBus model</h2>
+              <p>architecture discussion only; no code changes</p>
+              <h3>Files</h3>
+              <ul><li>src/IFNET</li><li>src/RM</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Treat imported host adapters as already materialized VVRP IFNET interfaces</li><li>Keep RM dependent only on IFNET-visible interfaces, not import provenance</li><li>Use EventBus as synchronous in-process domain event dispatcher</li></ul>
+              <h3>Architecture</h3>
+              <p>IFNET, RM</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+            <article class="card" id="5">
+              <div class="meta">
+                <span>2026-06-22_21-05-29</span>
+                <span>main</span>
+                <span>73ac1f0</span>
+              </div>
+              <h2>Add RM IM EventBus route interface model</h2>
+              <p>RM connected route calculation now consumes VVRP IFNET interface facts without import provenance</p>
+              <h3>Files</h3>
+              <ul><li>src/events.py</li><li>src/RM/IM/__init__.py</li><li>src/RM/IM/models.py</li><li>src/RM/IM/table.py</li><li>src/RM/routes.py</li><li>src/RM/models.py</li><li>src/RM/__init__.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Rename planned RCOM role to RM IM Interface Management</li><li>Keep RM disconnected from IFNET import state</li><li>Use synchronous VVRP_EventBus for IFNET/IP facts feeding RM_IM</li><li>Preserve old public RM functions while changing semantics to already-materialized IFNET interfaces</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, events.py, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 42 +++++++++++++++++++++++++++++++++++++++++-
+ src/RM/__init__.py            |  3 ++-
+ src/RM/models.py              | 10 ++++++++++
+ src/RM/routes.py              | 22 +++++++++++++++++-----
+ tests/test_routing.py         | 40 +++++++++++++++++++++++++++++-----------
+ 5 files changed, 99 insertions(+), 18 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="6">
+              <div class="meta">
+                <span>2026-06-22_21-13-25</span>
+                <span>main</span>
+                <span>73ac1f0</span>
+              </div>
+              <h2>Study additional Huawei VRP and eNSP manuals</h2>
+              <p>added large NE5000E V800R022 guide and eNSP Pro manual to VRP study corpus</p>
+              <h3>Files</h3>
+              <ul><li>tools/extract_vrp_manual_notes.py</li><li>docs/vrp-command-study-notes.md</li><li>context/replays/vrp_manual_notes</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Use V800R022 combined guide as broad command-family index</li><li>Use V800R025 split guides for focused interface/IP/routing/LAN implementation</li><li>Use eNSP Pro guide as lab and operator-experience reference</li></ul>
+              <h3>Architecture</h3>
+              <p>context, docs, tools</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 67 ++++++++++++++++++++++++++++++++++++++++++-
+ src/RM/__init__.py            |  3 +-
+ src/RM/models.py              | 10 +++++++
+ src/RM/routes.py              | 22 ++++++++++----
+ tests/test_routing.py         | 40 +++++++++++++++++++-------
+ 5 files changed, 124 insertions(+), 18 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="7">
+              <div class="meta">
+                <span>2026-06-22_21-32-51</span>
+                <span>main</span>
+                <span>73ac1f0</span>
+              </div>
+              <h2>Correct VRP display rm interface command finding</h2>
+              <p>architecture/reference correction from user-provided Huawei support URL</p>
+              <h3>Files</h3>
+              <ul><li>docs/vrp-command-study-notes.md</li><li>src/RM/IM</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Acknowledge Huawei online command reference includes display rm interface</li><li>Treat display rm interface as a useful model for VVRP RM_IM inspection output</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, docs</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+            <article class="card" id="8">
+              <div class="meta">
+                <span>2026-06-22_21-39-55</span>
+                <span>main</span>
+                <span>73ac1f0</span>
+              </div>
+              <h2>Add show rm interface command</h2>
+              <p>implements VRP-style RM interface inspection using VVRP display-to-show convention</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>src/RM/__init__.py</li><li>src/CCmd/examples.py</li><li>tests/test_routing.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Map Huawei display rm interface to VVRP show rm interface</li><li>Keep RM command input as materialized VVRP IFNET interfaces from the assembly layer</li><li>Add show rm parent command so contextual help exposes rm cleanly</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 112 +++++++++++++++++++++++++++++++++++++++++-
+ src/CCmd/examples.py          |  26 ++++++++++
+ src/RM/__init__.py            |   5 +-
+ src/RM/models.py              |  10 ++++
+ src/RM/routes.py              |  22 +++++++--
+ tests/test_core.py            |   3 +-
+ tests/test_routing.py         |  82 ++++++++++++++++++++++++++-----
+ 7 files changed, 241 insertions(+), 19 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="9">
+              <div class="meta">
+                <span>2026-06-22_21-49-52</span>
+                <span>main</span>
+                <span>73ac1f0</span>
+              </div>
+              <h2>Refine show rm interface command semantics</h2>
+              <p>aligns VVRP show/no convention with Huawei display rm interface behavior</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>src/CCmd/examples.py</li><li>tests/test_routing.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Restrict show rm interface command family to hidden mode</li><li>Make show rm incomplete by removing its direct handler</li><li>Move tabular output to show rm interface brief</li><li>Use section-style detail output for show rm interface</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 139 +++++++++++++++++++++++++++++++++++++++++-
+ src/CCmd/examples.py          |  26 ++++++++
+ src/RM/__init__.py            |   5 +-
+ src/RM/models.py              |  10 +++
+ src/RM/routes.py              |  22 +++++--
+ tests/test_routing.py         | 127 ++++++++++++++++++++++++++++++++++----
+ 6 files changed, 311 insertions(+), 18 deletions(-)</pre>
+              </details>
+            </article>
+            
+    <nav><strong>1</strong> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a></nav>
+  </main>
+</body>
+</html>

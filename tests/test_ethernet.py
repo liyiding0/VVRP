@@ -26,7 +26,7 @@ from src.CCmd import CliContext, CommandParser, CommandRegistry, ParseStatus, di
 from src.CCmd.examples import build_default_registry
 from src.ARP import ARP_REPLY, ArpPacket, get_arp_table
 from src.DPlane import DPlane_PlatformInfo, DPlane_Result
-from src.DPlane.frame_debug import DplaneEthernetFrameDebugService
+from src.ETHERNET.frame_debug import ETHERNET_FrameDebugService
 from src.DPlane.Windows.npcap import NpcapDevice
 from src.IFNET.imports import commit_imports, stage_import_interface
 from src.IFNET.state import set_interface_mac_address
@@ -283,7 +283,7 @@ class EthernetDebugTests(unittest.TestCase):
             ports.append(port)
             return port
 
-        service = DplaneEthernetFrameDebugService(
+        service = ETHERNET_FrameDebugService(
             ifnet_provider=FakeInterfaceProvider(),
             dplane_backend=FakeDPlaneBackend(),
             port_factory=port_factory,
@@ -349,7 +349,7 @@ class EthernetDebugTests(unittest.TestCase):
             ports.append(port)
             return port
 
-        service = DplaneEthernetFrameDebugService(
+        service = ETHERNET_FrameDebugService(
             ifnet_provider=FakeInterfaceProvider(),
             dplane_backend=FakeDPlaneBackend(),
             port_factory=port_factory,

@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from src.ARP import ArpTable
 from src.CCmd.models import CliContext, CommandResult
 from src.DPlane import DPlane_Backend, DPlane_create_backend
-from src.DPlane.frame_debug import DplaneEthernetFrameDebugService
 from src.DPlane.input import DPlane_PacketInputService
 from src.DPlane.ip_config import DPlane_DhcpClientProvider, DPlane_StaticIpv4Provider
+from src.ETHERNET.frame_debug import ETHERNET_FrameDebugService
 from src.FIB import FIB_sync_active_routes
 from src.FWD import FWD_default_forwarder
 from src.IFNET.admin import InterfaceAdminProvider
@@ -40,7 +40,7 @@ class VVRP_Runtime:
             self.VVRP_static_ipv4_provider
             or DPlane_StaticIpv4Provider(self.VVRP_dplane_backend)
         )
-        self.VVRP_ethernet_frame_debug = DplaneEthernetFrameDebugService(
+        self.VVRP_ethernet_frame_debug = ETHERNET_FrameDebugService(
             ifnet_provider=self.VVRP_ifnet_provider,
             ifnet_admin_provider=self.VVRP_ifnet_admin_provider,
             dplane_backend=self.VVRP_dplane_backend,
@@ -86,7 +86,9 @@ class VVRP_Runtime:
         )
         if VVRP_device is None:
             raise RuntimeError(f"FWD Ethernet device not found: {VVRP_interface.name}")
-        return self.VVRP_dplane_backend.DPlane_open_packet_port(VVRP_device)
+        VVRP_port = self.VVRP_dplane_backend.DPlane_open_packet_port(VVRP_device)
+        VVRP_port.open()
+        return VVRP_port
 
 
 def VVRP_create_runtime(

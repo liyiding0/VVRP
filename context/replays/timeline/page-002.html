@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    nav { margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a, nav strong { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; }
+    nav a { color: #1f4f9a; text-decoration: none; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    <nav><a href="page-001.html">1</a> <strong>2</strong> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a></nav>
+    
+            <article class="card" id="10">
+              <div class="meta">
+                <span>2026-06-22_22-02-16</span>
+                <span>main</span>
+                <span>73ac1f0</span>
+              </div>
+              <h2>Align show rm interface detail output</h2>
+              <p>refines show rm interface detail output according to Huawei display rm interface example/table guidance</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Align detail field colons in Huawei-style fixed columns</li><li>Show blank Slot for Ethernet RM interfaces</li><li>Show Slot 0 for Loopback RM interfaces</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 165 ++++++++++++++++++++++++++++++++++++++++-
+ src/CCmd/examples.py          |  26 +++++++
+ src/RM/__init__.py            |   5 +-
+ src/RM/models.py              |  10 +++
+ src/RM/routes.py              |  22 ++++--
+ tests/test_routing.py         | 168 +++++++++++++++++++++++++++++++++++++++---
+ 6 files changed, 378 insertions(+), 18 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="11">
+              <div class="meta">
+                <span>2026-06-22_22-09-13</span>
+                <span>main</span>
+                <span>73ac1f0</span>
+              </div>
+              <h2>Align show rm interface output with Huawei format</h2>
+              <p>Added Huawei-style fields with blanks where RM lacks data, kept brief output as tabular form.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Changed show rm interface detail from aligned key-value lines to Huawei-style Physical/Logical IF Info sections.</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 191 +++++++++++++++++++++++++++++++++++++++++-
+ src/CCmd/examples.py          |  26 ++++++
+ src/RM/__init__.py            |   5 +-
+ src/RM/models.py              |  10 +++
+ src/RM/routes.py              |  22 +++--
+ tests/test_routing.py         | 179 ++++++++++++++++++++++++++++++++++++---
+ 6 files changed, 415 insertions(+), 18 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="12">
+              <div class="meta">
+                <span>2026-06-23_10-18-01</span>
+                <span>main</span>
+                <span>eb3d059</span>
+              </div>
+              <h2>Merge GitHub DPlane backend code and push RM IM work</h2>
+              <p>Pushed main to GitHub after 193 unit tests passed.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>src/RM/IM/table.py</li><li>src/events.py</li><li>src/DPlane/backend.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Fetched origin/main through proxy 127.0.0.1:12334 before pushing.</li><li>Rebased RM IM and Huawei-style show rm interface work onto remote DPlane backend abstraction.</li></ul>
+              <h3>Architecture</h3>
+              <p>DPlane, RM, events.py</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+            
+            <article class="card" id="13">
+              <div class="meta">
+                <span>2026-06-23_14-13-32</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Add RM route table with Radix LPM index</h2>
+              <p>Added RM route table indexes by prefix/interface/source and active-route LPM lookup.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/rib.py</li><li>src/RM/routes.py</li><li>src/RM/__init__.py</li><li>src/IP/ICMP/ping.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep route selection inside RM and expose a RIB plus active IPv4 Radix tree for longest-prefix-match.</li><li>Leave ICMP as a FIB caller only; remove direct-route wording from ping failure text.</li></ul>
+              <h3>Architecture</h3>
+              <p>IP, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>src/IP/ICMP/ping.py   |  2 +-
+ src/RM/__init__.py    | 16 +++++++++-
+ src/RM/routes.py      | 22 ++++++-------
+ tests/test_routing.py | 88 ++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 4 files changed, 114 insertions(+), 14 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="14">
+              <div class="meta">
+                <span>2026-06-23_14-19-39</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Wire RM connected routes from IP interface events to FIB</h2>
+              <p>IP address events now create connected active routes that FIB can use for forwarding lookup.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/rib.py</li><li>src/RM/routes.py</li><li>src/RM/__init__.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>RM route table is stored in CLI state and updated synchronously from RM_IM interface/address events.</li><li>FIB lookup uses the RM state route table when present; otherwise it keeps the older compatibility path.</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html |  26 ++++++++-
+ src/IP/ICMP/ping.py           |   2 +-
+ src/RM/__init__.py            |  20 ++++++-
+ src/RM/routes.py              |  85 +++++++++++++++++++++++++----
+ tests/test_routing.py         | 124 +++++++++++++++++++++++++++++++++++++++++-
+ 5 files changed, 242 insertions(+), 15 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="15">
+              <div class="meta">
+                <span>2026-06-23_14-25-22</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Add show ip routing-table command family</h2>
+              <p>Supports active route display and protocol filtering for direct/connected/static/dynamic routes.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>tests/test_routing.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Implement show ip routing-table in RM because RM owns route selection while exposing the VRP-style IP command path.</li><li>Add show ip as a visible command group; keep show rm incomplete as previously required.</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html |  51 +++++++++++-
+ src/IP/ICMP/ping.py           |   2 +-
+ src/RM/__init__.py            |  20 ++++-
+ src/RM/commands.py            | 105 +++++++++++++++++++++++
+ src/RM/routes.py              |  85 ++++++++++++++++---
+ tests/test_core.py            |   7 +-
+ tests/test_routing.py         | 190 +++++++++++++++++++++++++++++++++++++++++-
+ 7 files changed, 442 insertions(+), 18 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="16">
+              <div class="meta">
+                <span>2026-06-23_14-28-18</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Add VRP-style show ip interface command family</h2>
+              <p>Added detail, brief, description, type filters, ip-configured filters, except filters, and per-interface variants.</p>
+              <h3>Files</h3>
+              <ul><li>src/IP/commands.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Expose display ip interface as VVRP show ip interface while keeping show host ip interface for host-only diagnostics.</li><li>Use imported/VVRP IFNET interfaces plus VVRP IP state, not raw host interface addresses, for show ip interface output.</li></ul>
+              <h3>Architecture</h3>
+              <p>IP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html |  78 ++++++++++++++++-
+ src/IP/ICMP/ping.py           |   2 +-
+ src/IP/commands.py            | 180 +++++++++++++++++++++++++++++++++++++++
+ src/RM/__init__.py            |  20 ++++-
+ src/RM/commands.py            | 105 +++++++++++++++++++++++
+ src/RM/routes.py              |  85 ++++++++++++++++---
+ tests/test_core.py            |  92 +++++++++++++++++++-
+ tests/test_routing.py         | 190 +++++++++++++++++++++++++++++++++++++++++-
+ 8 files changed, 733 insertions(+), 19 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="17">
+              <div class="meta">
+                <span>2026-06-23_15-42-15</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Refactor FIB into forwarding-plane table</h2>
+              <p>Only active RM routes are installed into FIB; inactive RIB candidates remain in RM route table only.</p>
+              <h3>Files</h3>
+              <ul><li>src/FIB/models.py</li><li>src/FIB/table.py</li><li>src/FIB/commands.py</li><li>src/FIB/__init__.py</li><li>src/DPlane/models.py</li><li>src/DPlane/backend.py</li><li>src/DPlane/__init__.py</li><li>src/RM/routes.py</li><li>src/CCmd/examples.py</li><li>tests/test_routing.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>FIB no longer reverse-queries RM; RM synchronizes active routes into FIB.</li><li>FIB owns installed forwarding entries and exposes show fib commands.</li><li>DPlane backend now has forwarding install/delete hooks as the VOS/ASIC abstraction.</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, DPlane, FIB, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 106 +++++++++++++++-
+ src/CCmd/examples.py          |   2 +
+ src/DPlane/__init__.py        |   9 +-
+ src/DPlane/backend.py         |  38 +++++-
+ src/DPlane/models.py          |  22 ++++
+ src/FIB/__init__.py           |  14 ++-
+ src/FIB/models.py             |  14 ++-
+ src/FIB/table.py              | 123 ++++++++++++++++--
+ src/IP/ICMP/ping.py           |   2 +-
+ src/IP/commands.py            | 180 ++++++++++++++++++++++++++
+ src/RM/__init__.py            |  20 ++-
+ src/RM/commands.py            | 105 ++++++++++++++++
+ src/RM/routes.py              | 100 +++++++++++++--
+ tests/test_core.py            | 109 +++++++++++++++-
+ tests/test_routing.py         | 287 +++++++++++++++++++++++++++++++++++++++++-
+ 15 files changed, 1089 insertions(+), 42 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="18">
+              <div class="meta">
+                <span>2026-06-23_15-47-15</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Install active routes into FIB from routing-table path</h2>
+              <p>Fixes the case where show ip routing-table displayed a Direct route but show fib remained empty.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>src/CCmd/examples.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>When RM builds or reads the active route table for show ip routing-table, synchronize active routes into FIB using the configured packet devices.</li><li>Default CLI passes the Npcap device provider to RM so show fib reflects active direct routes.</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 141 ++++++++++++++++++-
+ src/CCmd/examples.py          |   4 +
+ src/DPlane/__init__.py        |   9 +-
+ src/DPlane/backend.py         |  38 ++++-
+ src/DPlane/models.py          |  22 +++
+ src/FIB/__init__.py           |  14 +-
+ src/FIB/models.py             |  14 +-
+ src/FIB/table.py              | 123 ++++++++++++++--
+ src/IP/ICMP/ping.py           |   2 +-
+ src/IP/commands.py            | 180 ++++++++++++++++++++++++
+ src/RM/__init__.py            |  20 ++-
+ src/RM/commands.py            | 142 +++++++++++++++++++
+ src/RM/routes.py              | 100 +++++++++++--
+ tests/test_core.py            | 109 ++++++++++++++-
+ tests/test_routing.py         | 318 +++++++++++++++++++++++++++++++++++++++++-
+ 15 files changed, 1194 insertions(+), 42 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="19">
+              <div class="meta">
+                <span>2026-06-23_15-50-26</span>
+                <span>main</span>
+                <span>b075c88</span>
+              </div>
+              <h2>Fix FIB installed RM_IM interface compatibility</h2>
+              <p>Fixes ping handler errors caused by FIB entries carrying RM_IM_Interface objects.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/IM/models.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>RM_IM_Interface now exposes addresses_by_family so FIB-installed RM interfaces satisfy packet-path interface expectations.</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.html | 176 ++++++++++++++++++++++-
+ src/CCmd/examples.py          |   4 +
+ src/DPlane/__init__.py        |   9 +-
+ src/DPlane/backend.py         |  38 ++++-
+ src/DPlane/models.py          |  22 +++
+ src/FIB/__init__.py           |  14 +-
+ src/FIB/models.py             |  14 +-
+ src/FIB/table.py              | 123 ++++++++++++++--
+ src/IP/ICMP/ping.py           |   2 +-
+ src/IP/commands.py            | 180 +++++++++++++++++++++++
+ src/RM/IM/models.py           |   3 +
+ src/RM/__init__.py            |  20 ++-
+ src/RM/commands.py            | 142 +++++++++++++++++++
+ src/RM/routes.py              | 100 +++++++++++--
+ tests/test_core.py            | 109 +++++++++++++-
+ tests/test_routing.py         | 322 +++++++++++++++++++++++++++++++++++++++++-
+ 16 files changed, 1236 insertions(+), 42 deletions(-)</pre>
+              </details>
+            </article>
+            
+    <nav><a href="page-001.html">1</a> <strong>2</strong> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a></nav>
+  </main>
+</body>
+</html>

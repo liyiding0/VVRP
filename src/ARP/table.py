@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import time
 from dataclasses import dataclass
 from typing import Literal
@@ -38,7 +39,9 @@ class ArpTable:
         interface_name: str,
         now: float | None = None,
         entry_type: ArpEntryType = "dynamic",
-    ) -> ArpEntry:
+    ) -> ArpEntry | None:
+        if _should_ignore_arp_ip(ip_address):
+            return None
         timestamp = time.time() if now is None else float(now)
         entry = ArpEntry(
             ip_address=str(ip_address),
@@ -84,3 +87,11 @@ class ArpTable:
 
     def clear(self) -> None:
         self._entries.clear()
+
+
+def _should_ignore_arp_ip(ip_address: str) -> bool:
+    try:
+        address = ipaddress.IPv4Address(ip_address)
+    except ipaddress.AddressValueError:
+        return True
+    return address.is_unspecified

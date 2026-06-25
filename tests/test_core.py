@@ -77,10 +77,12 @@ from src.IP.ICMP.ping import (
     ICMP_classify_ping_target,
     ICMP_format_ping_reply,
     ICMP_format_ping_statistics,
+    ICMP_parse_ipv4_packet,
     ICMP_parse_ping_arguments,
     ICMP_run_ping,
 )
-from src.IP.ICMP.packet import g_ICMP_CODE, g_ICMP_ECHO_REPLY, ICMP_checksum
+from src.IP.ICMP.packet import g_ICMP_CODE, g_ICMP_ECHO_REPLY, ICMP_checksum, ICMP_parse_echo
+from src.IP.ICMP.replies import ICMP_record_echo_reply
 from src.IP.static import (
     IP_StaticIpv4Address,
     IP_StaticIpv4Result,
@@ -89,6 +91,7 @@ from src.IP.static import (
     IP_parse_static_ipv4_address,
     IP_validate_static_ipv4_address_for_interface,
 )
+from src.VVRP import VVRP_Runtime
 
 
 def build_registry(calls: list[tuple[str, dict[str, str]]] | None = None) -> CommandRegistry:
@@ -744,6 +747,55 @@ class FakeDPlaneBackend:
         from src.DPlane import DPlane_Result
 
         return DPlane_Result(ok=True)
+
+
+class VVRPRuntimeTests(unittest.TestCase):
+    def test_ethernet_port_is_opened_before_fwd_uses_it(self):
+        class TrackingPort:
+            def __init__(self):
+                self.opened = False
+
+            def open(self):
+                self.opened = True
+
+            def close(self):
+                return None
+
+            def recv_frame(self):
+                return None
+
+            def send_frame(self, frame):
+                if not self.opened:
+                    raise RuntimeError("port is not open")
+
+            def set_filter(self, expression):
+                return None
+
+        class TrackingDPlaneBackend(FakeDPlaneBackend):
+            def __init__(self):
+                super().__init__((NpcapDevice(name=r"\Device\NPF_eth0", description="eth0"),))
+                self.port = TrackingPort()
+
+            def DPlane_open_packet_port(self, DPlane_device):
+                return self.port
+
+        backend = TrackingDPlaneBackend()
+        runtime = VVRP_Runtime(VVRP_dplane_backend=backend)
+        interface = NetworkInterface(
+            name="eth0",
+            kind="ethernet",
+            index=1,
+            is_up=True,
+            mac_address="02:00:00:00:00:01",
+            speed_mbps=1000,
+            ifnet_index=1,
+            mtu=1500,
+        )
+
+        port = runtime.VVRP_ethernet_port(interface)
+
+        self.assertIs(port, backend.port)
+        self.assertTrue(port.opened)
 
 
 def register_host_interface_commands_for_test(
@@ -3551,7 +3603,68 @@ class PingTests(unittest.TestCase):
         result = ICMP_run_ping("-c 1 -m 0 192.0.2.1", ICMP_output=output, ICMP_pinger=pinger)
 
         self.assertFalse(result.ICMP_ok)
-        self.assertIn("FWD", result.ICMP_message)
+        self.assertIn("VVRP forwarder", output.getvalue())
+
+    def test_vvrp_packet_ping_prints_echo_reply_from_dplane_input(self):
+        from ipaddress import IPv4Network
+
+        from src.FIB import FIB_sync_active_routes
+        from src.RM import RMRoute
+        from src.SOCK import SOCK_SendResult
+
+        class ReplyingForwarder:
+            def FWD_send_packet(self, SOCK_packet, SOCK_route):
+                ICMP_ipv4 = ICMP_parse_ipv4_packet(SOCK_packet)
+                ICMP_echo = ICMP_parse_echo(ICMP_ipv4.ICMP_payload)
+                assert ICMP_echo is not None
+                ICMP_record_echo_reply(
+                    ctx.state,
+                    ICMP_source=ICMP_ipv4.ICMP_destination,
+                    ICMP_destination=ICMP_ipv4.ICMP_source,
+                    ICMP_identifier=ICMP_echo.ICMP_identifier,
+                    ICMP_sequence=ICMP_echo.ICMP_sequence,
+                    ICMP_ttl=64,
+                    ICMP_payload=ICMP_echo.ICMP_payload,
+                )
+                return SOCK_SendResult(SOCK_ok=True)
+
+        ctx = CliContext(output=io.StringIO())
+        stage_import_interface(ctx.state, "eth3")
+        commit_imports(ctx.state)
+        set_interface_addresses(
+            ctx.state,
+            "eth3",
+            (InterfaceAddress(family="ipv4", address="192.0.2.10", prefix_length=24),),
+        )
+        set_interface_mac_address(ctx.state, "eth3", "02:00:00:00:00:01")
+        provider = FakeInterfaceProvider((fake_ethernet("eth3"),))
+        FIB_sync_active_routes(
+            ctx.state,
+            (
+                RMRoute(
+                    destination=IPv4Network("192.0.2.0/24"),
+                    source="connected",
+                    interface=replace(fake_ethernet("eth3"), mac_address="02:00:00:00:00:01"),
+                    source_ip="192.0.2.10",
+                ),
+            ),
+        )
+        pinger = ICMP_VvrpPacketPinger(
+            ctx,
+            ICMP_ifnet_provider=provider,
+            ICMP_socket_forwarder=ReplyingForwarder(),
+            ICMP_identifier=0x1234,
+        )
+        output = io.StringIO()
+
+        result = ICMP_run_ping("-c 1 -m 0 192.0.2.1", ICMP_output=output, ICMP_pinger=pinger)
+
+        self.assertTrue(result.ICMP_ok)
+        text = output.getvalue()
+        self.assertIn("Reply from 192.0.2.1", text)
+        self.assertIn("Sequence=1", text)
+        self.assertIn("ttl=64", text)
+        self.assertIn("1 packet(s) received", text)
 
     def test_ping_command_is_available_in_all_modes(self):
         registry = build_default_registry()

@@ -3,11 +3,17 @@ from __future__ import annotations
 import unittest
 from ipaddress import IPv4Network
 
-from src.ARP import ArpTable
-from src.ETHERNET import ETHERTYPE_IPV4, parse_ethernet_ii_frame
+from src.ARP import ARP_REPLY, ARP_REQUEST, ZERO_MAC, ArpPacket, ArpTable, get_arp_table, parse_arp_packet
+from src.ETHERNET import BROADCAST_MAC, ETHERTYPE_ARP, ETHERTYPE_IPV4, EthernetFrame, parse_ethernet_ii_frame
 from src.FIB import FIBEntry, FIB_table
-from src.FWD import FWD_EthernetOutputHandler, FWD_Forwarder, FWD_default_forwarder
-from src.IFNET import NetworkInterface
+from src.FWD import (
+    FWD_EthernetOutputHandler,
+    FWD_Forwarder,
+    FWD_InputDispatcher,
+    FWD_default_forwarder,
+    FWD_default_input_dispatcher,
+)
+from src.IFNET import InterfaceAddress, NetworkInterface
 from src.IP.ipv4 import IP_build_ipv4_packet
 from src.RM import RMRoute
 from src.SOCK import SOCK_AF_INET, SOCK_IPPROTO_ICMP, SOCK_SOCK_RAW, SOCK_sendto, SOCK_socket
@@ -63,7 +69,9 @@ class FwdTests(unittest.TestCase):
 
         self.assertFalse(result.FWD_ok)
         self.assertIn("adjacency unresolved", result.FWD_message)
-        self.assertEqual([], port.frames)
+        self.assertEqual(1, len(port.frames))
+        frame = parse_ethernet_ii_frame(port.frames[0])
+        self.assertEqual(ETHERTYPE_ARP, frame.ethertype)
 
     def test_fwd_uses_route_next_hop_for_ethernet_adjacency(self):
         state = {}
@@ -89,6 +97,44 @@ class FwdTests(unittest.TestCase):
         frame = parse_ethernet_ii_frame(port.frames[0])
         self.assertEqual("66:77:88:99:aa:bb", frame.destination)
 
+    def test_fwd_sends_arp_request_then_ipv4_after_adjacency_is_learned(self):
+        state = {}
+        interface = fwd_interface("eth4")
+        route = fwd_route(interface, "192.0.2.0/24", "192.0.2.10")
+        packet = IP_build_ipv4_packet("192.0.2.10", "192.0.2.1", 1, b"hello")
+        arp = ArpTable()
+
+        class ResolvingPort(FakeRawFramePort):
+            def send_frame(self, frame: bytes) -> None:
+                super().send_frame(frame)
+                parsed = parse_ethernet_ii_frame(frame)
+                if parsed.ethertype == ETHERTYPE_ARP:
+                    request = parse_arp_packet(parsed.payload)
+                    if request.operation == ARP_REQUEST:
+                        arp.learn(request.target_ip, "66:77:88:99:aa:bb", "eth4")
+
+        port = ResolvingPort()
+        result = FWD_EthernetOutputHandler(
+            state,
+            FWD_port_provider=lambda current_interface: port,
+            FWD_arp_table=arp,
+            FWD_arp_timeout_seconds=0.1,
+            FWD_sleep=lambda seconds: None,
+        ).FWD_send_packet(packet, route, interface)
+
+        self.assertTrue(result.FWD_ok)
+        self.assertEqual(2, len(port.frames))
+        arp_request = parse_ethernet_ii_frame(port.frames[0])
+        self.assertEqual(ETHERTYPE_ARP, arp_request.ethertype)
+        self.assertEqual("ff:ff:ff:ff:ff:ff", arp_request.destination)
+        arp_packet = parse_arp_packet(arp_request.payload)
+        self.assertEqual("192.0.2.1", arp_packet.target_ip)
+
+        ipv4_frame = parse_ethernet_ii_frame(port.frames[1])
+        self.assertEqual(ETHERTYPE_IPV4, ipv4_frame.ethertype)
+        self.assertEqual("66:77:88:99:aa:bb", ipv4_frame.destination)
+        self.assertEqual(packet, ipv4_frame.payload[: len(packet)])
+
     def test_fwd_reports_unsupported_future_interface_type(self):
         state = {}
         interface = fwd_interface("ppp0", kind="ppp")
@@ -100,6 +146,136 @@ class FwdTests(unittest.TestCase):
 
         self.assertFalse(result.FWD_ok)
         self.assertIn("unsupported interface type: ppp", result.FWD_message)
+
+    def test_fwd_input_dispatches_by_interface_type(self):
+        calls = []
+
+        class Handler:
+            def FWD_handle_frame(self, FWD_interface, FWD_frame):
+                calls.append((FWD_interface.name, FWD_frame))
+
+        dispatcher = FWD_InputDispatcher({}, FWD_handlers={"ethernet": Handler()})
+
+        dispatcher.FWD_handle_frame(fwd_interface("eth4"), b"frame")
+        dispatcher.FWD_handle_frame(fwd_interface("ppp0", kind="ppp"), b"ignored")
+
+        self.assertEqual([("eth4", b"frame")], calls)
+
+    def test_default_fwd_input_dispatcher_delivers_ethernet_frame(self):
+        from src.CCmd import CliContext
+        from src.ETHERNET import build_ethernet_ii_frame
+        from src.IP.ICMP.packet import ICMP_build_echo_request, ICMP_parse_echo
+        from src.IP.ICMP.ping import (
+            ICMP_build_ipv4_packet,
+            ICMP_parse_ipv4_packet,
+            g_ICMP_IPV4_PROTOCOL_ICMP,
+        )
+
+        ctx = CliContext()
+        interface = fwd_interface("eth4")
+        interface = NetworkInterface(
+            name=interface.name,
+            kind=interface.kind,
+            index=interface.index,
+            is_up=interface.is_up,
+            mac_address=interface.mac_address,
+            speed_mbps=interface.speed_mbps,
+            ifnet_index=interface.ifnet_index,
+            mtu=interface.mtu,
+            addresses=(
+                InterfaceAddress(
+                    family="ipv4",
+                    address="192.0.2.10",
+                    prefix_length=24,
+                ),
+            ),
+        )
+        echo_request = ICMP_build_echo_request(0x1234, 1, b"hello")
+        ipv4 = ICMP_build_ipv4_packet(
+            "192.0.2.1",
+            "192.0.2.10",
+            g_ICMP_IPV4_PROTOCOL_ICMP,
+            echo_request,
+        )
+        raw = build_ethernet_ii_frame(
+            destination=interface.mac_address,
+            source="66:77:88:99:aa:bb",
+            ethertype=ETHERTYPE_IPV4,
+            payload=ipv4,
+        )
+        sent = []
+        dispatcher = FWD_default_input_dispatcher(
+            ctx,
+            FWD_ethernet_send_frame=lambda frame: sent.append(frame),
+        )
+
+        dispatcher.FWD_handle_frame(interface, raw)
+
+        self.assertEqual(1, len(sent))
+        reply_frame = parse_ethernet_ii_frame(sent[0])
+        reply_ipv4 = ICMP_parse_ipv4_packet(reply_frame.payload)
+        self.assertEqual("192.0.2.10", reply_ipv4.ICMP_source)
+        self.assertEqual("192.0.2.1", reply_ipv4.ICMP_destination)
+        echo = ICMP_parse_echo(reply_ipv4.ICMP_payload)
+        self.assertIsNotNone(echo)
+        self.assertTrue(echo.ICMP_is_echo_reply)
+
+    def test_default_fwd_input_dispatcher_replies_to_arp_request_for_local_ip(self):
+        from src.CCmd import CliContext
+
+        ctx = CliContext()
+        interface = NetworkInterface(
+            name="eth4",
+            kind="ethernet",
+            index=1,
+            is_up=True,
+            mac_address="02:00:00:00:00:01",
+            speed_mbps=1000,
+            ifnet_index=1,
+            mtu=1500,
+            addresses=(
+                InterfaceAddress(
+                    family="ipv4",
+                    address="192.0.2.10",
+                    prefix_length=24,
+                ),
+            ),
+        )
+        request = ArpPacket(
+            operation=ARP_REQUEST,
+            sender_mac="66:77:88:99:aa:bb",
+            sender_ip="192.0.2.1",
+            target_mac=ZERO_MAC,
+            target_ip="192.0.2.10",
+        )
+        raw = EthernetFrame(
+            destination=BROADCAST_MAC,
+            source="66:77:88:99:aa:bb",
+            ethertype=ETHERTYPE_ARP,
+            payload=request.to_bytes(),
+        ).to_bytes()
+        sent = []
+        dispatcher = FWD_default_input_dispatcher(
+            ctx,
+            FWD_ethernet_send_frame=lambda frame: sent.append(frame),
+        )
+
+        dispatcher.FWD_handle_frame(interface, raw)
+
+        self.assertEqual(1, len(sent))
+        reply_frame = parse_ethernet_ii_frame(sent[0])
+        self.assertEqual(ETHERTYPE_ARP, reply_frame.ethertype)
+        self.assertEqual("66:77:88:99:aa:bb", reply_frame.destination)
+        self.assertEqual("02:00:00:00:00:01", reply_frame.source)
+        reply = parse_arp_packet(reply_frame.payload)
+        self.assertEqual(ARP_REPLY, reply.operation)
+        self.assertEqual("02:00:00:00:00:01", reply.sender_mac)
+        self.assertEqual("192.0.2.10", reply.sender_ip)
+        self.assertEqual("66:77:88:99:aa:bb", reply.target_mac)
+        self.assertEqual("192.0.2.1", reply.target_ip)
+        learned = get_arp_table(ctx.state).lookup("192.0.2.1", "eth4")
+        self.assertIsNotNone(learned)
+        self.assertEqual("66:77:88:99:aa:bb", learned.mac_address)
 
     def test_sock_can_use_fwd_forwarder(self):
         state = {}
