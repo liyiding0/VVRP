@@ -12,7 +12,7 @@ from src.RM.IM import (
     RM_IM_register_event_handlers,
 )
 from src.events import VVRP_EventBus
-from src.IFNET.state import set_interface_addresses
+from src.IP.state import IP_set_interface_addresses
 from src.RM import (
     RM_RouteTable,
     RM_connected_routes,
@@ -29,7 +29,7 @@ from src.CCmd import CliContext, CommandRegistry, dispatch_line
 class RoutingModuleTests(unittest.TestCase):
     def test_rm_builds_connected_routes_from_ifnet_interfaces_without_import_state(self):
         RM_state = {}
-        set_interface_addresses(
+        IP_set_interface_addresses(
             RM_state,
             "eth4",
             (InterfaceAddress(family="ipv4", address="192.168.211.100", prefix_length=24),),
@@ -45,12 +45,12 @@ class RoutingModuleTests(unittest.TestCase):
 
     def test_rm_lookup_route_uses_longest_prefix_match(self):
         RM_state = {}
-        set_interface_addresses(
+        IP_set_interface_addresses(
             RM_state,
             "eth4",
             (InterfaceAddress(family="ipv4", address="192.168.211.100", prefix_length=24),),
         )
-        set_interface_addresses(
+        IP_set_interface_addresses(
             RM_state,
             "eth5",
             (InterfaceAddress(family="ipv4", address="192.168.211.129", prefix_length=25),),

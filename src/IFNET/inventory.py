@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from .admin import InterfaceAdminProvider, OsInterfaceAdminProvider
-from .discovery import InterfaceProvider, discover_interfaces
+from .admin import InterfaceAdminProvider
+from .discovery import InterfaceProvider, assign_ifnet_indices
 from .models import NetworkInterface
 
 
@@ -18,7 +18,7 @@ class IfnetManager:
         admin_provider: InterfaceAdminProvider | None = None,
     ) -> None:
         self.provider = provider
-        self.admin_provider = admin_provider or OsInterfaceAdminProvider()
+        self.admin_provider = admin_provider
         self._interfaces_by_name: dict[str, NetworkInterface] = {}
         self._loaded = False
 
@@ -40,7 +40,7 @@ class IfnetManager:
             self.refresh()
 
     def refresh(self) -> tuple[NetworkInterface, ...]:
-        interfaces = discover_interfaces(self.provider)
+        interfaces = assign_ifnet_indices(self.provider.list_interfaces()) if self.provider else ()
         self.merge(interfaces)
         self._loaded = True
         return interfaces

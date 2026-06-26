@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import ipaddress
 from collections.abc import Callable, Sequence
+from dataclasses import replace
+from datetime import datetime, timezone
 
 from src.CCmd.models import CommandResult
 from src.CCmd.registry import CommandRegistry
@@ -17,13 +19,14 @@ from src.CCmd.running_config import (
 )
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
-from src.IFNET.imports import imported_interfaces
+from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import InterfaceAddress, NetworkInterface
-from src.IFNET.state import is_admin_down, set_interface_addresses
+from src.IFNET.state import IFNET_set_interface_protocol_state, is_admin_down
 
 from .dhcp import IP_DhcpClientProvider
 from .ICMP.ping import g_ICMP_PING_ARGUMENT_PATTERN, ICMP_run_ping
+from .state import IP_set_interface_addresses
 from .static import (
     IP_StaticIpv4Address,
     IP_StaticIpv4Provider,
@@ -661,7 +664,7 @@ def _IP_list_vvrp_interfaces(
     interfaces = _IP_list_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interfaces, CommandResult):
         return interfaces
-    return imported_interfaces(ctx.state, interfaces)
+    return IFNET_ethernet_interface_snapshots(ctx.state, interfaces)
 
 
 def _IP_get_interface(
@@ -837,6 +840,7 @@ def _IP_set_vvrp_static_ipv4(
         current.append(address)
     else:
         current = [address, *[item for item in current if item.secondary]]
+    protocol_was_up = _IP_protocol_is_up(interface, ctx.state)
     _IP_apply_vvrp_static_ipv4_addresses(ctx, interface.name, tuple(current))
     _IP_call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
 
@@ -852,7 +856,16 @@ def _IP_set_vvrp_static_ipv4(
         _IP_static_ipv4_config_key(address),
         line,
     )
-    return CommandResult(ok=not config_error, message=config_error)
+    if config_error:
+        return CommandResult(ok=False, message=config_error)
+    return CommandResult(
+        message=_IP_protocol_transition_message(
+            ctx,
+            interface,
+            tuple(current),
+            protocol_was_up,
+        )
+    )
 
 
 def _IP_remove_static_ipv4(
@@ -960,10 +973,20 @@ def _IP_remove_vvrp_static_ipv4(
             return CommandResult(ok=False, message=str(exc))
 
     if address is None:
+        protocol_was_up = _IP_protocol_is_up(interface, ctx.state)
         _IP_apply_vvrp_static_ipv4_addresses(ctx, interface.name, ())
         _IP_call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
         config_error = remove_interface_config_prefix(ctx, interface.name, "ip-address:")
-        return CommandResult(ok=not config_error, message=config_error)
+        if config_error:
+            return CommandResult(ok=False, message=config_error)
+        return CommandResult(
+            message=_IP_protocol_transition_message(
+                ctx,
+                interface,
+                (),
+                protocol_was_up,
+            )
+        )
 
     current = tuple(
         item
@@ -974,6 +997,7 @@ def _IP_remove_vvrp_static_ipv4(
             and item.secondary == address.secondary
         )
     )
+    protocol_was_up = _IP_protocol_is_up(interface, ctx.state)
     _IP_apply_vvrp_static_ipv4_addresses(ctx, interface.name, current)
     _IP_call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
     config_error = remove_interface_config_command(
@@ -981,7 +1005,16 @@ def _IP_remove_vvrp_static_ipv4(
         interface.name,
         _IP_static_ipv4_config_key(address),
     )
-    return CommandResult(ok=not config_error, message=config_error)
+    if config_error:
+        return CommandResult(ok=False, message=config_error)
+    return CommandResult(
+        message=_IP_protocol_transition_message(
+            ctx,
+            interface,
+            current,
+            protocol_was_up,
+        )
+    )
 
 
 def _IP_apply_vvrp_static_ipv4_addresses(
@@ -989,7 +1022,7 @@ def _IP_apply_vvrp_static_ipv4_addresses(
     interface_name: str,
     addresses: tuple[IP_StaticIpv4Address, ...],
 ) -> None:
-    set_interface_addresses(
+    IP_set_interface_addresses(
         ctx.state,
         interface_name,
         tuple(_IP_interface_address_from_static(address) for address in addresses),
@@ -1007,6 +1040,37 @@ def _IP_interface_address_from_static(address: IP_StaticIpv4Address) -> Interfac
         family="ipv4",
         address=address.address,
         prefix_length=address.prefix_length,
+    )
+
+
+def _IP_protocol_transition_message(
+    ctx,
+    interface: NetworkInterface,
+    addresses: tuple[IP_StaticIpv4Address, ...],
+    protocol_was_up: bool,
+) -> str:
+    updated = replace(
+        interface,
+        addresses=tuple(_IP_interface_address_from_static(address) for address in addresses),
+    )
+    protocol_is_up = _IP_protocol_is_up(updated, ctx.state)
+    if not protocol_was_up and protocol_is_up:
+        IFNET_set_interface_protocol_state(ctx.state, interface.name, "up")
+        return _IP_format_line_protocol_log(ctx.hostname, interface.name, "UP")
+    if protocol_was_up and not protocol_is_up:
+        IFNET_set_interface_protocol_state(ctx.state, interface.name, "down")
+        return _IP_format_line_protocol_log(ctx.hostname, interface.name, "DOWN")
+    IFNET_set_interface_protocol_state(ctx.state, interface.name, "up" if protocol_is_up else "down")
+    return ""
+
+
+def _IP_format_line_protocol_log(hostname: str, interface_name: str, state: str) -> str:
+    event_index = "1" if state == "UP" else "2"
+    timestamp = datetime.now(timezone.utc).astimezone().strftime("%b %d %Y %H:%M:%S%z")
+    timestamp = f"{timestamp[:-2]}:{timestamp[-2:]}"
+    return (
+        f"{timestamp} {hostname} %%01IFNET/4/LINK_STATE(l)[{event_index}]:"
+        f"The line protocol IP on the interface {interface_name} has entered the {state} state."
     )
 
 

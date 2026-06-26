@@ -1,12 +1,11 @@
 """Interface network discovery and CCmd registrations for VVRP."""
 
 from .commands import register_ifnet_commands
-from .admin import InterfaceAdminProvider, InterfaceAdminResult, OsInterfaceAdminProvider
+from .admin import InterfaceAdminProvider, InterfaceAdminResult
 from .discovery import (
     InterfaceDiscoveryError,
     InterfaceProvider,
-    PsutilInterfaceProvider,
-    discover_interfaces,
+    assign_ifnet_indices,
 )
 from .models import InterfaceAddress, InterfaceKind, NetworkInterface
 
@@ -18,8 +17,6 @@ __all__ = [
     "InterfaceKind",
     "InterfaceProvider",
     "NetworkInterface",
-    "OsInterfaceAdminProvider",
-    "PsutilInterfaceProvider",
-    "discover_interfaces",
+    "assign_ifnet_indices",
     "register_ifnet_commands",
 ]

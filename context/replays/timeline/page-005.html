@@ -27,7 +27,7 @@
     <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
   </header>
   <main>
-    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <strong>5</strong></nav>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <strong>5</strong> <a href="page-006.html">6</a></nav>
     
             <article class="card" id="40">
               <div class="meta">
@@ -299,7 +299,31 @@
               </details>
             </article>
             
-    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <strong>5</strong></nav>
+            <article class="card" id="49">
+              <div class="meta">
+                <span>2026-06-26_11-44-06</span>
+                <span>main</span>
+                <span>047b3d2</span>
+              </div>
+              <h2>Extract per-media FWD adjacency handlers</h2>
+              <p>Moved next-hop/direct adjacency selection out of the generic FWD API into a per-media adjacency registry. Ethernet now registers an adjacency handler that resolves gateway routes to FIB next_hop_ip and direct routes to the IPv4 destination; PPP/Tunnel can later register their own handlers without changing the FWD dispatcher.</p>
+              <h3>Files</h3>
+              <ul><li>src\FWD\adjacency.py</li><li>src\FWD\ethernet.py</li><li>src\FWD\forwarder.py</li><li>src\FWD\__init__.py</li><li>tests\test_fwd.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>FWD, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>src/FWD/__init__.py  | 17 +++++++++++++++--
+ src/FWD/ethernet.py  | 24 ++++++++++++------------
+ src/FWD/forwarder.py |  4 ++++
+ tests/test_fwd.py    | 49 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 80 insertions(+), 14 deletions(-)</pre>
+              </details>
+            </article>
+            
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <strong>5</strong> <a href="page-006.html">6</a></nav>
   </main>
 </body>
 </html>

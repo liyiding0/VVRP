@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from src.ARP import ArpTable
 from src.CCmd.models import CliContext, CommandResult
 from src.DPlane import DPlane_Backend, DPlane_create_backend
+from src.DPlane.backend import DPlane_AdminProviderAdapter, DPlane_InterfaceProviderAdapter
 from src.DPlane.input import DPlane_PacketInputService
 from src.DPlane.ip_config import DPlane_DhcpClientProvider, DPlane_StaticIpv4Provider
 from src.ETHERNET.frame_debug import ETHERNET_FrameDebugService
@@ -12,7 +13,7 @@ from src.FIB import FIB_sync_active_routes
 from src.FWD import FWD_default_forwarder
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceProvider
-from src.IFNET.imports import imported_interfaces
+from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET.inventory import get_ifnet_manager
 from src.IP.dhcp import IP_DhcpClientProvider
 from src.IP.static import IP_StaticIpv4Provider
@@ -32,6 +33,13 @@ class VVRP_Runtime:
         self.VVRP_dplane_backend = self.VVRP_dplane_backend or DPlane_create_backend(
             DPlane_ifnet_provider=self.VVRP_ifnet_provider,
             DPlane_admin_provider=self.VVRP_ifnet_admin_provider,
+        )
+        self.VVRP_ifnet_provider = self.VVRP_ifnet_provider or DPlane_InterfaceProviderAdapter(
+            self.VVRP_dplane_backend
+        )
+        self.VVRP_ifnet_admin_provider = (
+            self.VVRP_ifnet_admin_provider
+            or DPlane_AdminProviderAdapter(self.VVRP_dplane_backend)
         )
         self.VVRP_dhcp_provider = self.VVRP_dhcp_provider or DPlane_DhcpClientProvider(
             self.VVRP_dplane_backend
@@ -54,24 +62,24 @@ class VVRP_Runtime:
     def VVRP_refresh_control_plane(self, VVRP_ctx: CliContext):
         VVRP_rm_table = RM_refresh_connected_routes_from_interfaces(
             VVRP_ctx,
-            lambda VVRP_current_ctx: self.VVRP_list_imported_interfaces(VVRP_current_ctx),
+            lambda VVRP_current_ctx: self.VVRP_list_ifnet_interfaces(VVRP_current_ctx),
         )
         if not isinstance(VVRP_rm_table, CommandResult):
             FIB_sync_active_routes(VVRP_ctx.state, VVRP_rm_table.RM_active_routes())
         return self.VVRP_packet_input.DPlane_refresh(VVRP_ctx)
 
-    def VVRP_list_imported_interfaces(self, VVRP_ctx: CliContext):
+    def VVRP_list_ifnet_interfaces(self, VVRP_ctx: CliContext):
         VVRP_interfaces = get_ifnet_manager(
             VVRP_ctx.state,
             provider=self.VVRP_ifnet_provider,
             admin_provider=self.VVRP_ifnet_admin_provider,
         ).list_interfaces()
-        return imported_interfaces(VVRP_ctx.state, VVRP_interfaces)
+        return IFNET_ethernet_interface_snapshots(VVRP_ctx.state, VVRP_interfaces)
 
     def VVRP_socket_forwarder(self, VVRP_ctx: CliContext):
         return FWD_default_forwarder(
             VVRP_ctx.state,
-            FWD_interfaces_provider=lambda: tuple(self.VVRP_list_imported_interfaces(VVRP_ctx)),
+            FWD_interfaces_provider=lambda: tuple(self.VVRP_list_ifnet_interfaces(VVRP_ctx)),
             FWD_ethernet_port_provider=lambda FWD_interface: self.VVRP_ethernet_port(
                 FWD_interface
             ),

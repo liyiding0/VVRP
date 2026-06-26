@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-26_11-44-06",
+  "prompt": "Extract per-media FWD adjacency handlers",
+  "changed_files": [
+    "src\\FWD\\adjacency.py",
+    "src\\FWD\\ethernet.py",
+    "src\\FWD\\forwarder.py",
+    "src\\FWD\\__init__.py",
+    "tests\\test_fwd.py"
+  ],
+  "note": "Moved next-hop/direct adjacency selection out of the generic FWD API into a per-media adjacency registry. Ethernet now registers an adjacency handler that resolves gateway routes to FIB next_hop_ip and direct routes to the IPv4 destination; PPP/Tunnel can later register their own handlers without changing the FWD dispatcher.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "047b3d26f79fc347efb32504fcb78be3ebaaed53",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "rc/FWD/__init__.py",
+    "src/FWD/ethernet.py",
+    "src/FWD/forwarder.py",
+    "tests/test_fwd.py",
+    "src/FWD/adjacency.py"
+  ],
+  "diff_stat": "src/FWD/__init__.py  | 17 +++++++++++++++--\n src/FWD/ethernet.py  | 24 ++++++++++++------------\n src/FWD/forwarder.py |  4 ++++\n tests/test_fwd.py    | 49 +++++++++++++++++++++++++++++++++++++++++++++++++\n 4 files changed, 80 insertions(+), 14 deletions(-)",
+  "diff_summary": "diff --git a/src/FWD/__init__.py b/src/FWD/__init__.py\nindex 450f88d..ba1cabc 100644\n--- a/src/FWD/__init__.py\n+++ b/src/FWD/__init__.py\n@@ -1,12 +1,25 @@\n \"\"\"Forwarding dispatch layer for VVRP.\"\"\"\n \n-from .ethernet import FWD_EthernetOutputHandler, FWD_next_hop_ip\n+from .adjacency import (\n+    FWD_Adjacency,\n+    FWD_AdjacencyError,\n+    FWD_AdjacencyHandler,\n+    FWD_AdjacencyRegistry,\n+    FWD_EthernetAdjacencyHandler,\n+    FWD_default_adjacency_registry,\n+)\n+from .ethernet import FWD_EthernetOutputHandler\n from .forwarder import FWD_Forwarder, FWD_default_forwarder\n from .input import FWD_EthernetInputHandler, FWD_InputDispatcher, FWD_default_input_dispatcher\n from .models import FWD_InputHandler, FWD_OutputHandler, FWD_RawFramePort, FWD_Result\n \n __all__ = [\n+    \"FWD_Adjacency\",\n+    \"FWD_AdjacencyError\",\n+    \"FWD_AdjacencyHandler\",\n+    \"FWD_AdjacencyRegistry\",\n     \"FWD_EthernetInputHandler\",\n+    \"FWD_EthernetAdjacencyHandler\",\n     \"FWD_EthernetOutputHandler\",\n     \"FWD_Forwarder\",\n     \"FWD_InputDispatcher\",\n@@ -14,7 +27,7 @@ __all__ = [\n     \"FWD_OutputHandler\",\n     \"FWD_RawFramePort\",\n     \"FWD_Result\",\n+    \"FWD_default_adjacency_registry\",\n     \"FWD_default_input_dispatcher\",\n     \"FWD_default_forwarder\",\n-    \"FWD_next_hop_ip\",\n ]\ndiff --git a/src/FWD/ethernet.py b/src/FWD/ethernet.py\nindex b639ff4..6169c9f 100644\n--- a/src/FWD/ethernet.py\n+++ b/src/FWD/ethernet.py\n@@ -7,8 +7,8 @@ from src.ARP import ArpProtocol, ArpTable, get_arp_table\n from src.ETHERNET import ETHERTYPE_IPV4, EthernetFrame\n from src.FIB import FIBEntry\n from src.IFNET.models import NetworkInterface\n-from src.IP.ipv4 import IP_parse_ipv4_packet\n \n+from .adjacency import FWD_AdjacencyError, FWD_AdjacencyRegistry, FWD_default_adjacency_registry\n from .models import FWD_RawFramePort, FWD_Result\n \n \n@@ -27,6 +27,7 @@ class FWD_EthernetOutputHandler:\n         FWD_arp_poll_interval_seconds: float = g_FWD_ARP_RESOLVE_INTERVAL_SECONDS,\n         FWD_monotonic: Callable[[], float] = time.monotonic,\n         FWD_sleep: Callable[[float], None] = time.sleep,\n+        FWD_adjacency_registry: FWD_AdjacencyRegistry | None = None,\n     ) -> None:\n         self.FWD_state = FWD_state\n         self.FWD_port_provider = FWD_port_provider\n@@ -35,6 +36,7 @@ class FWD_EthernetOutputHandler:\n         self.FWD_arp_poll_interval_seconds = FWD_arp_poll_interval_seconds\n         self.FWD_monotonic = FWD_monotonic\n         self.FWD_sleep = FWD_sleep\n+        self.FWD_adjacency_registry = FWD_adjacency_registry or FWD_default_adjacency_registry()\n \n     def FWD_send_packet(\n         self,\n@@ -49,16 +51,20 @@ class FWD_EthernetOutputHandler:\n                 FWD_route=FWD_route,\n             )\n         try:\n-            FWD_destination_ip = FWD_next_hop_ip(FWD_packet, FWD_route)\n-        except ValueError as FWD_exc:\n+            FWD_adjacency = self.FWD_adjacency_registry.FWD_resolve_adjacency(\n+                FWD_packet,\n+                FWD_route,\n+                FWD_interface,\n... truncated 131 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "FWD",
+      "tests"
+    ]
+  }
+}

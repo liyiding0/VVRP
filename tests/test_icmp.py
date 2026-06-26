@@ -12,8 +12,9 @@ from src.DPlane.input import DPlane_PacketInputService
 from src.DPlane.Windows.npcap import NpcapDevice
 from src.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
 from src.IFNET import InterfaceAddress, NetworkInterface
-from src.IFNET.imports import commit_imports, stage_import_interface
-from src.IFNET.state import set_interface_addresses, set_interface_mac_address
+from src.ETHERNET.device import ETHERNET_commit_device_changes, ETHERNET_stage_device_install
+from src.IFNET.state import set_interface_mac_address
+from src.IP.state import IP_set_interface_addresses
 from src.IP.ICMP.packet import ICMP_build_echo_request, ICMP_parse_echo
 from src.IP.ICMP.ping import g_ICMP_IPV4_PROTOCOL_ICMP, ICMP_build_ipv4_packet, ICMP_parse_ipv4_packet
 
@@ -116,9 +117,9 @@ class StopErrorDPlaneInputPort:
 class DPlanePacketInputTests(unittest.TestCase):
     def test_packet_input_replies_to_arp_and_icmp_echo_for_vvrp_ip(self):
         ctx = CliContext(output=io.StringIO())
-        stage_import_interface(ctx.state, "eth4")
-        commit_imports(ctx.state)
-        set_interface_addresses(
+        ETHERNET_stage_device_install(ctx.state, "eth4")
+        ETHERNET_commit_device_changes(ctx.state)
+        IP_set_interface_addresses(
             ctx.state,
             "eth4",
             (InterfaceAddress(family="ipv4", address="192.168.211.100", prefix_length=24),),
@@ -192,9 +193,9 @@ class DPlanePacketInputTests(unittest.TestCase):
     def test_packet_input_stop_suppresses_expected_read_error(self):
         output = io.StringIO()
         ctx = CliContext(output=output)
-        stage_import_interface(ctx.state, "eth4")
-        commit_imports(ctx.state)
-        set_interface_addresses(
+        ETHERNET_stage_device_install(ctx.state, "eth4")
+        ETHERNET_commit_device_changes(ctx.state)
+        IP_set_interface_addresses(
             ctx.state,
             "eth4",
             (InterfaceAddress(family="ipv4", address="192.168.211.100", prefix_length=24),),

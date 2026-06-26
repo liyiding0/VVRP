@@ -28,7 +28,7 @@ from src.ARP import ARP_REPLY, ArpPacket, get_arp_table
 from src.DPlane import DPlane_PlatformInfo, DPlane_Result
 from src.ETHERNET.frame_debug import ETHERNET_FrameDebugService
 from src.DPlane.Windows.npcap import NpcapDevice
-from src.IFNET.imports import commit_imports, stage_import_interface
+from src.ETHERNET.device import ETHERNET_commit_device_changes, ETHERNET_stage_device_install
 from src.IFNET.state import set_interface_mac_address
 from src.IFNET import InterfaceAddress, NetworkInterface
 
@@ -299,8 +299,8 @@ class EthernetDebugTests(unittest.TestCase):
         output = io.StringIO()
         ctx = CliContext(output=output)
         ctx.push_mode("privileged")
-        stage_import_interface(ctx.state, "eth4")
-        commit_imports(ctx.state)
+        ETHERNET_stage_device_install(ctx.state, "eth4")
+        ETHERNET_commit_device_changes(ctx.state)
 
         self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)
 
@@ -365,8 +365,8 @@ class EthernetDebugTests(unittest.TestCase):
         output = io.StringIO()
         ctx = CliContext(output=output)
         ctx.push_mode("privileged")
-        stage_import_interface(ctx.state, "eth4")
-        commit_imports(ctx.state)
+        ETHERNET_stage_device_install(ctx.state, "eth4")
+        ETHERNET_commit_device_changes(ctx.state)
         set_interface_mac_address(ctx.state, "eth4", "02:00:00:00:00:01")
 
         self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)

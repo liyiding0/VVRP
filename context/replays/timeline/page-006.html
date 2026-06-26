@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    nav { margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a, nav strong { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; }
+    nav a { color: #1f4f9a; text-decoration: none; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <strong>6</strong></nav>
+    
+            <article class="card" id="50">
+              <div class="meta">
+                <span>2026-06-26_14-14-50</span>
+                <span>main</span>
+                <span>047b3d2</span>
+              </div>
+              <h2>Emit IFNET line protocol up log on IPv4 address configuration</h2>
+              <p>Added a VRP-style IFNET LINK_STATE log when configuring the first VVRP IPv4 address transitions an Ethernet interface IP line protocol from down to up. Secondary address additions do not repeat the protocol-up log. DS/DATASYNC config-change logs are deferred until VVRP has a dedicated configuration sync/change notification subsystem.</p>
+              <h3>Files</h3>
+              <ul><li>src\IP\commands.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>IP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 20181 -&gt; 20487 bytes
+ context/replays/timeline/index.html    |   9 +++++-
+ context/replays/timeline/page-005.html |  24 ++++++++++++++++
+ src/FWD/__init__.py                    |  17 ++++++++++--
+ src/FWD/ethernet.py                    |  24 ++++++++--------
+ src/FWD/forwarder.py                   |   4 +++
+ src/IP/commands.py                     |  38 ++++++++++++++++++++++++-
+ tests/test_core.py                     |  25 ++++++++++++++++-
+ tests/test_fwd.py                      |  49 +++++++++++++++++++++++++++++++++
+ 9 files changed, 173 insertions(+), 17 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="51">
+              <div class="meta">
+                <span>2026-06-26_14-21-22</span>
+                <span>main</span>
+                <span>047b3d2</span>
+              </div>
+              <h2>Emit IFNET line protocol down log on IPv4 address removal</h2>
+              <p>Added VRP-style IFNET LINK_STATE DOWN logging when no ip address removes the last VVRP IPv4 address and transitions the interface IP line protocol from up to down. Removing secondary addresses while a primary IPv4 remains does not emit a DOWN log.</p>
+              <h3>Files</h3>
+              <ul><li>src\IP\commands.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>IP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 20181 -&gt; 22049 bytes
+ context/replays/timeline/index.html    |  16 +++++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |  28 +++++++++++++-
+ src/FWD/__init__.py                    |  17 ++++++++-
+ src/FWD/ethernet.py                    |  24 ++++++------
+ src/FWD/forwarder.py                   |   4 ++
+ src/IP/commands.py                     |  66 +++++++++++++++++++++++++++++++--
+ tests/test_core.py                     |  49 +++++++++++++++++++++++-
+ tests/test_fwd.py                      |  49 ++++++++++++++++++++++++
+ 13 files changed, 240 insertions(+), 29 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="52">
+              <div class="meta">
+                <span>2026-06-26_14-28-31</span>
+                <span>main</span>
+                <span>047b3d2</span>
+              </div>
+              <h2>Align IFNET Ethernet protocol display with IPv4 line protocol</h2>
+              <p>Fixed show interfaces brief/detail so imported Ethernet interfaces without IPv4 addresses show protocol down even when physical is up, matching show ip interface brief and the IFNET line protocol log behavior. Loopback spoofing behavior remains unchanged.</p>
+              <h3>Files</h3>
+              <ul><li>src\IFNET\commands.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>IFNET, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 20181 -&gt; 22279 bytes
+ context/replays/timeline/index.html    |  23 +++++++++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |  28 +++++++++++++-
+ src/FWD/__init__.py                    |  17 ++++++++-
+ src/FWD/ethernet.py                    |  24 ++++++------
+ src/FWD/forwarder.py                   |   4 ++
+ src/IFNET/commands.py                  |   8 ++++
+ src/IP/commands.py                     |  66 +++++++++++++++++++++++++++++++--
+ tests/test_core.py                     |  65 +++++++++++++++++++++++++++++++-
+ tests/test_fwd.py                      |  49 ++++++++++++++++++++++++
+ 14 files changed, 271 insertions(+), 29 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="53">
+              <div class="meta">
+                <span>2026-06-26_14-46-57</span>
+                <span>main</span>
+                <span>047b3d2</span>
+              </div>
+              <h2>Move VVRP interface IPv4 ownership into IP module</h2>
+              <p>Moved VVRP interface IPv4 address storage out of IFNET and into IP state. IFNET now keeps only interface admin/MAC/MTU/protocol state, while imported interface snapshots are assembled with IP-owned addresses for consumers such as RM, ARP, ICMP, and FWD. IP address changes update IFNET protocol state explicitly instead of IFNET deriving protocol state from addresses.</p>
+              <h3>Files</h3>
+              <ul><li>src\IP\state.py</li><li>src\IP\commands.py</li><li>src\IP\__init__.py</li><li>src\IFNET\state.py</li><li>src\IFNET\imports.py</li><li>src\IFNET\commands.py</li><li>tests\test_core.py</li><li>tests\test_routing.py</li><li>tests\test_icmp.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>IFNET, IP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 20181 -&gt; 22499 bytes
+ context/replays/timeline/index.html    |  30 ++++++++++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |  28 +++++++++++-
+ src/FWD/__init__.py                    |  17 ++++++-
+ src/FWD/ethernet.py                    |  24 +++++-----
+ src/FWD/forwarder.py                   |   4 ++
+ src/IFNET/commands.py                  |  15 +++++--
+ src/IFNET/imports.py                   |   6 ++-
+ src/IFNET/state.py                     |  48 ++++++++++----------
+ src/IP/__init__.py                     |  68 +++-------------------------
+ src/IP/commands.py                     |  74 ++++++++++++++++++++++++++++---
+ tests/test_core.py                     |  78 ++++++++++++++++++++++++++++++---
+ tests/test_fwd.py                      |  49 +++++++++++++++++++++
+ tests/test_icmp.py                     |   7 +--
+ tests/test_routing.py                  |   8 ++--
+ 19 files changed, 338 insertions(+), 134 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="54">
+              <div class="meta">
+                <span>2026-06-26_15-27-41</span>
+                <span>main</span>
+                <span>047b3d2</span>
+              </div>
+              <h2>Move Ethernet host device installation out of IFNET import path</h2>
+              <p>Introduced Ethernet device installation state under src/ETHERNET/device.py and moved runtime interface snapshot assembly into IFNET via src/IFNET/interfaces.py. DPlane host-interface import commands now install/uninstall Ethernet devices, formal src paths consume IFNET interface snapshots instead of IFNET import state, and IFNET/imports.py remains only as a compatibility facade during migration.</p>
+              <h3>Files</h3>
+              <ul><li>src\ETHERNET\device.py</li><li>src\IFNET\interfaces.py</li><li>src\IFNET\imports.py</li><li>src\DPlane\commands.py</li><li>src\DPlane\input.py</li><li>src\VVRP\runtime.py</li><li>src\IFNET\commands.py</li><li>src\IP\commands.py</li><li>src\ETHERNET\commands.py</li><li>src\ETHERNET\frame_debug.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>DPlane, ETHERNET, IFNET, IP, VVRP</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 20181 -&gt; 22904 bytes
+ context/replays/timeline/index.html    |  37 ++++++++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |  28 ++++++++-
+ src/CCmd/examples.py                   |   2 +-
+ src/DPlane/commands.py                 |  51 ++++++++-------
+ src/DPlane/input.py                    |   4 +-
+ src/ETHERNET/commands.py               |  28 ++++-----
+ src/ETHERNET/frame_debug.py            |   4 +-
+ src/FWD/__init__.py                    |  17 ++++-
+ src/FWD/ethernet.py                    |  24 ++++----
+ src/FWD/forwarder.py                   |   4 ++
+ src/IFNET/commands.py                  |  19 ++++--
+ src/IFNET/imports.py                   | 109 ++++++++-------------------------
+ src/IFNET/state.py                     |  48 +++++++--------
+ src/IP/__init__.py                     |  68 ++------------------
+ src/IP/commands.py                     |  78 ++++++++++++++++++++---
+ src/VVRP/runtime.py                    |  10 +--
+ tests/test_core.py                     |  78 ++++++++++++++++++++---
+ tests/test_fwd.py                      |  49 +++++++++++++++
+ tests/test_icmp.py                     |   7 ++-
+ tests/test_routing.py                  |   8 +--
+ 25 files changed, 419 insertions(+), 270 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="55">
+              <div class="meta">
+                <span>2026-06-26_15-36-30</span>
+                <span>main</span>
+                <span>047b3d2</span>
+              </div>
+              <h2>Remove IFNET import compatibility layer</h2>
+              <p>Removed IFNET import compatibility and OS/DPlane provider aliases from IFNET. Host-interface import remains a DPlane CLI operation that installs/uninstalls Ethernet devices through src/ETHERNET/device.py; IFNET now only keeps logical interface protocols, injected provider types, and runtime snapshots via src/IFNET/interfaces.py.</p>
+              <h3>Files</h3>
+              <ul><li>src\ETHERNET\device.py</li><li>src\IFNET\interfaces.py</li><li>src\IFNET\imports.py</li><li>src\DPlane\commands.py</li><li>src\DPlane\input.py</li><li>src\DPlane\backend.py</li><li>src\VVRP\runtime.py</li><li>src\CCmd\examples.py</li><li>src\IFNET\commands.py</li><li>src\IFNET\state.py</li><li>src\IFNET\discovery.py</li><li>src\IFNET\admin.py</li><li>src\IFNET\inventory.py</li><li>src\IFNET\__init__.py</li><li>src\IFNET\Ethernet\admin.py</li><li>src\IFNET\Ethernet\static.py</li><li>src\IFNET\Ethernet\dhcp.py</li><li>src\IFNET\Loopback\static.py</li><li>src\IP\commands.py</li><li>src\ETHERNET\commands.py</li><li>src\ETHERNET\frame_debug.py</li><li>tests\test_core.py</li><li>tests\test_icmp.py</li><li>tests\test_ethernet.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, DPlane, ETHERNET, IFNET, IP, VVRP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 20181 -&gt; 22904 bytes
+ context/replays/timeline/index.html    |  37 +++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |  28 +++-
+ src/CCmd/examples.py                   |   2 +-
+ src/DPlane/backend.py                  |   3 +-
+ src/DPlane/commands.py                 |  51 ++++----
+ src/DPlane/input.py                    |   4 +-
+ src/ETHERNET/commands.py               |  28 ++--
+ src/ETHERNET/frame_debug.py            |   4 +-
+ src/FWD/__init__.py                    |  17 ++-
+ src/FWD/ethernet.py                    |  24 ++--
+ src/FWD/forwarder.py                   |   4 +
+ src/IFNET/Ethernet/__init__.py         |   2 -
+ src/IFNET/Ethernet/admin.py            |   5 -
+ src/IFNET/Ethernet/dhcp.py             |   5 -
+ src/IFNET/Ethernet/static.py           |   5 -
+ src/IFNET/Loopback/static.py           |   5 -
+ src/IFNET/__init__.py                  |   9 +-
+ src/IFNET/admin.py                     |  17 +--
+ src/IFNET/commands.py                  |  19 ++-
+ src/IFNET/discovery.py                 |  52 +-------
+ src/IFNET/imports.py                   | 102 ---------------
+ src/IFNET/inventory.py                 |   8 +-
+ src/IFNET/state.py                     |  48 +++----
+ src/IP/__init__.py                     |  68 +---------
+ src/IP/commands.py                     |  78 +++++++++++-
+ src/VVRP/runtime.py                    |  18 ++-
+ tests/test_core.py                     | 226 +++++++++++++++++++++------------
+ tests/test_ethernet.py                 |  10 +-
+ tests/test_fwd.py                      |  49 +++++++
+ tests/test_icmp.py                     |  17 +--
+ tests/test_routing.py                  |   8 +-
+ 36 files changed, 496 insertions(+), 473 deletions(-)</pre>
+              </details>
+            </article>
+            
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <strong>6</strong></nav>
+  </main>
+</body>
+</html>

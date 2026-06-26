@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from src.IFNET.admin import InterfaceAdminProvider
-from src.IFNET.discovery import InterfaceProvider, discover_interfaces
+from src.IFNET.discovery import InterfaceProvider
 from src.IFNET.models import NetworkInterface
+from src.DPlane.interface_discovery import discover_interfaces
 
 from .models import (
     DPlane_Backend,

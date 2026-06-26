@@ -7,8 +7,8 @@ from src.ARP import ArpProtocol, ArpTable, get_arp_table
 from src.ETHERNET import ETHERTYPE_IPV4, EthernetFrame
 from src.FIB import FIBEntry
 from src.IFNET.models import NetworkInterface
-from src.IP.ipv4 import IP_parse_ipv4_packet
 
+from .adjacency import FWD_AdjacencyError, FWD_AdjacencyRegistry, FWD_default_adjacency_registry
 from .models import FWD_RawFramePort, FWD_Result
 
 
@@ -27,6 +27,7 @@ class FWD_EthernetOutputHandler:
         FWD_arp_poll_interval_seconds: float = g_FWD_ARP_RESOLVE_INTERVAL_SECONDS,
         FWD_monotonic: Callable[[], float] = time.monotonic,
         FWD_sleep: Callable[[float], None] = time.sleep,
+        FWD_adjacency_registry: FWD_AdjacencyRegistry | None = None,
     ) -> None:
         self.FWD_state = FWD_state
         self.FWD_port_provider = FWD_port_provider
@@ -35,6 +36,7 @@ class FWD_EthernetOutputHandler:
         self.FWD_arp_poll_interval_seconds = FWD_arp_poll_interval_seconds
         self.FWD_monotonic = FWD_monotonic
         self.FWD_sleep = FWD_sleep
+        self.FWD_adjacency_registry = FWD_adjacency_registry or FWD_default_adjacency_registry()
 
     def FWD_send_packet(
         self,
@@ -49,16 +51,20 @@ class FWD_EthernetOutputHandler:
                 FWD_route=FWD_route,
             )
         try:
-            FWD_destination_ip = FWD_next_hop_ip(FWD_packet, FWD_route)
-        except ValueError as FWD_exc:
+            FWD_adjacency = self.FWD_adjacency_registry.FWD_resolve_adjacency(
+                FWD_packet,
+                FWD_route,
+                FWD_interface,
+            )
+        except (FWD_AdjacencyError, ValueError) as FWD_exc:
             return FWD_Result(
                 FWD_ok=False,
-                FWD_message=f"% FWD invalid IPv4 packet: {FWD_exc}",
+                FWD_message=f"% FWD adjacency resolution failed: {FWD_exc}",
                 FWD_route=FWD_route,
             )
         FWD_port = self.FWD_port_provider(FWD_interface)
         FWD_arp_entry = self._FWD_resolve_arp(
-            FWD_destination_ip,
+            FWD_adjacency.FWD_target_ip,
             FWD_interface,
             FWD_port,
             FWD_route.source_ip,
@@ -67,7 +73,7 @@ class FWD_EthernetOutputHandler:
             return FWD_Result(
                 FWD_ok=False,
                 FWD_message=(
-                    f"% FWD adjacency unresolved: {FWD_destination_ip} "
+                    f"% FWD adjacency unresolved: {FWD_adjacency.FWD_target_ip} "
                     f"via {FWD_interface.name}"
                 ),
                 FWD_route=FWD_route,
@@ -122,9 +128,3 @@ class FWD_EthernetOutputHandler:
                 break
             self.FWD_sleep(min(self.FWD_arp_poll_interval_seconds, FWD_remaining))
         return FWD_table.lookup(FWD_destination_ip, FWD_interface.name)
-
-
-def FWD_next_hop_ip(FWD_packet: bytes, FWD_route: FIBEntry) -> str:
-    if FWD_route.next_hop_ip:
-        return FWD_route.next_hop_ip
-    return IP_parse_ipv4_packet(FWD_packet).IP_destination

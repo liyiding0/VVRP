@@ -14,11 +14,16 @@ from src.CCmd.running_config import (
 
 from .admin import InterfaceAdminProvider
 from .discovery import InterfaceDiscoveryError, InterfaceProvider
-from .imports import imported_interfaces
+from .interfaces import IFNET_ethernet_interface_snapshots
 from .inventory import IfnetManager, get_ifnet_manager
 from .models import InterfaceAddress, NetworkInterface
 from .policy import interface_can_shutdown
-from .state import is_admin_down, no_shutdown_interface, shutdown_interface
+from .state import (
+    IFNET_protocol_state_for_interface,
+    is_admin_down,
+    no_shutdown_interface,
+    shutdown_interface,
+)
 
 
 DEFAULT_IFNET_COMMAND_MODES = ("hidden", "interface")
@@ -203,7 +208,7 @@ def _list_vvrp_interfaces(
     result = _list_interfaces(ctx, provider, admin_provider)
     if isinstance(result, CommandResult):
         return result
-    return imported_interfaces(ctx.state, result)
+    return IFNET_ethernet_interface_snapshots(ctx.state, result)
 
 
 def _get_interface(
@@ -396,7 +401,9 @@ def _display_protocol(interface: NetworkInterface, state: dict) -> str:
         return "down"
     if interface.kind == "loopback" and interface.is_up:
         return "up(s)"
-    return _display_state(interface)
+    if not interface.is_up:
+        return "down"
+    return IFNET_protocol_state_for_interface(state, interface.name)
 
 
 def _display_protocol_upper(interface: NetworkInterface, state: dict) -> str:
@@ -404,7 +411,9 @@ def _display_protocol_upper(interface: NetworkInterface, state: dict) -> str:
         return "DOWN"
     if interface.kind == "loopback" and interface.is_up:
         return "UP(spoofing)"
-    return _display_state(interface).upper()
+    if not interface.is_up:
+        return "DOWN"
+    return IFNET_protocol_state_for_interface(state, interface.name).upper()
 
 
 def _display_mtu(mtu: int | None) -> str:

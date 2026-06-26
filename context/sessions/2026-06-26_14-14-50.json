@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-26_14-14-50",
+  "prompt": "Emit IFNET line protocol up log on IPv4 address configuration",
+  "changed_files": [
+    "src\\IP\\commands.py",
+    "tests\\test_core.py"
+  ],
+  "note": "Added a VRP-style IFNET LINK_STATE log when configuring the first VVRP IPv4 address transitions an Ethernet interface IP line protocol from down to up. Secondary address additions do not repeat the protocol-up log. DS/DATASYNC config-change logs are deferred until VVRP has a dedicated configuration sync/change notification subsystem.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "047b3d26f79fc347efb32504fcb78be3ebaaed53",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-005.html",
+    "src/FWD/__init__.py",
+    "src/FWD/ethernet.py",
+    "src/FWD/forwarder.py",
+    "src/IP/commands.py",
+    "tests/test_core.py",
+    "tests/test_fwd.py",
+    "context/commits/047b3d26f79f.json",
+    "context/sessions/2026-06-26_11-44-06.json",
+    "src/FWD/adjacency.py"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 20181 -> 20487 bytes\n context/replays/timeline/index.html    |   9 +++++-\n context/replays/timeline/page-005.html |  24 ++++++++++++++++\n src/FWD/__init__.py                    |  17 ++++++++++--\n src/FWD/ethernet.py                    |  24 ++++++++--------\n src/FWD/forwarder.py                   |   4 +++\n src/IP/commands.py                     |  38 ++++++++++++++++++++++++-\n tests/test_core.py                     |  25 ++++++++++++++++-\n tests/test_fwd.py                      |  49 +++++++++++++++++++++++++++++++++\n 9 files changed, 173 insertions(+), 17 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex 441532d..44d2092 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 9fab0d5..9dfb118 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>49 events, split into 5 page(s).</p>\n+    <p>50 events, split into 5 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -367,6 +367,13 @@\n               <td>e9796ed</td>\n               <td>main</td>\n             </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_11-44-06</td>\n+              <td><a href=\"page-005.html#49\">Extract per-media FWD adjacency handlers</a></td>\n+              <td>047b3d2</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-005.html b/context/replays/timeline/page-005.html\nindex c37f779..860d52c 100644\n--- a/context/replays/timeline/page-005.html\n+++ b/context/replays/timeline/page-005.html\n@@ -299,6 +299,30 @@\n               </details>\n             </article>\n             \n+            <article class=\"card\" id=\"49\">\n+              <div class=\"meta\">\n+                <span>2026-06-26_11-44-06</span>\n+                <span>main</span>\n+                <span>047b3d2</span>\n+              </div>\n+              <h2>Extract per-media FWD adjacency handlers</h2>\n+              <p>Moved next-hop/direct adjacency selection out of the generic FWD API into a per-media adjacency registry. Ethernet now registers an adjacency handler that resolves gateway routes to FIB next_hop_ip and direct routes to the IPv4 destination; PPP/Tunnel can later register their own handlers without changing the FWD dispatcher.</p>\n+              <h3>Files</h3>\n+              <ul><li>src\\FWD\\adjacency.py</li><li>src\\FWD\\ethernet.py</li><li>src\\FWD\\forwarder.py</li><li>src\\FWD\\__init__.py</li><li>tests\\test_fwd.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>None recorded</li></ul>\n+              <h3>Architecture</h3>\n+              <p>FWD, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>src/FWD/__init__.py  | 17 +++++++++++++++--\n+ src/FWD/ethernet.py  | 24 ++++++++++++------------\n+ src/FWD/forwarder.py |  4 ++++\n+ tests/test_fwd.py    | 49 +++++++++++++++++++++++++++++++++++++++++++++++++\n+ 4 files changed, 80 insertions(+), 14 deletions(-)</pre>\n+              </details>\n+            </article>\n+            \n     <nav><a href=\"page-001.html\">1</a> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <strong>5</strong></nav>\n   </main>\n </body>\ndiff --git a/src/FWD/__init__.py b/src/FWD/__init__.py\nindex 450f88d..ba1cabc 100644\n--- a/src/FWD/__init__.py\n+++ b/src/FWD/__init__.py\n@@ -1,12 +1,25 @@\n \"\"\"Forwarding dispatch layer for VVRP.\"\"\"\n \n-from .ethernet import FWD_EthernetOutputHandler, FWD_next_hop_ip\n+from .adjacency import (\n+    FWD_Adjacency,\n+    FWD_AdjacencyError,\n+    FWD_AdjacencyHandler,\n+    FWD_AdjacencyRegistry,\n+    FWD_EthernetAdjacencyHandler,\n+    FWD_default_adjacency_registry,\n... truncated 302 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "IP",
+      "tests"
+    ]
+  }
+}

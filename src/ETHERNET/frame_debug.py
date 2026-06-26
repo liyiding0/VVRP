@@ -9,7 +9,7 @@ from src.DPlane.backend import DPlane_create_backend
 from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
-from src.IFNET.imports import imported_interfaces
+from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import NetworkInterface
 
@@ -102,7 +102,7 @@ class ETHERNET_FrameDebugService:
 
         output: list[ETHERNET_FrameDebugPortBinding] = []
         host_mac_by_name = {interface.name: interface.mac_address for interface in interfaces}
-        for interface in imported_interfaces(ctx.state, interfaces):
+        for interface in IFNET_ethernet_interface_snapshots(ctx.state, interfaces):
             device = self.dplane_backend.DPlane_find_packet_device(interface, devices)
             if device is not None:
                 output.append(

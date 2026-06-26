@@ -5,6 +5,7 @@ from collections.abc import Callable
 from src.FIB import FIBEntry
 from src.IFNET.models import NetworkInterface
 
+from .adjacency import FWD_AdjacencyRegistry, FWD_default_adjacency_registry
 from .ethernet import FWD_EthernetOutputHandler
 from .models import FWD_OutputHandler, FWD_Result
 
@@ -56,7 +57,9 @@ def FWD_default_forwarder(
     FWD_interfaces_provider: Callable[[], tuple[NetworkInterface, ...]] | None = None,
     FWD_ethernet_port_provider=None,
     FWD_arp_table=None,
+    FWD_adjacency_registry: FWD_AdjacencyRegistry | None = None,
 ) -> FWD_Forwarder:
+    FWD_adjacency_registry = FWD_adjacency_registry or FWD_default_adjacency_registry()
     FWD_forwarder = FWD_Forwarder(
         FWD_state,
         FWD_interfaces_provider=FWD_interfaces_provider,
@@ -67,6 +70,7 @@ def FWD_default_forwarder(
             FWD_state,
             FWD_port_provider=FWD_ethernet_port_provider,
             FWD_arp_table=FWD_arp_table,
+            FWD_adjacency_registry=FWD_adjacency_registry,
         ),
     )
     return FWD_forwarder

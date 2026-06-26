@@ -7,7 +7,7 @@ from src.CCmd.registry import CommandRegistry
 from src.CCmd.running_config import remove_interface_config_command, set_interface_config_command
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
-from src.IFNET.imports import imported_interfaces
+from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import NetworkInterface
 from src.IFNET.state import (
@@ -44,9 +44,9 @@ def register_ethernet_commands(
         vvrp_interface = _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(vvrp_interface, CommandResult):
             return vvrp_interface
-        imported_interface = _current_imported_interface(ctx, ifnet_provider, ifnet_admin_provider)
-        if isinstance(imported_interface, CommandResult):
-            return imported_interface
+        device_interface = _current_ethernet_device_interface(ctx, ifnet_provider, ifnet_admin_provider)
+        if isinstance(device_interface, CommandResult):
+            return device_interface
         if vvrp_interface.kind != "ethernet":
             return CommandResult(
                 ok=False,
@@ -55,7 +55,7 @@ def register_ethernet_commands(
         normalized = _normalize_configured_mac_address(args["mac_address"])
         if normalized is None:
             return CommandResult(ok=False, message=f"% Invalid MAC address: {args['mac_address']}")
-        validation_error = _validate_configured_mac_address(normalized, imported_interface)
+        validation_error = _validate_configured_mac_address(normalized, device_interface)
         if validation_error:
             return CommandResult(ok=False, message=validation_error)
         set_interface_mac_address(ctx.state, vvrp_interface.name, normalized)
@@ -69,7 +69,7 @@ def register_ethernet_commands(
 
     @registry.command(
         "no mac-address",
-        help_text="Restore original imported Ethernet MAC address",
+        help_text="Restore original host Ethernet MAC address",
         modes=("interface",),
     )
     def no_mac_address(ctx, args):
@@ -109,7 +109,7 @@ def register_ethernet_commands(
 
     @registry.command(
         "no mtu",
-        help_text="Restore original imported Ethernet MTU",
+        help_text="Restore original host Ethernet MTU",
         modes=("interface",),
     )
     def ETH_no_mtu(ctx, args):
@@ -177,7 +177,7 @@ def _current_vvrp_interface(
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
 ) -> NetworkInterface | CommandResult:
-    interfaces = _list_imported_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
+    interfaces = _list_vvrp_ethernet_interfaces(ctx, ifnet_provider, ifnet_admin_provider)
     if isinstance(interfaces, CommandResult):
         return interfaces
     for interface in interfaces:
@@ -186,7 +186,7 @@ def _current_vvrp_interface(
     return CommandResult(ok=False, message=f"% Interface not found: {ctx.mode_label}")
 
 
-def _current_imported_interface(
+def _current_ethernet_device_interface(
     ctx: CliContext,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
@@ -204,7 +204,7 @@ def _current_imported_interface(
     return interface
 
 
-def _list_imported_interfaces(
+def _list_vvrp_ethernet_interfaces(
     ctx: CliContext,
     ifnet_provider: InterfaceProvider | None,
     ifnet_admin_provider: InterfaceAdminProvider | None,
@@ -217,7 +217,7 @@ def _list_imported_interfaces(
         ).list_interfaces()
     except InterfaceDiscoveryError as exc:
         return CommandResult(ok=False, message=f"% {exc}")
-    return imported_interfaces(ctx.state, host_interfaces)
+    return IFNET_ethernet_interface_snapshots(ctx.state, host_interfaces)
 
 
 def _normalize_configured_mac_address(value: str) -> str | None:
@@ -231,7 +231,7 @@ def _normalize_configured_mac_address(value: str) -> str | None:
     return ":".join(f"{octet:02X}" for octet in octets)
 
 
-def _validate_configured_mac_address(mac_address: str, imported_interface: NetworkInterface) -> str:
+def _validate_configured_mac_address(mac_address: str, device_interface: NetworkInterface) -> str:
     octets = [int(part, 16) for part in mac_address.split(":")]
     if all(octet == 0 for octet in octets):
         return "% Invalid MAC address: all-zero address is not allowed"
@@ -239,9 +239,9 @@ def _validate_configured_mac_address(mac_address: str, imported_interface: Netwo
         return "% Invalid MAC address: broadcast address is not allowed"
     if octets[0] & 1:
         return "% Invalid MAC address: multicast address is not allowed"
-    original = _normalize_configured_mac_address(imported_interface.mac_address)
+    original = _normalize_configured_mac_address(device_interface.mac_address)
     if original == mac_address:
-        return "% Invalid MAC address: configured MAC must differ from imported host MAC"
+        return "% Invalid MAC address: configured MAC must differ from host Ethernet MAC"
     return ""
 
 

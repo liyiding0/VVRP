@@ -14,17 +14,17 @@ from src.CCmd.running_config import (
 )
 from src.DPlane.backend import DPlane_create_backend
 from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
+from src.ETHERNET.device import (
+    ETHERNET_commit_device_changes,
+    ETHERNET_has_pending_device_changes,
+    ETHERNET_installed_device_names,
+    ETHERNET_pending_device_names,
+    ETHERNET_stage_device_install,
+    ETHERNET_stage_device_uninstall,
+)
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
-from src.IFNET.imports import (
-    IFNET_IMPORT_STATE_KEY,
-    commit_imports,
-    imported_ifnet_index_map,
-    imported_interface_names,
-    pending_import_names,
-    stage_import_interface,
-    stage_unimport_interface,
-)
+from src.IFNET.interfaces import IFNET_ethernet_ifnet_index_map
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import NetworkInterface
 
@@ -171,7 +171,7 @@ def register_dplane_commands(
 
     @registry.command(
         "import",
-        help_text="Import current host interface into VVRP IFNET",
+        help_text="Install current host Ethernet device into VVRP",
         modes=("host-interface",),
     )
     def import_interface(ctx, args):
@@ -186,9 +186,9 @@ def register_dplane_commands(
                 ok=False,
                 message=f"% Host interface is not matched to a DPlane packet device: {interface.name}",
             )
-        stage_import_interface(ctx.state, interface.name)
+        ETHERNET_stage_device_install(ctx.state, interface.name)
         if ctx.state.get(RUNNING_CONFIG_LOADING_STATE_KEY):
-            commit_imports(ctx.state)
+            ETHERNET_commit_device_changes(ctx.state)
             _call_after_import_commit(ctx, after_import_commit)
             config_error = _sync_import_config_from_active(ctx, (interface.name,))
             return CommandResult(ok=not config_error, message=config_error)
@@ -196,16 +196,16 @@ def register_dplane_commands(
 
     @registry.command(
         "no import",
-        help_text="Remove current host interface from VVRP IFNET imports",
+        help_text="Remove current host Ethernet device from VVRP",
         modes=("host-interface",),
     )
     def no_import_interface(ctx, args):
         interface = _get_host_interface(ctx, ifnet_provider, ifnet_admin_provider, ctx.mode_label)
         if isinstance(interface, CommandResult):
             return interface
-        stage_unimport_interface(ctx.state, interface.name)
+        ETHERNET_stage_device_uninstall(ctx.state, interface.name)
         if ctx.state.get(RUNNING_CONFIG_LOADING_STATE_KEY):
-            commit_imports(ctx.state)
+            ETHERNET_commit_device_changes(ctx.state)
             _call_after_import_commit(ctx, after_import_commit)
             config_error = _sync_import_config_from_active(ctx, (interface.name,))
             return CommandResult(ok=not config_error, message=config_error)
@@ -217,15 +217,15 @@ def register_dplane_commands(
         modes=("host-interface",),
     )
     def commit_host_interface(ctx, args):
-        active_before = imported_interface_names(ctx.state)
-        pending_before = pending_import_names(ctx.state)
+        active_before = ETHERNET_installed_device_names(ctx.state)
+        pending_before = ETHERNET_pending_device_names(ctx.state)
         if not _has_pending_import_changes(ctx.state, active_before, pending_before):
             return CommandResult(message="% No host interface import changes to commit")
-        commit_imports(ctx.state)
+        ETHERNET_commit_device_changes(ctx.state)
         _call_after_import_commit(ctx, after_import_commit)
         config_error = _sync_import_config_from_active(
             ctx,
-            active_before | pending_before | imported_interface_names(ctx.state),
+            active_before | pending_before | ETHERNET_installed_device_names(ctx.state),
         )
         if config_error:
             return CommandResult(ok=False, message=config_error)
@@ -243,10 +243,7 @@ def _has_pending_import_changes(
     active_imports: frozenset[str],
     pending_imports: frozenset[str],
 ) -> bool:
-    import_state = state.get(IFNET_IMPORT_STATE_KEY)
-    if not isinstance(import_state, dict):
-        return False
-    return import_state.get("pending") is not None and pending_imports != active_imports
+    return ETHERNET_has_pending_device_changes(state, active_imports, pending_imports)
 
 
 def _list_host_interfaces(
@@ -273,7 +270,7 @@ def _list_host_interfaces_result(
 
 
 def _sync_import_config_from_active(ctx, interface_names) -> str:
-    active_imports = imported_interface_names(ctx.state)
+    active_imports = ETHERNET_installed_device_names(ctx.state)
     for name in sorted(interface_names, key=str.casefold):
         if name in active_imports:
             config_error = set_host_interface_config_command(
@@ -426,9 +423,9 @@ def _dplane_interface_rows(
     devices: tuple[DPlane_PacketDevice, ...],
     DPlane_backend: DPlane_Backend,
 ) -> tuple[DplaneInterfaceRow, ...]:
-    active_imports = imported_interface_names(state)
-    pending_imports = pending_import_names(state)
-    imported_indices = imported_ifnet_index_map(state, interfaces)
+    active_imports = ETHERNET_installed_device_names(state)
+    pending_imports = ETHERNET_pending_device_names(state)
+    imported_indices = IFNET_ethernet_ifnet_index_map(state, interfaces)
     rows: list[DplaneInterfaceRow] = []
     for interface in interfaces:
         device = DPlane_backend.DPlane_find_packet_device(interface, devices)

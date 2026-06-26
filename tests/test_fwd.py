@@ -7,6 +7,10 @@ from src.ARP import ARP_REPLY, ARP_REQUEST, ZERO_MAC, ArpPacket, ArpTable, get_a
 from src.ETHERNET import BROADCAST_MAC, ETHERTYPE_ARP, ETHERTYPE_IPV4, EthernetFrame, parse_ethernet_ii_frame
 from src.FIB import FIBEntry, FIB_table
 from src.FWD import (
+    FWD_Adjacency,
+    FWD_AdjacencyError,
+    FWD_AdjacencyRegistry,
+    FWD_EthernetAdjacencyHandler,
     FWD_EthernetOutputHandler,
     FWD_Forwarder,
     FWD_InputDispatcher,
@@ -96,6 +100,51 @@ class FwdTests(unittest.TestCase):
         self.assertTrue(result.FWD_ok)
         frame = parse_ethernet_ii_frame(port.frames[0])
         self.assertEqual("66:77:88:99:aa:bb", frame.destination)
+
+    def test_ethernet_adjacency_handler_resolves_gateway_or_direct_target(self):
+        interface = fwd_interface("eth4")
+        gateway_route = fwd_route(
+            interface,
+            "0.0.0.0/0",
+            "192.0.2.10",
+            next_hop="192.0.2.254",
+        )
+        direct_route = fwd_route(interface, "192.0.2.0/24", "192.0.2.10")
+        packet = IP_build_ipv4_packet("192.0.2.10", "198.51.100.1", 1, b"hello")
+        handler = FWD_EthernetAdjacencyHandler()
+
+        gateway = handler.FWD_resolve_adjacency(packet, gateway_route, interface)
+        direct = handler.FWD_resolve_adjacency(packet, direct_route, interface)
+
+        self.assertEqual("192.0.2.254", gateway.FWD_target_ip)
+        self.assertEqual("198.51.100.1", direct.FWD_target_ip)
+
+    def test_adjacency_registry_dispatches_by_interface_type(self):
+        class PppAdjacencyHandler:
+            def FWD_resolve_adjacency(self, FWD_packet, FWD_route, FWD_interface):
+                return FWD_Adjacency(FWD_target_ip="0.0.0.0")
+
+        registry = FWD_AdjacencyRegistry({"ppp": PppAdjacencyHandler()})
+        interface = fwd_interface("ppp0", kind="ppp")
+
+        adjacency = registry.FWD_resolve_adjacency(
+            b"packet",
+            fwd_route(interface, "192.0.2.0/24", "192.0.2.10"),
+            interface,
+        )
+
+        self.assertEqual("0.0.0.0", adjacency.FWD_target_ip)
+
+    def test_adjacency_registry_reports_unregistered_media(self):
+        registry = FWD_AdjacencyRegistry()
+        interface = fwd_interface("tun0", kind="tunnel")
+
+        with self.assertRaisesRegex(FWD_AdjacencyError, "unsupported adjacency media: tunnel"):
+            registry.FWD_resolve_adjacency(
+                b"packet",
+                fwd_route(interface, "192.0.2.0/24", "192.0.2.10"),
+                interface,
+            )
 
     def test_fwd_sends_arp_request_then_ipv4_after_adjacency_is_learned(self):
         state = {}

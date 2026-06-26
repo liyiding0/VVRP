@@ -89,7 +89,7 @@ def build_default_registry(
     )
     RM_register_commands(
         registry,
-        RM_interfaces_provider=lambda ctx: active_runtime.VVRP_list_imported_interfaces(ctx),
+        RM_interfaces_provider=lambda ctx: active_runtime.VVRP_list_ifnet_interfaces(ctx),
         RM_modes=("hidden",),
     )
     FIB_register_commands(registry, FIB_modes=SHOW_MODES)

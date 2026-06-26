@@ -8,7 +8,7 @@ from src.DPlane.backend import DPlane_create_backend
 from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
-from src.IFNET.imports import imported_interfaces
+from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import NetworkInterface
 from src.IFNET.state import is_admin_down
@@ -77,7 +77,7 @@ class DPlane_PacketInputService:
         ).list_interfaces()
         DPlane_devices = self.DPlane_backend.DPlane_list_packet_devices()
         DPlane_output: list[tuple[NetworkInterface, DPlane_PacketDevice]] = []
-        for DPlane_interface in imported_interfaces(DPlane_ctx.state, DPlane_interfaces):
+        for DPlane_interface in IFNET_ethernet_interface_snapshots(DPlane_ctx.state, DPlane_interfaces):
             if (
                 DPlane_interface.kind != "ethernet"
                 or not DPlane_interface.is_up
