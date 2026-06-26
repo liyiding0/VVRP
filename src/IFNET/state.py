@@ -7,9 +7,19 @@ from .models import NetworkInterface
 
 
 IFNET_ADMIN_DOWN_STATE_KEY = "ifnet.admin_down"
+IFNET_INTERFACE_ADMINS_STATE_KEY = "ifnet.interface_admins"
+IFNET_INTERFACE_PHYSICALS_STATE_KEY = "ifnet.interface_physicals"
 IFNET_INTERFACE_MACS_STATE_KEY = "ifnet.interface_macs"
 IFNET_INTERFACE_MTUS_STATE_KEY = "ifnet.interface_mtus"
 IFNET_INTERFACE_PROTOCOLS_STATE_KEY = "ifnet.interface_protocols"
+
+
+IFNET_STATUS_VALUES = {"up", "down"}
+
+
+def IFNET_validate_status(IFNET_status: str, IFNET_kind: str) -> None:
+    if IFNET_status not in IFNET_STATUS_VALUES:
+        raise ValueError(f"unsupported IFNET {IFNET_kind} status: {IFNET_status}")
 
 
 def admin_down_interfaces(state: dict[str, Any]) -> set[str]:
@@ -21,15 +31,17 @@ def admin_down_interfaces(state: dict[str, Any]) -> set[str]:
 
 
 def is_admin_down(state: dict[str, Any], name: str) -> bool:
-    return name in admin_down_interfaces(state)
+    return IFNET_admin_status_for_interface(state, name) == "down"
 
 
 def shutdown_interface(state: dict[str, Any], name: str) -> None:
     admin_down_interfaces(state).add(name)
+    IFNET_set_interface_admin_status(state, name, "down")
 
 
 def no_shutdown_interface(state: dict[str, Any], name: str) -> None:
     admin_down_interfaces(state).discard(name)
+    IFNET_set_interface_admin_status(state, name, "up")
 
 
 def set_interface_mac_address(
@@ -67,9 +79,75 @@ def IFNET_set_interface_protocol_state(
     name: str,
     protocol_state: str,
 ) -> None:
-    if protocol_state not in {"up", "down"}:
-        raise ValueError(f"unsupported IFNET protocol state: {protocol_state}")
+    IFNET_validate_status(protocol_state, "protocol")
     IFNET_interface_protocols(state)[name] = protocol_state
+
+
+def IFNET_set_interface_physical_state(
+    state: dict[str, Any],
+    name: str,
+    physical_state: str,
+) -> None:
+    IFNET_validate_status(physical_state, "physical")
+    IFNET_interface_physicals(state)[name] = physical_state
+
+
+def IFNET_set_interface_admin_status(
+    state: dict[str, Any],
+    name: str,
+    admin_status: str,
+) -> None:
+    IFNET_validate_status(admin_status, "admin")
+    IFNET_interface_admins(state)[name] = admin_status
+
+
+def IFNET_refresh_interface_status(
+    state: dict[str, Any],
+    interface: NetworkInterface,
+    IFNET_recompute_protocol: bool = False,
+) -> None:
+    if interface.name not in IFNET_interface_admins(state):
+        IFNET_set_interface_admin_status(
+            state,
+            interface.name,
+            "down" if interface.name in admin_down_interfaces(state) else "up",
+        )
+    IFNET_set_interface_physical_state(
+        state,
+        interface.name,
+        "up" if interface.is_up else "down",
+    )
+    if IFNET_recompute_protocol or interface.name not in IFNET_interface_protocols(state):
+        IFNET_set_interface_protocol_state(
+            state,
+            interface.name,
+            _IFNET_initial_protocol_state(state, interface),
+        )
+
+
+def _IFNET_initial_protocol_state(
+    state: dict[str, Any],
+    interface: NetworkInterface,
+) -> str:
+    if IFNET_admin_status_for_interface(state, interface.name) == "down":
+        return "down"
+    if not interface.is_up:
+        return "down"
+    if interface.kind in {"loopback", "null"}:
+        return "up"
+    if _IFNET_interface_has_ipv4_address(interface):
+        return "up"
+    return "down"
+
+
+def _IFNET_interface_has_ipv4_address(interface: NetworkInterface) -> bool:
+    addresses_by_family = getattr(interface, "addresses_by_family", None)
+    if callable(addresses_by_family):
+        return bool(addresses_by_family("ipv4"))
+    im_addresses_by_family = getattr(interface, "RM_IM_addresses_by_family", None)
+    if callable(im_addresses_by_family):
+        return bool(im_addresses_by_family("ipv4"))
+    return False
 
 
 def interface_mac_addresses(state: dict[str, Any]) -> dict[str, str]:
@@ -88,6 +166,22 @@ def IFNET_interface_mtus(state: dict[str, Any]) -> dict[str, int]:
     return value
 
 
+def IFNET_interface_admins(state: dict[str, Any]) -> dict[str, str]:
+    value = state.setdefault(IFNET_INTERFACE_ADMINS_STATE_KEY, {})
+    if not isinstance(value, dict):
+        value = {}
+        state[IFNET_INTERFACE_ADMINS_STATE_KEY] = value
+    return value
+
+
+def IFNET_interface_physicals(state: dict[str, Any]) -> dict[str, str]:
+    value = state.setdefault(IFNET_INTERFACE_PHYSICALS_STATE_KEY, {})
+    if not isinstance(value, dict):
+        value = {}
+        state[IFNET_INTERFACE_PHYSICALS_STATE_KEY] = value
+    return value
+
+
 def IFNET_interface_protocols(state: dict[str, Any]) -> dict[str, str]:
     value = state.setdefault(IFNET_INTERFACE_PROTOCOLS_STATE_KEY, {})
     if not isinstance(value, dict):
@@ -101,9 +195,49 @@ def IFNET_protocol_state_for_interface(
     name: str,
 ) -> str:
     value = IFNET_interface_protocols(state).get(name)
-    if value in {"up", "down"}:
+    if value in IFNET_STATUS_VALUES:
         return value
     return "down"
+
+
+def IFNET_physical_state_for_interface(
+    state: dict[str, Any],
+    name: str,
+) -> str:
+    value = IFNET_interface_physicals(state).get(name)
+    if value in IFNET_STATUS_VALUES:
+        return value
+    return "down"
+
+
+def IFNET_admin_status_for_interface(
+    state: dict[str, Any],
+    name: str,
+) -> str:
+    value = IFNET_interface_admins(state).get(name)
+    if value in IFNET_STATUS_VALUES:
+        return value
+    if name in admin_down_interfaces(state):
+        return "down"
+    return "up"
+
+
+def IFNET_is_physical_up(
+    state: dict[str, Any],
+    name: str,
+) -> bool:
+    return IFNET_physical_state_for_interface(state, name) == "up"
+
+
+def IFNET_is_protocol_up(
+    state: dict[str, Any],
+    name: str,
+) -> bool:
+    return (
+        IFNET_admin_status_for_interface(state, name) == "up"
+        and IFNET_physical_state_for_interface(state, name) == "up"
+        and IFNET_protocol_state_for_interface(state, name) == "up"
+    )
 
 
 def mac_address_for_interface(

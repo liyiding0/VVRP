@@ -172,6 +172,14 @@ def build_default_registry(
         return CommandResult(message="\n".join(lines))
 
     @registry.command(
+        "reboot",
+        help_text="Reboot VVRP and return to user mode",
+        modes=ALL_MODES,
+    )
+    def reboot_command(ctx, args):
+        return CommandResult(reboot_requested=True)
+
+    @registry.command(
         "quit",
         help_text="Return to previous mode",
         modes=("privileged", "config", "interface", "hidden", "host-interface"),

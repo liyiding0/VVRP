@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-26_16-51-31",
+  "prompt": "Add in-CLI VVRP reboot command",
+  "changed_files": [
+    "src\\CCmd\\models.py",
+    "src\\CCmd\\dispatch.py",
+    "src\\CCmd\\interactive.py",
+    "src\\CCmd\\examples.py",
+    "tests\\test_core.py"
+  ],
+  "note": "Added a reboot command available from all CLI modes. The command sets a reboot request flag, the interactive loops rebuild CliContext without exiting Python, reload saved configuration, print reboot progress messages, and return to user mode.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "b4ad17fd4f3ed09d519cdf3ccb073b0337126e8f",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-006.html",
+    "src/CCmd/dispatch.py",
+    "src/CCmd/examples.py",
+    "src/CCmd/interactive.py",
+    "src/CCmd/models.py",
+    "src/DPlane/input.py",
+    "src/IFNET/commands.py",
+    "src/IFNET/interfaces.py",
+    "src/IFNET/models.py",
+    "src/IFNET/policy.py",
+    "src/IFNET/state.py",
+    "src/IP/commands.py",
+    "src/IP/static.py",
+    "src/RM/routes.py",
+    "tests/test_core.py",
+    "context/commits/b4ad17fd4f3e.json",
+    "context/sessions/2026-06-26_16-03-30.json",
+    "context/sessions/2026-06-26_16-12-29.json",
+    "src/IFNET/Null.py"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 23777 -> 24407 bytes\n context/replays/timeline/index.html    |  16 +++-\n context/replays/timeline/page-006.html |  59 ++++++++++++++\n src/CCmd/dispatch.py                   |   2 +\n src/CCmd/examples.py                   |   8 ++\n src/CCmd/interactive.py                |  37 +++++++++\n src/CCmd/models.py                     |   2 +\n src/DPlane/input.py                    |   6 +-\n src/IFNET/commands.py                  |  22 ++---\n src/IFNET/interfaces.py                |  36 +++++----\n src/IFNET/models.py                    |   2 +-\n src/IFNET/policy.py                    |   2 +\n src/IFNET/state.py                     | 142 ++++++++++++++++++++++++++++++++-\n src/IP/commands.py                     | 101 ++++++++++++++---------\n src/IP/static.py                       |   4 +\n src/RM/routes.py                       |   9 ++-\n tests/test_core.py                     |  81 ++++++++++++++++++-\n 17 files changed, 456 insertions(+), 73 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex 67fe911..1d9f365 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 456d89e..464cbe3 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>56 events, split into 6 page(s).</p>\n+    <p>58 events, split into 6 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -416,6 +416,20 @@\n               <td>047b3d2</td>\n               <td>main</td>\n             </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_16-03-30</td>\n+              <td><a href=\"page-006.html#56\">Persist IFNET operational status fields</a></td>\n+              <td>b4ad17f</td>\n+              <td>main</td>\n+            </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_16-12-29</td>\n+              <td><a href=\"page-006.html#57\">Add IFNET NULL0 logical discard interface</a></td>\n+              <td>b4ad17f</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-006.html b/context/replays/timeline/page-006.html\nindex 729c0a8..c3984a8 100644\n--- a/context/replays/timeline/page-006.html\n+++ b/context/replays/timeline/page-006.html\n@@ -265,6 +265,65 @@\n               </details>\n             </article>\n             \n+            <article class=\"card\" id=\"56\">\n+              <div class=\"meta\">\n+                <span>2026-06-26_16-03-30</span>\n+                <span>main</span>\n+                <span>b4ad17f</span>\n+              </div>\n+              <h2>Persist IFNET operational status fields</h2>\n+              <p>Added persistent IFNET admin, physical, and protocol status fields. Interface snapshots now refresh physical/admin/protocol facts into IFNET state; IP updates protocol state before RM/FIB refresh; RM and DPlane input consume IFNET status accessors instead of rebuilding state ad hoc in show paths.</p>\n+              <h3>Files</h3>\n+              <ul><li>src\\IFNET\\state.py</li><li>src\\IFNET\\interfaces.py</li><li>src\\IFNET\\commands.py</li><li>src\\IP\\commands.py</li><li>src\\RM\\routes.py</li><li>src\\DPlane\\input.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>None recorded</li></ul>\n+              <h3>Architecture</h3>\n+              <p>DPlane, IFNET, IP, RM</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>src/DPlane/input.py     |   6 +-\n+ src/IFNET/commands.py   |  19 ++++---\n+ src/IFNET/interfaces.py |  18 +++---\n+ src/IFNET/state.py      | 142 ++++++++++++++++++++++++++++++++++++++++++++++--\n+ src/IP/commands.py      |  96 +++++++++++++++++++-------------\n+ src/RM/routes.py        |   9 ++-\n+ 6 files changed, 225 insertions(+), 65 deletions(-)</pre>\n+              </details>\n+            </article>\n+            \n+            <article class=\"card\" id=\"57\">\n+              <div class=\"meta\">\n+                <span>2026-06-26_16-12-29</span>\n+                <span>main</span>\n+                <span>b4ad17f</span>\n+              </div>\n+              <h2>Add IFNET NULL0 logical discard interface</h2>\n+              <p>Added built-in VVRP NULL0 IFNET interface with fixed IFNET index 0x0, permanent physical/protocol UP spoofing state, show interfaces/show ip interface visibility, shutdown rejection, and IPv4 configuration rejection. NULL0 is created inside IFNET and does not pass through DPlane or Ethernet import.</p>\n+              <h3>Files</h3>\n... truncated 915 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CCmd",
+      "tests"
+    ]
+  }
+}

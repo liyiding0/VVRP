@@ -131,6 +131,10 @@ def IP_validate_static_ipv4_interface_policy(
             raise IP_StaticIpv4ValidationError(
                 "% Invalid IPv4 mask length: Loopback interfaces support only /32"
             )
+    elif interface.kind == "null":
+        raise IP_StaticIpv4ValidationError(
+            f"% NULL interface does not support static IPv4: {interface.name}"
+        )
     else:
         raise IP_StaticIpv4ValidationError(
             f"% Unsupported interface type for static IPv4: {interface.kind}"

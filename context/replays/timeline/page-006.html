@@ -265,6 +265,102 @@
               </details>
             </article>
             
+            <article class="card" id="56">
+              <div class="meta">
+                <span>2026-06-26_16-03-30</span>
+                <span>main</span>
+                <span>b4ad17f</span>
+              </div>
+              <h2>Persist IFNET operational status fields</h2>
+              <p>Added persistent IFNET admin, physical, and protocol status fields. Interface snapshots now refresh physical/admin/protocol facts into IFNET state; IP updates protocol state before RM/FIB refresh; RM and DPlane input consume IFNET status accessors instead of rebuilding state ad hoc in show paths.</p>
+              <h3>Files</h3>
+              <ul><li>src\IFNET\state.py</li><li>src\IFNET\interfaces.py</li><li>src\IFNET\commands.py</li><li>src\IP\commands.py</li><li>src\RM\routes.py</li><li>src\DPlane\input.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>DPlane, IFNET, IP, RM</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>src/DPlane/input.py     |   6 +-
+ src/IFNET/commands.py   |  19 ++++---
+ src/IFNET/interfaces.py |  18 +++---
+ src/IFNET/state.py      | 142 ++++++++++++++++++++++++++++++++++++++++++++++--
+ src/IP/commands.py      |  96 +++++++++++++++++++-------------
+ src/RM/routes.py        |   9 ++-
+ 6 files changed, 225 insertions(+), 65 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="57">
+              <div class="meta">
+                <span>2026-06-26_16-12-29</span>
+                <span>main</span>
+                <span>b4ad17f</span>
+              </div>
+              <h2>Add IFNET NULL0 logical discard interface</h2>
+              <p>Added built-in VVRP NULL0 IFNET interface with fixed IFNET index 0x0, permanent physical/protocol UP spoofing state, show interfaces/show ip interface visibility, shutdown rejection, and IPv4 configuration rejection. NULL0 is created inside IFNET and does not pass through DPlane or Ethernet import.</p>
+              <h3>Files</h3>
+              <ul><li>src\IFNET\Null.py</li><li>src\IFNET\models.py</li><li>src\IFNET\interfaces.py</li><li>src\IFNET\state.py</li><li>src\IFNET\commands.py</li><li>src\IFNET\policy.py</li><li>src\IP\commands.py</li><li>src\IP\static.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>IFNET, IP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 23777 -&gt; 24084 bytes
+ context/replays/timeline/index.html    |   9 ++-
+ context/replays/timeline/page-006.html |  26 ++++++
+ src/DPlane/input.py                    |   6 +-
+ src/IFNET/commands.py                  |  22 ++---
+ src/IFNET/interfaces.py                |  36 +++++----
+ src/IFNET/models.py                    |   2 +-
+ src/IFNET/policy.py                    |   2 +
+ src/IFNET/state.py                     | 142 ++++++++++++++++++++++++++++++++-
+ src/IP/commands.py                     | 101 ++++++++++++++---------
+ src/IP/static.py                       |   4 +
+ src/RM/routes.py                       |   9 ++-
+ tests/test_core.py                     |  46 ++++++++++-
+ 13 files changed, 332 insertions(+), 73 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="58">
+              <div class="meta">
+                <span>2026-06-26_16-51-31</span>
+                <span>main</span>
+                <span>b4ad17f</span>
+              </div>
+              <h2>Add in-CLI VVRP reboot command</h2>
+              <p>Added a reboot command available from all CLI modes. The command sets a reboot request flag, the interactive loops rebuild CliContext without exiting Python, reload saved configuration, print reboot progress messages, and return to user mode.</p>
+              <h3>Files</h3>
+              <ul><li>src\CCmd\models.py</li><li>src\CCmd\dispatch.py</li><li>src\CCmd\interactive.py</li><li>src\CCmd\examples.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 23777 -&gt; 24407 bytes
+ context/replays/timeline/index.html    |  16 +++-
+ context/replays/timeline/page-006.html |  59 ++++++++++++++
+ src/CCmd/dispatch.py                   |   2 +
+ src/CCmd/examples.py                   |   8 ++
+ src/CCmd/interactive.py                |  37 +++++++++
+ src/CCmd/models.py                     |   2 +
+ src/DPlane/input.py                    |   6 +-
+ src/IFNET/commands.py                  |  22 ++---
+ src/IFNET/interfaces.py                |  36 +++++----
+ src/IFNET/models.py                    |   2 +-
+ src/IFNET/policy.py                    |   2 +
+ src/IFNET/state.py                     | 142 ++++++++++++++++++++++++++++++++-
+ src/IP/commands.py                     | 101 ++++++++++++++---------
+ src/IP/static.py                       |   4 +
+ src/RM/routes.py                       |   9 ++-
+ tests/test_core.py                     |  81 ++++++++++++++++++-
+ 17 files changed, 456 insertions(+), 73 deletions(-)</pre>
+              </details>
+            </article>
+            
     <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <strong>6</strong></nav>
   </main>
 </body>

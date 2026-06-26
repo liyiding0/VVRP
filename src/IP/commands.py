@@ -22,7 +22,14 @@ from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import InterfaceAddress, NetworkInterface
-from src.IFNET.state import IFNET_set_interface_protocol_state, is_admin_down
+from src.IFNET.state import (
+    IFNET_is_physical_up,
+    IFNET_is_protocol_up,
+    IFNET_physical_state_for_interface,
+    IFNET_refresh_interface_status,
+    IFNET_set_interface_protocol_state,
+    is_admin_down,
+)
 
 from .dhcp import IP_DhcpClientProvider
 from .ICMP.ping import g_ICMP_PING_ARGUMENT_PATTERN, ICMP_run_ping
@@ -647,11 +654,14 @@ def _IP_list_interfaces(
     ifnet_admin_provider: InterfaceAdminProvider | None,
 ) -> tuple[NetworkInterface, ...] | CommandResult:
     try:
-        return get_ifnet_manager(
+        interfaces = get_ifnet_manager(
             ctx.state,
             provider=ifnet_provider,
             admin_provider=ifnet_admin_provider,
         ).list_interfaces()
+        for interface in interfaces:
+            IFNET_refresh_interface_status(ctx.state, interface)
+        return interfaces
     except InterfaceDiscoveryError as exc:
         return CommandResult(ok=False, message=f"% {exc}")
 
@@ -684,6 +694,7 @@ def _IP_get_interface(
 
     if interface is None:
         return CommandResult(ok=False, message=f"% Interface not found: {name}")
+    IFNET_refresh_interface_status(ctx.state, interface)
     return interface
 
 
@@ -717,6 +728,11 @@ def _IP_unsupported_dhcp_interface(interface: NetworkInterface) -> CommandResult
 def _IP_unsupported_static_ipv4_interface(interface: NetworkInterface) -> CommandResult | None:
     if interface.kind in ("ethernet", "loopback"):
         return None
+    if interface.kind == "null":
+        return CommandResult(
+            ok=False,
+            message=f"% NULL interface does not support static IPv4: {interface.name}",
+        )
     return CommandResult(
         ok=False,
         message=(
@@ -842,6 +858,12 @@ def _IP_set_vvrp_static_ipv4(
         current = [address, *[item for item in current if item.secondary]]
     protocol_was_up = _IP_protocol_is_up(interface, ctx.state)
     _IP_apply_vvrp_static_ipv4_addresses(ctx, interface.name, tuple(current))
+    protocol_message = _IP_protocol_transition_message(
+        ctx,
+        interface,
+        tuple(current),
+        protocol_was_up,
+    )
     _IP_call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
 
     dhcp_error = remove_interface_config_command(ctx, interface.name, "ip-address-dhcp")
@@ -858,14 +880,7 @@ def _IP_set_vvrp_static_ipv4(
     )
     if config_error:
         return CommandResult(ok=False, message=config_error)
-    return CommandResult(
-        message=_IP_protocol_transition_message(
-            ctx,
-            interface,
-            tuple(current),
-            protocol_was_up,
-        )
-    )
+    return CommandResult(message=protocol_message)
 
 
 def _IP_remove_static_ipv4(
@@ -975,18 +990,17 @@ def _IP_remove_vvrp_static_ipv4(
     if address is None:
         protocol_was_up = _IP_protocol_is_up(interface, ctx.state)
         _IP_apply_vvrp_static_ipv4_addresses(ctx, interface.name, ())
+        protocol_message = _IP_protocol_transition_message(
+            ctx,
+            interface,
+            (),
+            protocol_was_up,
+        )
         _IP_call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
         config_error = remove_interface_config_prefix(ctx, interface.name, "ip-address:")
         if config_error:
             return CommandResult(ok=False, message=config_error)
-        return CommandResult(
-            message=_IP_protocol_transition_message(
-                ctx,
-                interface,
-                (),
-                protocol_was_up,
-            )
-        )
+        return CommandResult(message=protocol_message)
 
     current = tuple(
         item
@@ -999,6 +1013,12 @@ def _IP_remove_vvrp_static_ipv4(
     )
     protocol_was_up = _IP_protocol_is_up(interface, ctx.state)
     _IP_apply_vvrp_static_ipv4_addresses(ctx, interface.name, current)
+    protocol_message = _IP_protocol_transition_message(
+        ctx,
+        interface,
+        current,
+        protocol_was_up,
+    )
     _IP_call_after_vvrp_ipv4_change(ctx, after_vvrp_ipv4_change)
     config_error = remove_interface_config_command(
         ctx,
@@ -1007,14 +1027,7 @@ def _IP_remove_vvrp_static_ipv4(
     )
     if config_error:
         return CommandResult(ok=False, message=config_error)
-    return CommandResult(
-        message=_IP_protocol_transition_message(
-            ctx,
-            interface,
-            current,
-            protocol_was_up,
-        )
-    )
+    return CommandResult(message=protocol_message)
 
 
 def _IP_apply_vvrp_static_ipv4_addresses(
@@ -1053,7 +1066,7 @@ def _IP_protocol_transition_message(
         interface,
         addresses=tuple(_IP_interface_address_from_static(address) for address in addresses),
     )
-    protocol_is_up = _IP_protocol_is_up(updated, ctx.state)
+    protocol_is_up = _IP_desired_protocol_is_up(updated, ctx.state)
     if not protocol_was_up and protocol_is_up:
         IFNET_set_interface_protocol_state(ctx.state, interface.name, "up")
         return _IP_format_line_protocol_log(ctx.hostname, interface.name, "UP")
@@ -1150,7 +1163,7 @@ def _IP_format_ip_interface_brief(
     interfaces: tuple[NetworkInterface, ...],
     state: dict,
 ) -> str:
-    physical_up = sum(1 for interface in interfaces if interface.is_up and not is_admin_down(state, interface.name))
+    physical_up = sum(1 for interface in interfaces if _IP_physical_is_up(interface, state))
     physical_down = len(interfaces) - physical_up
     protocol_up = sum(1 for interface in interfaces if _IP_protocol_is_up(interface, state))
     protocol_down = len(interfaces) - protocol_up
@@ -1184,7 +1197,7 @@ def _IP_format_ip_interface_description(
     interfaces: tuple[NetworkInterface, ...],
     state: dict,
 ) -> str:
-    physical_up = sum(1 for interface in interfaces if interface.is_up and not is_admin_down(state, interface.name))
+    physical_up = sum(1 for interface in interfaces if _IP_physical_is_up(interface, state))
     physical_down = len(interfaces) - physical_up
     protocol_up = sum(1 for interface in interfaces if _IP_protocol_is_up(interface, state))
     protocol_down = len(interfaces) - protocol_up
@@ -1276,18 +1289,16 @@ def _IP_display_physical(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "*down"
     if interface.kind == "loopback":
-        return f"{_IP_display_state(interface)}(l)"
-    return _IP_display_state(interface)
+        return f"{IFNET_physical_state_for_interface(state, interface.name)}(l)"
+    return IFNET_physical_state_for_interface(state, interface.name)
 
 
 def _IP_display_protocol(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "down"
-    if interface.kind == "loopback" and interface.is_up:
+    if interface.kind in {"loopback", "null"} and IFNET_is_physical_up(state, interface.name):
         return "up(s)"
-    if not _IP_has_ipv4_address(interface):
-        return "down"
-    return _IP_display_state(interface)
+    return "up" if IFNET_is_protocol_up(state, interface.name) else "down"
 
 
 def _IP_display_detail_protocol(interface: NetworkInterface, state: dict) -> str:
@@ -1300,7 +1311,7 @@ def _IP_display_detail_protocol(interface: NetworkInterface, state: dict) -> str
 def _IP_display_detail_state(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "Administratively DOWN"
-    return "UP" if interface.is_up else "DOWN"
+    return IFNET_physical_state_for_interface(state, interface.name).upper()
 
 
 def _IP_display_state(interface: NetworkInterface) -> str:
@@ -1308,13 +1319,27 @@ def _IP_display_state(interface: NetworkInterface) -> str:
 
 
 def _IP_protocol_is_up(interface: NetworkInterface, state: dict) -> bool:
-    return _IP_display_protocol(interface, state).startswith("up")
+    if interface.kind in {"loopback", "null"} and IFNET_is_physical_up(state, interface.name):
+        return True
+    return IFNET_is_protocol_up(state, interface.name)
+
+
+def _IP_desired_protocol_is_up(interface: NetworkInterface, state: dict) -> bool:
+    if is_admin_down(state, interface.name):
+        return False
+    if interface.kind in {"loopback", "null"} and IFNET_is_physical_up(state, interface.name):
+        return True
+    return IFNET_is_physical_up(state, interface.name) and _IP_has_ipv4_address(interface)
+
+
+def _IP_physical_is_up(interface: NetworkInterface, state: dict) -> bool:
+    return not is_admin_down(state, interface.name) and IFNET_is_physical_up(state, interface.name)
 
 
 def _IP_display_short_physical(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "*D"
-    return "U" if interface.is_up else "D"
+    return "U" if IFNET_is_physical_up(state, interface.name) else "D"
 
 
 def _IP_display_short_protocol(interface: NetworkInterface, state: dict) -> str:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import ipaddress
 
 from src.IFNET.models import NetworkInterface
-from src.IFNET.state import apply_vvrp_interface_state, is_admin_down
+from src.IFNET.state import IFNET_is_protocol_up, IFNET_refresh_interface_status, apply_vvrp_interface_state
 from src.RM.IM import (
     RM_IM_Interface,
     RM_IM_InterfaceAddressAdded,
@@ -36,7 +36,12 @@ def RM_connected_routes_from_im(
 ) -> tuple[RMRoute, ...]:
     RM_routes: list[RMRoute] = []
     for RM_interface in RM_interfaces:
-        if not RM_interface.is_up or is_admin_down(RM_state, RM_interface.name):
+        IFNET_refresh_interface_status(
+            RM_state,
+            RM_interface,
+            IFNET_recompute_protocol=True,
+        )
+        if not IFNET_is_protocol_up(RM_state, RM_interface.name):
             continue
         for RM_address in RM_route_interface_addresses_by_family(RM_interface, "ipv4"):
             if RM_address.prefix_length is None:

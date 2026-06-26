@@ -25,6 +25,7 @@ class CommandResult:
     ok: bool = True
     message: str = ""
     exit_requested: bool = False
+    reboot_requested: bool = False
 
 
 @dataclass
@@ -39,6 +40,7 @@ class CliContext:
     mode_stack: list[ModeFrame] = field(default_factory=lambda: [ModeFrame("user")])
     state: dict[str, Any] = field(default_factory=dict)
     exit_requested: bool = False
+    reboot_requested: bool = False
     output: TextIO = field(default_factory=lambda: sys.stdout)
 
     @property

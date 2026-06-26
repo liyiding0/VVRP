@@ -70,6 +70,7 @@ def _run_plain_cli(
 ) -> int:
     ctx = CliContext(hostname=hostname)
     registry.initialize_context(ctx)
+    set_saved_configuration_path(ctx, saved_configuration_file)
     _print_saved_configuration_errors(
         ctx,
         load_saved_configuration(ctx, registry, saved_configuration_file),
@@ -83,6 +84,15 @@ def _run_plain_cli(
 
         line = f"{pending_input}{line}"
         dispatch_line(ctx, registry, line)
+        if ctx.reboot_requested:
+            ctx = _reboot_context(
+                registry,
+                hostname=hostname,
+                output=ctx.output,
+                saved_configuration_file=saved_configuration_file,
+            )
+            pending_input = ""
+            continue
         pending_input = _preserve_help_input(line) if "?" in line else ""
 
     return 0
@@ -308,8 +318,35 @@ def run_interactive_cli(
             break
 
         dispatch_line(ctx, registry, line)
+        if ctx.reboot_requested:
+            ctx = _reboot_context(
+                registry,
+                hostname=hostname,
+                output=ctx.output,
+                saved_configuration_file=saved_configuration_file,
+            )
 
     return 0
+
+
+def _reboot_context(
+    registry: CommandRegistry,
+    hostname: str,
+    output,
+    saved_configuration_file: str | os.PathLike[str] | None,
+) -> CliContext:
+    output.write("\nSystem is rebooting...\n")
+    output.write("Stopping services...\n")
+    output.write("Starting VVRP...\n")
+    ctx = CliContext(hostname=hostname, output=output)
+    registry.initialize_context(ctx)
+    set_saved_configuration_path(ctx, saved_configuration_file)
+    _print_saved_configuration_errors(
+        ctx,
+        load_saved_configuration(ctx, registry, saved_configuration_file),
+    )
+    output.write("Reboot complete.\n")
+    return ctx
 
 
 def _print_saved_configuration_errors(ctx: CliContext, errors: list[str]) -> None:

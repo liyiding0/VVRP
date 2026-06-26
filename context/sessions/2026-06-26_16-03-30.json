@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-26_16-03-30",
+  "prompt": "Persist IFNET operational status fields",
+  "changed_files": [
+    "src\\IFNET\\state.py",
+    "src\\IFNET\\interfaces.py",
+    "src\\IFNET\\commands.py",
+    "src\\IP\\commands.py",
+    "src\\RM\\routes.py",
+    "src\\DPlane\\input.py"
+  ],
+  "note": "Added persistent IFNET admin, physical, and protocol status fields. Interface snapshots now refresh physical/admin/protocol facts into IFNET state; IP updates protocol state before RM/FIB refresh; RM and DPlane input consume IFNET status accessors instead of rebuilding state ad hoc in show paths.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "b4ad17fd4f3ed09d519cdf3ccb073b0337126e8f",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "rc/DPlane/input.py",
+    "src/IFNET/commands.py",
+    "src/IFNET/interfaces.py",
+    "src/IFNET/state.py",
+    "src/IP/commands.py",
+    "src/RM/routes.py"
+  ],
+  "diff_stat": "src/DPlane/input.py     |   6 +-\n src/IFNET/commands.py   |  19 ++++---\n src/IFNET/interfaces.py |  18 +++---\n src/IFNET/state.py      | 142 ++++++++++++++++++++++++++++++++++++++++++++++--\n src/IP/commands.py      |  96 +++++++++++++++++++-------------\n src/RM/routes.py        |   9 ++-\n 6 files changed, 225 insertions(+), 65 deletions(-)",
+  "diff_summary": "diff --git a/src/DPlane/input.py b/src/DPlane/input.py\nindex d4189a7..758e0f3 100644\n--- a/src/DPlane/input.py\n+++ b/src/DPlane/input.py\n@@ -11,7 +11,7 @@ from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider\n from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots\n from src.IFNET.inventory import get_ifnet_manager\n from src.IFNET.models import NetworkInterface\n-from src.IFNET.state import is_admin_down\n+from src.IFNET.state import IFNET_is_physical_up, IFNET_is_protocol_up\n \n \n g_DPLANE_PACKET_INPUT_FILTER = \"ether proto 0x0806 or ether proto 0x0800\"\n@@ -80,8 +80,8 @@ class DPlane_PacketInputService:\n         for DPlane_interface in IFNET_ethernet_interface_snapshots(DPlane_ctx.state, DPlane_interfaces):\n             if (\n                 DPlane_interface.kind != \"ethernet\"\n-                or not DPlane_interface.is_up\n-                or is_admin_down(DPlane_ctx.state, DPlane_interface.name)\n+                or not IFNET_is_physical_up(DPlane_ctx.state, DPlane_interface.name)\n+                or not IFNET_is_protocol_up(DPlane_ctx.state, DPlane_interface.name)\n                 or not DPlane_interface.addresses_by_family(\"ipv4\")\n             ):\n                 continue\ndiff --git a/src/IFNET/commands.py b/src/IFNET/commands.py\nindex 06512ad..003cbd3 100644\n--- a/src/IFNET/commands.py\n+++ b/src/IFNET/commands.py\n@@ -19,6 +19,9 @@ from .inventory import IfnetManager, get_ifnet_manager\n from .models import InterfaceAddress, NetworkInterface\n from .policy import interface_can_shutdown\n from .state import (\n+    IFNET_is_physical_up,\n+    IFNET_is_protocol_up,\n+    IFNET_physical_state_for_interface,\n     IFNET_protocol_state_for_interface,\n     is_admin_down,\n     no_shutdown_interface,\n@@ -385,23 +388,23 @@ def _display_state(interface: NetworkInterface) -> str:\n def _display_detail_state_upper(interface: NetworkInterface, state: dict) -> str:\n     if is_admin_down(state, interface.name):\n         return \"Administratively DOWN\"\n-    return _display_state(interface).upper()\n+    return IFNET_physical_state_for_interface(state, interface.name).upper()\n \n \n def _display_phy(interface: NetworkInterface, state: dict) -> str:\n     if is_admin_down(state, interface.name):\n         return \"*down\"\n     if interface.kind == \"loopback\":\n-        return f\"{_display_state(interface)}(l)\"\n-    return _display_state(interface)\n+        return f\"{IFNET_physical_state_for_interface(state, interface.name)}(l)\"\n+    return IFNET_physical_state_for_interface(state, interface.name)\n \n \n def _display_protocol(interface: NetworkInterface, state: dict) -> str:\n     if is_admin_down(state, interface.name):\n         return \"down\"\n-    if interface.kind == \"loopback\" and interface.is_up:\n+    if interface.kind == \"loopback\" and IFNET_is_physical_up(state, interface.name):\n         return \"up(s)\"\n-    if not interface.is_up:\n+    if not IFNET_is_physical_up(state, interface.name):\n         return \"down\"\n     return IFNET_protocol_state_for_interface(state, interface.name)\n \n@@ -409,11 +412,9 @@ def _display_protocol(interface: NetworkInterface, state: dict) -> str:\n def _display_protocol_upper(interface: NetworkInterface, state: dict) -> str:\n     if is_admin_down(state, interface.name):\n         return \"DOWN\"\n-    if interface.kind == \"loopback\" and interface.is_up:\n+    if interface.kind == \"loopback\" and IFNET_is_physical_up(state, interface.name):\n         return \"UP(spoofing)\"\n-    if not interface.is_up:\n-        return \"DOWN\"\n-    return IFNET_protocol_state_for_interface(state, interface.name).upper()\n+    return \"UP\" if IFNET_is_protocol_up(state, interface.name) else \"DOWN\"\n \n \n... truncated 482 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "DPlane",
+      "IFNET",
+      "IP",
+      "RM"
+    ]
+  }
+}

@@ -19,6 +19,9 @@ from .inventory import IfnetManager, get_ifnet_manager
 from .models import InterfaceAddress, NetworkInterface
 from .policy import interface_can_shutdown
 from .state import (
+    IFNET_is_physical_up,
+    IFNET_is_protocol_up,
+    IFNET_physical_state_for_interface,
     IFNET_protocol_state_for_interface,
     is_admin_down,
     no_shutdown_interface,
@@ -247,6 +250,9 @@ def _current_interface(
     provider: InterfaceProvider | None,
     admin_provider: InterfaceAdminProvider | None,
 ) -> NetworkInterface | CommandResult:
+    interface = _get_vvrp_interface(ctx, provider, admin_provider, ctx.mode_label)
+    if not isinstance(interface, CommandResult):
+        return interface
     return _get_interface(ctx, provider, admin_provider, ctx.mode_label)
 
 
@@ -385,23 +391,23 @@ def _display_state(interface: NetworkInterface) -> str:
 def _display_detail_state_upper(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "Administratively DOWN"
-    return _display_state(interface).upper()
+    return IFNET_physical_state_for_interface(state, interface.name).upper()
 
 
 def _display_phy(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "*down"
     if interface.kind == "loopback":
-        return f"{_display_state(interface)}(l)"
-    return _display_state(interface)
+        return f"{IFNET_physical_state_for_interface(state, interface.name)}(l)"
+    return IFNET_physical_state_for_interface(state, interface.name)
 
 
 def _display_protocol(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "down"
-    if interface.kind == "loopback" and interface.is_up:
+    if interface.kind in {"loopback", "null"} and IFNET_is_physical_up(state, interface.name):
         return "up(s)"
-    if not interface.is_up:
+    if not IFNET_is_physical_up(state, interface.name):
         return "down"
     return IFNET_protocol_state_for_interface(state, interface.name)
 
@@ -409,11 +415,9 @@ def _display_protocol(interface: NetworkInterface, state: dict) -> str:
 def _display_protocol_upper(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "DOWN"
-    if interface.kind == "loopback" and interface.is_up:
+    if interface.kind in {"loopback", "null"} and IFNET_is_physical_up(state, interface.name):
         return "UP(spoofing)"
-    if not interface.is_up:
-        return "DOWN"
-    return IFNET_protocol_state_for_interface(state, interface.name).upper()
+    return "UP" if IFNET_is_protocol_up(state, interface.name) else "DOWN"
 
 
 def _display_mtu(mtu: int | None) -> str:

@@ -11,7 +11,7 @@ from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import NetworkInterface
-from src.IFNET.state import is_admin_down
+from src.IFNET.state import IFNET_is_physical_up, IFNET_is_protocol_up
 
 
 g_DPLANE_PACKET_INPUT_FILTER = "ether proto 0x0806 or ether proto 0x0800"
@@ -80,8 +80,8 @@ class DPlane_PacketInputService:
         for DPlane_interface in IFNET_ethernet_interface_snapshots(DPlane_ctx.state, DPlane_interfaces):
             if (
                 DPlane_interface.kind != "ethernet"
-                or not DPlane_interface.is_up
-                or is_admin_down(DPlane_ctx.state, DPlane_interface.name)
+                or not IFNET_is_physical_up(DPlane_ctx.state, DPlane_interface.name)
+                or not IFNET_is_protocol_up(DPlane_ctx.state, DPlane_interface.name)
                 or not DPlane_interface.addresses_by_family("ipv4")
             ):
                 continue

@@ -30,6 +30,7 @@ from src.CCmd.interactive import (
     _format_help_screen_update,
     _preserve_help_input,
     _render_input_with_token_styles,
+    _reboot_context,
     run_interactive_cli,
 )
 from src.CCmd.models import TokenStatus
@@ -1131,7 +1132,8 @@ class IFNETCommandTests(unittest.TestCase):
         registry.initialize_context(ctx)
 
         self.assertTrue(dispatch_line(ctx, registry, "show interfaces brief").executed)
-        self.assertEqual("No interfaces found\n", output.getvalue())
+        self.assertIn("NULL0", output.getvalue())
+        self.assertIn("NULL0                        up       up(s)", output.getvalue())
 
         ETHERNET_stage_device_install(ctx.state, "eth3")
         ETHERNET_commit_device_changes(ctx.state)
@@ -1142,6 +1144,7 @@ class IFNETCommandTests(unittest.TestCase):
 
         text = output.getvalue()
         self.assertIn("PHY: Physical", text)
+        self.assertIn("NULL0", text)
         self.assertIn("eth3", text)
         self.assertNotIn("loopback_0", text)
         self.assertNotIn("AA:BB:CC:DD:EE:FF", text)
@@ -1184,6 +1187,48 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertIn("Route Port,The Maximum Transmit Unit is 1500", text)
         self.assertIn("Hardware address is AA:BB:CC:DD:EE:FF", text)
         self.assertIn("Internet Address is unassigned", text)
+
+    def test_null0_is_builtin_vvrp_interface_with_zero_ifnet_index(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        registry.initialize_context(ctx)
+
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces NULL0").executed)
+
+        text = output.getvalue()
+        self.assertIn("NULL0 current state : UP", text)
+        self.assertIn("Line protocol current state : UP(spoofing)", text)
+        self.assertIn("IFNET Index : 0x0", text)
+        self.assertIn("Interface type : null", text)
+
+    def test_null0_ip_interface_is_up_spoofing_without_ip_processing(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        registry.initialize_context(ctx)
+
+        self.assertTrue(dispatch_line(ctx, registry, "show ip interface NULL0").executed)
+
+        text = output.getvalue()
+        self.assertIn("NULL0 current state : UP", text)
+        self.assertIn("Line protocol current state : UP (spoofing)", text)
+        self.assertIn("Internet protocol processing : disabled", text)
+        self.assertIn("Broadcast address : 0.0.0.0", text)
+
+    def test_null0_rejects_shutdown_and_ip_address(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        ctx = CliContext(output=io.StringIO())
+        registry.initialize_context(ctx)
+        ctx.push_mode("hidden")
+
+        self.assertTrue(dispatch_line(ctx, registry, "interface NULL0").executed)
+        shutdown = dispatch_line(ctx, registry, "shutdown")
+        self.assertTrue(shutdown.executed)
+        self.assertEqual("% Null interface cannot be shut down: NULL0", shutdown.message)
+        ip_address = dispatch_line(ctx, registry, "ip address 192.0.2.1 24")
+        self.assertTrue(ip_address.executed)
+        self.assertEqual("% NULL interface does not support static IPv4: NULL0", ip_address.message)
 
     def test_show_vvrp_interfaces_name_requires_installed_interface(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
@@ -3176,6 +3221,40 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_reboot_command_requests_context_restart_from_any_mode(self):
+        registry = build_default_registry()
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("hidden")
+        ctx.push_mode("interface", "NULL0")
+
+        outcome = dispatch_line(ctx, registry, "reboot")
+
+        self.assertTrue(outcome.executed)
+        self.assertTrue(ctx.reboot_requested)
+        self.assertFalse(ctx.exit_requested)
+
+    def test_reboot_context_returns_to_user_mode_and_loads_saved_configuration(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "saved-configuration"
+            config_path.write_text("hostname R9\n", encoding="utf-8")
+            registry = build_default_registry()
+            output = io.StringIO()
+            old_ctx = CliContext(hostname="Router", output=output)
+            old_ctx.push_mode("hidden")
+
+            new_ctx = _reboot_context(
+                registry,
+                hostname="Router",
+                output=old_ctx.output,
+                saved_configuration_file=config_path,
+            )
+
+            self.assertEqual("user", new_ctx.mode)
+            self.assertEqual("R9", new_ctx.hostname)
+            self.assertFalse(new_ctx.reboot_requested)
+            self.assertIn("System is rebooting...", output.getvalue())
+            self.assertIn("Reboot complete.", output.getvalue())
+
     def test_default_saved_configuration_path_is_runtime_root_relative(self):
         original_cwd = Path.cwd()
         try:
