@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    nav { margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a, nav strong { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; }
+    nav a { color: #1f4f9a; text-decoration: none; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <strong>7</strong></nav>
+    
+            <article class="card" id="60">
+              <div class="meta">
+                <span>2026-06-26_17-11-28</span>
+                <span>main</span>
+                <span>9a2cb3f</span>
+              </div>
+              <h2>Split reload and process-level reboot semantics</h2>
+              <p>Kept reboot as process-level restart for code reload, and restored the previous CliContext-only soft reset as a reload command. reload rebuilds CLI context, reloads saved-configuration, and returns to user mode without replacing the Python process.</p>
+              <h3>Files</h3>
+              <ul><li>src\CCmd\models.py</li><li>src\CCmd\dispatch.py</li><li>src\CCmd\interactive.py</li><li>src\CCmd\examples.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 24674 -&gt; 25034 bytes
+ context/replays/timeline/index.html    |   9 ++++++-
+ context/replays/timeline/page-006.html |  27 ++++++++++++++++++++
+ src/CCmd/dispatch.py                   |   4 +--
+ src/CCmd/examples.py                   |  19 ++++++++++++--
+ src/CCmd/interactive.py                |  17 ++++++-------
+ src/CCmd/models.py                     |   4 +--
+ src/VVRP/__main__.py                   |   2 ++
+ src/VVRP/runtime.py                    |   4 +++
+ tests/test_core.py                     |  45 ++++++++++++++++++++++++++-------
+ 10 files changed, 106 insertions(+), 25 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="61">
+              <div class="meta">
+                <span>2026-06-26_17-17-26</span>
+                <span>main</span>
+                <span>9a2cb3f</span>
+              </div>
+              <h2>Fix Windows reboot console handoff</h2>
+              <p>Changed process-level reboot so Windows starts the new VVRP process and waits for it instead of letting PowerShell print its prompt before the restarted CLI prompt. POSIX still uses execv for true process replacement.</p>
+              <h3>Files</h3>
+              <ul><li>src\CCmd\process_reboot.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 24674 -&gt; 26550 bytes
+ context/replays/timeline/index.html    |  16 ++++++++-
+ context/replays/timeline/page-001.html |   4 +--
+ context/replays/timeline/page-002.html |   4 +--
+ context/replays/timeline/page-003.html |   4 +--
+ context/replays/timeline/page-004.html |   4 +--
+ context/replays/timeline/page-005.html |   4 +--
+ context/replays/timeline/page-006.html |  31 +++++++++++++++--
+ src/CCmd/dispatch.py                   |   4 +--
+ src/CCmd/examples.py                   |  19 +++++++++--
+ src/CCmd/interactive.py                |  17 +++++-----
+ src/CCmd/models.py                     |   4 +--
+ src/VVRP/__main__.py                   |   2 ++
+ src/VVRP/runtime.py                    |   4 +++
+ tests/test_core.py                     |  59 ++++++++++++++++++++++++++++-----
+ 15 files changed, 139 insertions(+), 37 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="62">
+              <div class="meta">
+                <span>2026-06-26_17-22-43</span>
+                <span>main</span>
+                <span>9a2cb3f</span>
+              </div>
+              <h2>Remove leading blank line from reload output</h2>
+              <p>Adjusted reload progress output so System is reloading appears immediately after the command without an extra blank line, and added a regression assertion for the CLI output prefix.</p>
+              <h3>Files</h3>
+              <ul><li>src\CCmd\interactive.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 24674 -&gt; 26818 bytes
+ context/replays/timeline/index.html    |  23 ++++++++++++-
+ context/replays/timeline/page-001.html |   4 +--
+ context/replays/timeline/page-002.html |   4 +--
+ context/replays/timeline/page-003.html |   4 +--
+ context/replays/timeline/page-004.html |   4 +--
+ context/replays/timeline/page-005.html |   4 +--
+ context/replays/timeline/page-006.html |  31 +++++++++++++++--
+ src/CCmd/dispatch.py                   |   4 +--
+ src/CCmd/examples.py                   |  19 +++++++++--
+ src/CCmd/interactive.py                |  17 +++++-----
+ src/CCmd/models.py                     |   4 +--
+ src/VVRP/__main__.py                   |   2 ++
+ src/VVRP/runtime.py                    |   4 +++
+ tests/test_core.py                     |  59 ++++++++++++++++++++++++++++-----
+ 15 files changed, 146 insertions(+), 37 deletions(-)</pre>
+              </details>
+            </article>
+            
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <strong>7</strong></nav>
+  </main>
+</body>
+</html>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.ARP import ArpTable, register_arp_commands
+from src.CCmd.process_reboot import CCMD_process_reboot
 from src.DPlane import DPlane_Backend, register_dplane_commands
 from src.ETHERNET import register_ethernet_commands
 from src.FIB import FIB_register_commands
@@ -173,11 +174,25 @@ def build_default_registry(
 
     @registry.command(
         "reboot",
-        help_text="Reboot VVRP and return to user mode",
+        help_text="Reboot the VVRP process",
         modes=ALL_MODES,
     )
     def reboot_command(ctx, args):
-        return CommandResult(reboot_requested=True)
+        ctx.write("System is rebooting...")
+        ctx.write("Stopping services...")
+        active_runtime.VVRP_shutdown()
+        ctx.write("Restarting VVRP process...")
+        ctx.output.flush()
+        CCMD_process_reboot()
+        return CommandResult(ok=False, message="% Reboot failed: process replacement returned")
+
+    @registry.command(
+        "reload",
+        help_text="Reload VVRP configuration and return to user mode",
+        modes=ALL_MODES,
+    )
+    def reload_command(ctx, args):
+        return CommandResult(reload_requested=True)
 
     @registry.command(
         "quit",

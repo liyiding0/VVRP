@@ -5,6 +5,7 @@ import os
 
 from src.CCmd.examples import build_default_registry
 from src.CCmd.interactive import run_interactive_cli
+from src.CCmd.process_reboot import g_CCMD_REBOOT_MODULE_ENV
 
 from .runtime import VVRP_create_runtime
 
@@ -17,6 +18,7 @@ def main() -> int:
         help="Start VVRP runtime without launching the CCmd CLI.",
     )
     VVRP_args = VVRP_parser.parse_args()
+    os.environ[g_CCMD_REBOOT_MODULE_ENV] = __package__ or "src.VVRP"
     VVRP_runtime = VVRP_create_runtime()
     if VVRP_args.no_ccmd:
         return 0

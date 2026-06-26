@@ -84,8 +84,8 @@ def _run_plain_cli(
 
         line = f"{pending_input}{line}"
         dispatch_line(ctx, registry, line)
-        if ctx.reboot_requested:
-            ctx = _reboot_context(
+        if ctx.reload_requested:
+            ctx = _reload_context(
                 registry,
                 hostname=hostname,
                 output=ctx.output,
@@ -318,8 +318,8 @@ def run_interactive_cli(
             break
 
         dispatch_line(ctx, registry, line)
-        if ctx.reboot_requested:
-            ctx = _reboot_context(
+        if ctx.reload_requested:
+            ctx = _reload_context(
                 registry,
                 hostname=hostname,
                 output=ctx.output,
@@ -329,15 +329,14 @@ def run_interactive_cli(
     return 0
 
 
-def _reboot_context(
+def _reload_context(
     registry: CommandRegistry,
     hostname: str,
     output,
     saved_configuration_file: str | os.PathLike[str] | None,
 ) -> CliContext:
-    output.write("\nSystem is rebooting...\n")
-    output.write("Stopping services...\n")
-    output.write("Starting VVRP...\n")
+    output.write("System is reloading...\n")
+    output.write("Reloading saved configuration...\n")
     ctx = CliContext(hostname=hostname, output=output)
     registry.initialize_context(ctx)
     set_saved_configuration_path(ctx, saved_configuration_file)
@@ -345,7 +344,7 @@ def _reboot_context(
         ctx,
         load_saved_configuration(ctx, registry, saved_configuration_file),
     )
-    output.write("Reboot complete.\n")
+    output.write("Reload complete.\n")
     return ctx
 
 

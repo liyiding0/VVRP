@@ -52,8 +52,8 @@ def dispatch_line(ctx: CliContext, registry: CommandRegistry, line: str) -> Disp
     result = _normalize_result(raw_result)
     if result.exit_requested:
         ctx.exit_requested = True
-    if result.reboot_requested:
-        ctx.reboot_requested = True
+    if result.reload_requested:
+        ctx.reload_requested = True
     if result.message:
         ctx.write(result.message)
 

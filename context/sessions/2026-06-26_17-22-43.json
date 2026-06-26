@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-26_17-22-43",
+  "prompt": "Remove leading blank line from reload output",
+  "changed_files": [
+    "src\\CCmd\\interactive.py",
+    "tests\\test_core.py"
+  ],
+  "note": "Adjusted reload progress output so System is reloading appears immediately after the command without an extra blank line, and added a regression assertion for the CLI output prefix.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "9a2cb3f8ed7a71cb20ce9f1cd43d7dfd8602beaa",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-001.html",
+    "context/replays/timeline/page-002.html",
+    "context/replays/timeline/page-003.html",
+    "context/replays/timeline/page-004.html",
+    "context/replays/timeline/page-005.html",
+    "context/replays/timeline/page-006.html",
+    "src/CCmd/dispatch.py",
+    "src/CCmd/examples.py",
+    "src/CCmd/interactive.py",
+    "src/CCmd/models.py",
+    "src/VVRP/__main__.py",
+    "src/VVRP/runtime.py",
+    "tests/test_core.py",
+    "context/commits/9a2cb3f8ed7a.json",
+    "context/replays/timeline/page-007.html",
+    "context/sessions/2026-06-26_17-08-49.json",
+    "context/sessions/2026-06-26_17-11-28.json",
+    "context/sessions/2026-06-26_17-17-26.json",
+    "src/CCmd/process_reboot.py"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 24674 -> 26818 bytes\n context/replays/timeline/index.html    |  23 ++++++++++++-\n context/replays/timeline/page-001.html |   4 +--\n context/replays/timeline/page-002.html |   4 +--\n context/replays/timeline/page-003.html |   4 +--\n context/replays/timeline/page-004.html |   4 +--\n context/replays/timeline/page-005.html |   4 +--\n context/replays/timeline/page-006.html |  31 +++++++++++++++--\n src/CCmd/dispatch.py                   |   4 +--\n src/CCmd/examples.py                   |  19 +++++++++--\n src/CCmd/interactive.py                |  17 +++++-----\n src/CCmd/models.py                     |   4 +--\n src/VVRP/__main__.py                   |   2 ++\n src/VVRP/runtime.py                    |   4 +++\n tests/test_core.py                     |  59 ++++++++++++++++++++++++++++-----\n 15 files changed, 146 insertions(+), 37 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex cb4db89..afdf2ff 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex cac5627..0f0077c 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>59 events, split into 6 page(s).</p>\n+    <p>62 events, split into 7 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -437,6 +437,27 @@\n               <td>b4ad17f</td>\n               <td>main</td>\n             </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_17-08-49</td>\n+              <td><a href=\"page-006.html#59\">Upgrade reboot to process-level restart</a></td>\n+              <td>9a2cb3f</td>\n+              <td>main</td>\n+            </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_17-11-28</td>\n+              <td><a href=\"page-007.html#60\">Split reload and process-level reboot semantics</a></td>\n+              <td>9a2cb3f</td>\n+              <td>main</td>\n+            </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_17-17-26</td>\n+              <td><a href=\"page-007.html#61\">Fix Windows reboot console handoff</a></td>\n+              <td>9a2cb3f</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-001.html b/context/replays/timeline/page-001.html\nindex 6832cc9..f87a51e 100644\n--- a/context/replays/timeline/page-001.html\n+++ b/context/replays/timeline/page-001.html\n@@ -27,7 +27,7 @@\n     <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>\n   </header>\n   <main>\n-    <nav><strong>1</strong> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a></nav>\n+    <nav><strong>1</strong> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a> <a href=\"page-007.html\">7</a></nav>\n     \n             <article class=\"card\" id=\"0\">\n               <div class=\"meta\">\n@@ -252,7 +252,7 @@\n               </details>\n             </article>\n             \n-    <nav><strong>1</strong> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a></nav>\n+    <nav><strong>1</strong> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a> <a href=\"page-007.html\">7</a></nav>\n   </main>\n </body>\n </html>\ndiff --git a/context/replays/timeline/page-002.html b/context/replays/timeline/page-002.html\nindex 3d4f3ed..734bd51 100644\n--- a/context/replays/timeline/page-002.html\n+++ b/context/replays/timeline/page-002.html\n@@ -27,7 +27,7 @@\n     <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>\n   </header>\n   <main>\n-    <nav><a href=\"page-001.html\">1</a> <strong>2</strong> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a></nav>\n+    <nav><a href=\"page-001.html\">1</a> <strong>2</strong> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a> <a href=\"page-007.html\">7</a></nav>\n     \n             <article class=\"card\" id=\"10\">\n               <div class=\"meta\">\n@@ -311,7 +311,7 @@\n... truncated 389 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CCmd",
+      "tests"
+    ]
+  }
+}

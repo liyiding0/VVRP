@@ -98,6 +98,10 @@ class VVRP_Runtime:
         VVRP_port.open()
         return VVRP_port
 
+    def VVRP_shutdown(self) -> None:
+        self.VVRP_packet_input.DPlane_stop()
+        self.VVRP_ethernet_frame_debug.stop()
+
 
 def VVRP_create_runtime(
     VVRP_ifnet_provider: InterfaceProvider | None = None,

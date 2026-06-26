@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-26_17-11-28",
+  "prompt": "Split reload and process-level reboot semantics",
+  "changed_files": [
+    "src\\CCmd\\models.py",
+    "src\\CCmd\\dispatch.py",
+    "src\\CCmd\\interactive.py",
+    "src\\CCmd\\examples.py",
+    "tests\\test_core.py"
+  ],
+  "note": "Kept reboot as process-level restart for code reload, and restored the previous CliContext-only soft reset as a reload command. reload rebuilds CLI context, reloads saved-configuration, and returns to user mode without replacing the Python process.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "9a2cb3f8ed7a71cb20ce9f1cd43d7dfd8602beaa",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-006.html",
+    "src/CCmd/dispatch.py",
+    "src/CCmd/examples.py",
+    "src/CCmd/interactive.py",
+    "src/CCmd/models.py",
+    "src/VVRP/__main__.py",
+    "src/VVRP/runtime.py",
+    "tests/test_core.py",
+    "context/commits/9a2cb3f8ed7a.json",
+    "context/sessions/2026-06-26_17-08-49.json",
+    "src/CCmd/process_reboot.py"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 24674 -> 25034 bytes\n context/replays/timeline/index.html    |   9 ++++++-\n context/replays/timeline/page-006.html |  27 ++++++++++++++++++++\n src/CCmd/dispatch.py                   |   4 +--\n src/CCmd/examples.py                   |  19 ++++++++++++--\n src/CCmd/interactive.py                |  17 ++++++-------\n src/CCmd/models.py                     |   4 +--\n src/VVRP/__main__.py                   |   2 ++\n src/VVRP/runtime.py                    |   4 +++\n tests/test_core.py                     |  45 ++++++++++++++++++++++++++-------\n 10 files changed, 106 insertions(+), 25 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex cb4db89..ebd8ca2 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex cac5627..0c977b7 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>59 events, split into 6 page(s).</p>\n+    <p>60 events, split into 6 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -437,6 +437,13 @@\n               <td>b4ad17f</td>\n               <td>main</td>\n             </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_17-08-49</td>\n+              <td><a href=\"page-006.html#59\">Upgrade reboot to process-level restart</a></td>\n+              <td>9a2cb3f</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-006.html b/context/replays/timeline/page-006.html\nindex 0e4796e..3bbd97e 100644\n--- a/context/replays/timeline/page-006.html\n+++ b/context/replays/timeline/page-006.html\n@@ -361,6 +361,33 @@\n               </details>\n             </article>\n             \n+            <article class=\"card\" id=\"59\">\n+              <div class=\"meta\">\n+                <span>2026-06-26_17-08-49</span>\n+                <span>main</span>\n+                <span>9a2cb3f</span>\n+              </div>\n+              <h2>Upgrade reboot to process-level restart</h2>\n+              <p>Changed reboot from CliContext-only soft reset to process-level restart. The reboot command now prints shutdown progress, stops VVRP packet input/frame debug services, flushes output, and re-execs the current Python interpreter with the VVRP module so changed code is reloaded cross-platform. Tests patch the exec path to verify argv without replacing the test process.</p>\n+              <h3>Files</h3>\n+              <ul><li>src\\CCmd\\process_reboot.py</li><li>src\\CCmd\\examples.py</li><li>src\\CCmd\\dispatch.py</li><li>src\\CCmd\\interactive.py</li><li>src\\CCmd\\models.py</li><li>src\\VVRP\\__main__.py</li><li>src\\VVRP\\runtime.py</li><li>tests\\test_core.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>None recorded</li></ul>\n+              <h3>Architecture</h3>\n+              <p>CCmd, VVRP, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>src/CCmd/dispatch.py    |  2 --\n+ src/CCmd/examples.py    | 11 +++++++++--\n+ src/CCmd/interactive.py | 37 -------------------------------------\n+ src/CCmd/models.py      |  2 --\n+ src/VVRP/__main__.py    |  2 ++\n+ src/VVRP/runtime.py     |  4 ++++\n+ tests/test_core.py      | 40 ++++++++++++++++------------------------\n+ 7 files changed, 31 insertions(+), 67 deletions(-)</pre>\n+              </details>\n+            </article>\n+            \n     <nav><a href=\"page-001.html\">1</a> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <strong>6</strong></nav>\n   </main>\n </body>\ndiff --git a/src/CCmd/dispatch.py b/src/CCmd/dispatch.py\nindex edd6348..c09f840 100644\n--- a/src/CCmd/dispatch.py\n+++ b/src/CCmd/dispatch.py\n@@ -52,8 +52,8 @@ def dispatch_line(ctx: CliContext, registry: CommandRegistry, line: str) -> Disp\n     result = _normalize_result(raw_result)\n     if result.exit_requested:\n         ctx.exit_requested = True\n-    if result.reboot_requested:\n-        ctx.reboot_requested = True\n+    if result.reload_requested:\n+        ctx.reload_requested = True\n... truncated 240 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CCmd",
+      "tests"
+    ]
+  }
+}

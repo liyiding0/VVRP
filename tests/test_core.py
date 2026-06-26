@@ -30,7 +30,7 @@ from src.CCmd.interactive import (
     _format_help_screen_update,
     _preserve_help_input,
     _render_input_with_token_styles,
-    _reboot_context,
+    _reload_context,
     run_interactive_cli,
 )
 from src.CCmd.models import TokenStatus
@@ -3221,19 +3221,60 @@ class StaticIpv4CommandTests(unittest.TestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
-    def test_reboot_command_requests_context_restart_from_any_mode(self):
+    def test_reboot_command_stops_runtime_and_reexecs_process_from_any_mode(self):
+        registry = build_default_registry()
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        ctx.push_mode("hidden")
+        ctx.push_mode("interface", "NULL0")
+
+        with patch("src.CCmd.examples.CCMD_process_reboot") as reboot:
+            outcome = dispatch_line(ctx, registry, "reboot")
+
+        self.assertTrue(outcome.executed)
+        self.assertFalse(ctx.exit_requested)
+        reboot.assert_called_once_with()
+        self.assertIn("System is rebooting...", output.getvalue())
+        self.assertIn("Stopping services...", output.getvalue())
+        self.assertIn("Restarting VVRP process...", output.getvalue())
+
+    def test_process_reboot_execs_current_python_with_vvrp_module(self):
+        from src.CCmd.process_reboot import CCMD_process_reboot
+
+        with patch.dict(os.environ, {"VVRP_REBOOT_MODULE": "VVRP"}):
+            with patch("src.CCmd.process_reboot.os.name", "posix"):
+                with patch("src.CCmd.process_reboot.os.execv") as execv:
+                    CCMD_process_reboot()
+
+        self.assertEqual(sys.executable, execv.call_args.args[0])
+        self.assertEqual([sys.executable, "-m", "VVRP"], execv.call_args.args[1])
+
+    def test_process_reboot_waits_for_child_process_on_windows(self):
+        from src.CCmd.process_reboot import CCMD_process_reboot
+
+        with patch.dict(os.environ, {"VVRP_REBOOT_MODULE": "VVRP"}):
+            with patch("src.CCmd.process_reboot.os.name", "nt"):
+                with patch("src.CCmd.process_reboot.subprocess.call", return_value=7) as call:
+                    with patch("src.CCmd.process_reboot.os._exit", side_effect=SystemExit) as exit_:
+                        with self.assertRaises(SystemExit):
+                            CCMD_process_reboot()
+
+        call.assert_called_once_with([sys.executable, "-m", "VVRP"])
+        exit_.assert_called_once_with(7)
+
+    def test_reload_command_requests_context_reload_from_any_mode(self):
         registry = build_default_registry()
         ctx = CliContext(output=io.StringIO())
         ctx.push_mode("hidden")
         ctx.push_mode("interface", "NULL0")
 
-        outcome = dispatch_line(ctx, registry, "reboot")
+        outcome = dispatch_line(ctx, registry, "reload")
 
         self.assertTrue(outcome.executed)
-        self.assertTrue(ctx.reboot_requested)
+        self.assertTrue(ctx.reload_requested)
         self.assertFalse(ctx.exit_requested)
 
-    def test_reboot_context_returns_to_user_mode_and_loads_saved_configuration(self):
+    def test_reload_context_returns_to_user_mode_and_loads_saved_configuration(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "saved-configuration"
             config_path.write_text("hostname R9\n", encoding="utf-8")
@@ -3242,7 +3283,7 @@ class ConfigurationTests(unittest.TestCase):
             old_ctx = CliContext(hostname="Router", output=output)
             old_ctx.push_mode("hidden")
 
-            new_ctx = _reboot_context(
+            new_ctx = _reload_context(
                 registry,
                 hostname="Router",
                 output=old_ctx.output,
@@ -3251,9 +3292,9 @@ class ConfigurationTests(unittest.TestCase):
 
             self.assertEqual("user", new_ctx.mode)
             self.assertEqual("R9", new_ctx.hostname)
-            self.assertFalse(new_ctx.reboot_requested)
-            self.assertIn("System is rebooting...", output.getvalue())
-            self.assertIn("Reboot complete.", output.getvalue())
+            self.assertFalse(new_ctx.reload_requested)
+            self.assertTrue(output.getvalue().startswith("System is reloading...\n"))
+            self.assertIn("Reload complete.", output.getvalue())
 
     def test_default_saved_configuration_path_is_runtime_root_relative(self):
         original_cwd = Path.cwd()

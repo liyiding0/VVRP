@@ -1,0 +1,39 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-26_17-08-49",
+  "prompt": "Upgrade reboot to process-level restart",
+  "changed_files": [
+    "src\\CCmd\\process_reboot.py",
+    "src\\CCmd\\examples.py",
+    "src\\CCmd\\dispatch.py",
+    "src\\CCmd\\interactive.py",
+    "src\\CCmd\\models.py",
+    "src\\VVRP\\__main__.py",
+    "src\\VVRP\\runtime.py",
+    "tests\\test_core.py"
+  ],
+  "note": "Changed reboot from CliContext-only soft reset to process-level restart. The reboot command now prints shutdown progress, stops VVRP packet input/frame debug services, flushes output, and re-execs the current Python interpreter with the VVRP module so changed code is reloaded cross-platform. Tests patch the exec path to verify argv without replacing the test process.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "9a2cb3f8ed7a71cb20ce9f1cd43d7dfd8602beaa",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "rc/CCmd/dispatch.py",
+    "src/CCmd/examples.py",
+    "src/CCmd/interactive.py",
+    "src/CCmd/models.py",
+    "src/VVRP/__main__.py",
+    "src/VVRP/runtime.py",
+    "tests/test_core.py",
+    "src/CCmd/process_reboot.py"
+  ],
+  "diff_stat": "src/CCmd/dispatch.py    |  2 --\n src/CCmd/examples.py    | 11 +++++++++--\n src/CCmd/interactive.py | 37 -------------------------------------\n src/CCmd/models.py      |  2 --\n src/VVRP/__main__.py    |  2 ++\n src/VVRP/runtime.py     |  4 ++++\n tests/test_core.py      | 40 ++++++++++++++++------------------------\n 7 files changed, 31 insertions(+), 67 deletions(-)",
+  "diff_summary": "diff --git a/src/CCmd/dispatch.py b/src/CCmd/dispatch.py\nindex edd6348..4b96ec2 100644\n--- a/src/CCmd/dispatch.py\n+++ b/src/CCmd/dispatch.py\n@@ -52,8 +52,6 @@ def dispatch_line(ctx: CliContext, registry: CommandRegistry, line: str) -> Disp\n     result = _normalize_result(raw_result)\n     if result.exit_requested:\n         ctx.exit_requested = True\n-    if result.reboot_requested:\n-        ctx.reboot_requested = True\n     if result.message:\n         ctx.write(result.message)\n \ndiff --git a/src/CCmd/examples.py b/src/CCmd/examples.py\nindex 3902cdd..ba2e4ae 100644\n--- a/src/CCmd/examples.py\n+++ b/src/CCmd/examples.py\n@@ -1,6 +1,7 @@\n from __future__ import annotations\n \n from src.ARP import ArpTable, register_arp_commands\n+from src.CCmd.process_reboot import CCMD_process_reboot\n from src.DPlane import DPlane_Backend, register_dplane_commands\n from src.ETHERNET import register_ethernet_commands\n from src.FIB import FIB_register_commands\n@@ -173,11 +174,17 @@ def build_default_registry(\n \n     @registry.command(\n         \"reboot\",\n-        help_text=\"Reboot VVRP and return to user mode\",\n+        help_text=\"Reboot the VVRP process\",\n         modes=ALL_MODES,\n     )\n     def reboot_command(ctx, args):\n-        return CommandResult(reboot_requested=True)\n+        ctx.write(\"System is rebooting...\")\n+        ctx.write(\"Stopping services...\")\n+        active_runtime.VVRP_shutdown()\n+        ctx.write(\"Restarting VVRP process...\")\n+        ctx.output.flush()\n+        CCMD_process_reboot()\n+        return CommandResult(ok=False, message=\"% Reboot failed: process replacement returned\")\n \n     @registry.command(\n         \"quit\",\ndiff --git a/src/CCmd/interactive.py b/src/CCmd/interactive.py\nindex 8771c22..13a57f4 100644\n--- a/src/CCmd/interactive.py\n+++ b/src/CCmd/interactive.py\n@@ -70,7 +70,6 @@ def _run_plain_cli(\n ) -> int:\n     ctx = CliContext(hostname=hostname)\n     registry.initialize_context(ctx)\n-    set_saved_configuration_path(ctx, saved_configuration_file)\n     _print_saved_configuration_errors(\n         ctx,\n         load_saved_configuration(ctx, registry, saved_configuration_file),\n@@ -84,15 +83,6 @@ def _run_plain_cli(\n \n         line = f\"{pending_input}{line}\"\n         dispatch_line(ctx, registry, line)\n-        if ctx.reboot_requested:\n-            ctx = _reboot_context(\n-                registry,\n-                hostname=hostname,\n-                output=ctx.output,\n-                saved_configuration_file=saved_configuration_file,\n-            )\n-            pending_input = \"\"\n-            continue\n         pending_input = _preserve_help_input(line) if \"?\" in line else \"\"\n \n     return 0\n@@ -318,37 +308,10 @@ def run_interactive_cli(\n             break\n \n         dispatch_line(ctx, registry, line)\n-        if ctx.reboot_requested:\n-            ctx = _reboot_context(\n-                registry,\n... truncated 154 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CCmd",
+      "VVRP",
+      "tests"
+    ]
+  }
+}
