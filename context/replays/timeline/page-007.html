@@ -218,6 +218,28 @@
               </details>
             </article>
             
+            <article class="card" id="66">
+              <div class="meta">
+                <span>2026-06-27_01-08-58</span>
+                <span>main</span>
+                <span>fbf2f95</span>
+              </div>
+              <h2>Mark unique dynamic CLI prefixes as valid</h2>
+              <p>Fixed real-time CLI token analysis so unique dynamic parameter prefixes such as show interfaces in and show interfaces n are marked valid/green and canonicalized to InLoopBack0 and NULL0, while multi-match prefixes remain ambiguous/yellow.</p>
+              <h3>Files</h3>
+              <ul><li>src\CCmd\parser.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>src/CCmd/parser.py | 10 ++++++++--
+ tests/test_core.py | 23 +++++++++++++++++++++++
+ 2 files changed, 31 insertions(+), 2 deletions(-)</pre>
+              </details>
+            </article>
+            
     <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <strong>7</strong></nav>
   </main>
 </body>

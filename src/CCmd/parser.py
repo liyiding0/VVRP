@@ -242,8 +242,9 @@ class CommandParser:
                 resolved_tokens.append(edge.token.literal or "")
             else:
                 assert edge.token.name is not None
-                args[edge.token.name] = token_slice.text
-                resolved_tokens.append(_format_resolved_token(token_slice.text))
+                resolved_value = matches[0].candidates[0] if matches[0].candidates else token_slice.text
+                args[edge.token.name] = resolved_value
+                resolved_tokens.append(_format_resolved_token(resolved_value))
             node = edge.node
 
         command = node.command
@@ -469,6 +470,11 @@ class CommandParser:
                 if value_candidate.lower().startswith(value_key)
             )
             if prefix_matches:
+                if len(prefix_matches) == 1:
+                    parameter_matches.append(
+                        _EdgeMatch(edge, TokenStyle.VALID, prefix_matches)
+                    )
+                    continue
                 parameter_matches.append(
                     _EdgeMatch(edge, TokenStyle.AMBIGUOUS, prefix_matches)
                 )

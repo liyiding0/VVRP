@@ -371,6 +371,29 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(ParseStatus.VALID_UNIQUE, exact.status)
         self.assertTrue(exact.executable)
 
+    def test_unique_dynamic_interface_prefix_is_valid_and_canonical(self):
+        registry = build_default_registry(
+            ifnet_provider=FakeInterfaceProvider((fake_ethernet_without_ipv4("eth0"),))
+        )
+        ctx = CliContext(output=io.StringIO())
+        ctx.push_mode("hidden")
+        registry.initialize_context(ctx)
+        ETHERNET_stage_device_install(ctx.state, "eth0")
+        ETHERNET_commit_device_changes(ctx.state)
+        parser = CommandParser(registry)
+
+        inloopback = parser.parse("show interfaces in", mode="hidden", ctx=ctx)
+        self.assertEqual(ParseStatus.VALID_UNIQUE, inloopback.status)
+        self.assertEqual(TokenStyle.VALID, inloopback.token_statuses[2].style)
+        self.assertEqual({"name": "InLoopBack0"}, inloopback.args)
+        self.assertEqual("show interfaces InLoopBack0", inloopback.complete_command)
+
+        null0 = parser.parse("show interfaces n", mode="hidden", ctx=ctx)
+        self.assertEqual(ParseStatus.VALID_UNIQUE, null0.status)
+        self.assertEqual(TokenStyle.VALID, null0.token_statuses[2].style)
+        self.assertEqual({"name": "NULL0"}, null0.args)
+        self.assertEqual("show interfaces NULL0", null0.complete_command)
+
     def test_ambiguous_top_level_token_does_not_complete_before_space(self):
         parser = CommandParser(build_default_registry())
 

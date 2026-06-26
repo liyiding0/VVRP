@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-27_01-08-58",
+  "prompt": "Mark unique dynamic CLI prefixes as valid",
+  "changed_files": [
+    "src\\CCmd\\parser.py",
+    "tests\\test_core.py"
+  ],
+  "note": "Fixed real-time CLI token analysis so unique dynamic parameter prefixes such as show interfaces in and show interfaces n are marked valid/green and canonicalized to InLoopBack0 and NULL0, while multi-match prefixes remain ambiguous/yellow.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "fbf2f951bdfaa1d3966efe3817e1a06ce896bf11",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "rc/CCmd/parser.py",
+    "tests/test_core.py"
+  ],
+  "diff_stat": "src/CCmd/parser.py | 10 ++++++++--\n tests/test_core.py | 23 +++++++++++++++++++++++\n 2 files changed, 31 insertions(+), 2 deletions(-)",
+  "diff_summary": "diff --git a/src/CCmd/parser.py b/src/CCmd/parser.py\nindex d26a428..3a67067 100644\n--- a/src/CCmd/parser.py\n+++ b/src/CCmd/parser.py\n@@ -242,8 +242,9 @@ class CommandParser:\n                 resolved_tokens.append(edge.token.literal or \"\")\n             else:\n                 assert edge.token.name is not None\n-                args[edge.token.name] = token_slice.text\n-                resolved_tokens.append(_format_resolved_token(token_slice.text))\n+                resolved_value = matches[0].candidates[0] if matches[0].candidates else token_slice.text\n+                args[edge.token.name] = resolved_value\n+                resolved_tokens.append(_format_resolved_token(resolved_value))\n             node = edge.node\n \n         command = node.command\n@@ -469,6 +470,11 @@ class CommandParser:\n                 if value_candidate.lower().startswith(value_key)\n             )\n             if prefix_matches:\n+                if len(prefix_matches) == 1:\n+                    parameter_matches.append(\n+                        _EdgeMatch(edge, TokenStyle.VALID, prefix_matches)\n+                    )\n+                    continue\n                 parameter_matches.append(\n                     _EdgeMatch(edge, TokenStyle.AMBIGUOUS, prefix_matches)\n                 )\ndiff --git a/tests/test_core.py b/tests/test_core.py\nindex 9273ae9..009b709 100644\n--- a/tests/test_core.py\n+++ b/tests/test_core.py\n@@ -371,6 +371,29 @@ class ParserTests(unittest.TestCase):\n         self.assertEqual(ParseStatus.VALID_UNIQUE, exact.status)\n         self.assertTrue(exact.executable)\n \n+    def test_unique_dynamic_interface_prefix_is_valid_and_canonical(self):\n+        registry = build_default_registry(\n+            ifnet_provider=FakeInterfaceProvider((fake_ethernet_without_ipv4(\"eth0\"),))\n+        )\n+        ctx = CliContext(output=io.StringIO())\n+        ctx.push_mode(\"hidden\")\n+        registry.initialize_context(ctx)\n+        ETHERNET_stage_device_install(ctx.state, \"eth0\")\n+        ETHERNET_commit_device_changes(ctx.state)\n+        parser = CommandParser(registry)\n+\n+        inloopback = parser.parse(\"show interfaces in\", mode=\"hidden\", ctx=ctx)\n+        self.assertEqual(ParseStatus.VALID_UNIQUE, inloopback.status)\n+        self.assertEqual(TokenStyle.VALID, inloopback.token_statuses[2].style)\n+        self.assertEqual({\"name\": \"InLoopBack0\"}, inloopback.args)\n+        self.assertEqual(\"show interfaces InLoopBack0\", inloopback.complete_command)\n+\n+        null0 = parser.parse(\"show interfaces n\", mode=\"hidden\", ctx=ctx)\n+        self.assertEqual(ParseStatus.VALID_UNIQUE, null0.status)\n+        self.assertEqual(TokenStyle.VALID, null0.token_statuses[2].style)\n+        self.assertEqual({\"name\": \"NULL0\"}, null0.args)\n+        self.assertEqual(\"show interfaces NULL0\", null0.complete_command)\n+\n     def test_ambiguous_top_level_token_does_not_complete_before_space(self):\n         parser = CommandParser(build_default_registry())",
+  "architecture": {
+    "touched_modules": [
+      "CCmd",
+      "tests"
+    ]
+  }
+}
