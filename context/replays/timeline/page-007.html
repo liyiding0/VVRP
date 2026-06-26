@@ -129,6 +129,95 @@
               </details>
             </article>
             
+            <article class="card" id="63">
+              <div class="meta">
+                <span>2026-06-26_17-33-34</span>
+                <span>main</span>
+                <span>ab9a93b</span>
+              </div>
+              <h2>Add InLoopBack0 and IPv4 loopback direct routes</h2>
+              <p>Added built-in VVRP InLoopBack0 IFNET interface, IP-owned 127.0.0.1/8 address state, and RM generation of both 127.0.0.0/8 and 127.0.0.1/32 Direct routes. FIB sync now carries loopback forwarding entries alongside Ethernet connected routes.</p>
+              <h3>Files</h3>
+              <ul><li>src\IFNET\InLoopBack.py</li><li>src\IFNET\interfaces.py</li><li>src\IP\state.py</li><li>src\RM\routes.py</li><li>tests\test_routing.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>IFNET, IP, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>src/IFNET/interfaces.py |  8 ++++++--
+ src/IP/state.py         |  8 ++++++++
+ src/RM/routes.py        | 11 +++++++++++
+ tests/test_core.py      |  5 ++++-
+ tests/test_routing.py   | 13 +++++++++++++
+ 5 files changed, 42 insertions(+), 3 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="64">
+              <div class="meta">
+                <span>2026-06-26_17-51-17</span>
+                <span>main</span>
+                <span>ab9a93b</span>
+              </div>
+              <h2>Align built-in interfaces and CLI case handling</h2>
+              <p>Set InLoopBack0 IFNET index to 0x0 and NULL0 to 0xffff, blocked interface view entry for InLoopBack0, made VVRP interface lookups case-insensitive with canonical names, and made command literal parsing globally case-insensitive. Also retained IP-owned 127.0.0.1/8 loopback route generation.</p>
+              <h3>Files</h3>
+              <ul><li>src\IFNET\InLoopBack.py</li><li>src\IFNET\Null.py</li><li>src\IFNET\interfaces.py</li><li>src\IFNET\commands.py</li><li>src\IP\state.py</li><li>src\RM\routes.py</li><li>src\CCmd\registry.py</li><li>src\CCmd\parser.py</li><li>tests\test_core.py</li><li>tests\test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, IFNET, IP, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 27015 -&gt; 27360 bytes
+ context/replays/timeline/index.html    |   9 +++-
+ context/replays/timeline/page-007.html |  25 +++++++++++
+ src/CCmd/parser.py                     |  11 +++--
+ src/CCmd/registry.py                   |   2 +-
+ src/IFNET/Null.py                      |   2 +-
+ src/IFNET/commands.py                  |  37 +++++++++++++---
+ src/IFNET/interfaces.py                |  13 ++++--
+ src/IP/state.py                        |   8 ++++
+ src/RM/routes.py                       |  11 +++++
+ tests/test_core.py                     |  78 +++++++++++++++++++++++++++++++--
+ tests/test_routing.py                  |  13 ++++++
+ 12 files changed, 191 insertions(+), 18 deletions(-)</pre>
+              </details>
+            </article>
+            
+            <article class="card" id="65">
+              <div class="meta">
+                <span>2026-06-27_01-02-18</span>
+                <span>main</span>
+                <span>ab9a93b</span>
+              </div>
+              <h2>Keep canonical interface names in CLI help</h2>
+              <p>Fixed dynamic parameter matching so interface names can be entered case-insensitively while help output keeps only canonical names such as NULL0 and InLoopBack0. Removed lowercase aliases from IFNET parameter providers and moved case-insensitive comparison into the parser.</p>
+              <h3>Files</h3>
+              <ul><li>src\CCmd\parser.py</li><li>src\IFNET\commands.py</li><li>tests\test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>CCmd, IFNET, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 27015 -&gt; 27707 bytes
+ context/replays/timeline/index.html    |  16 +++++-
+ context/replays/timeline/page-007.html |  57 +++++++++++++++++++++
+ src/CCmd/parser.py                     |  30 +++++++----
+ src/CCmd/registry.py                   |   2 +-
+ src/IFNET/Null.py                      |   2 +-
+ src/IFNET/commands.py                  |  24 +++++++--
+ src/IFNET/interfaces.py                |  13 +++--
+ src/IP/state.py                        |   8 +++
+ src/RM/routes.py                       |  11 ++++
+ tests/test_core.py                     |  90 +++++++++++++++++++++++++++++++--
+ tests/test_routing.py                  |  13 +++++
+ 12 files changed, 244 insertions(+), 22 deletions(-)</pre>
+              </details>
+            </article>
+            
     <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <strong>7</strong></nav>
   </main>
 </body>

@@ -286,12 +286,13 @@ class CommandParser:
         candidates: list[CompletionCandidate] = []
         start_position = -len(prefix) if prefix else 0
         literal_names = sorted(node.literal_edges)
+        prefix_key = prefix.lower()
 
         for name in literal_names:
             edge = node.literal_edges[name]
             if self._edge_is_hidden(edge):
                 continue
-            if not prefix or name.startswith(prefix):
+            if not prefix or name.startswith(prefix_key):
                 meta = edge.node.command.help_text if edge.node.command else ""
                 candidates.append(
                     CompletionCandidate(
@@ -307,8 +308,9 @@ class CommandParser:
                 continue
             dynamic_values = self._parameter_values(edge, [item.text for item in previous_tokens], ctx)
             if dynamic_values is not None:
+                prefix_key = prefix.lower()
                 for value in sorted(dynamic_values):
-                    if not prefix or value.startswith(prefix):
+                    if not prefix or value.lower().startswith(prefix_key):
                         candidates.append(
                             CompletionCandidate(
                                 text=_format_resolved_token(value),
@@ -375,10 +377,11 @@ class CommandParser:
             node = matches[0].edge.node
 
         candidates: list[HelpCandidate] = []
+        prefix_key = prefix.lower()
         for name, edge in sorted(node.literal_edges.items()):
             if self._edge_is_hidden(edge):
                 continue
-            if not prefix or name.startswith(prefix):
+            if not prefix or name.startswith(prefix_key):
                 candidates.append(
                     HelpCandidate(
                         display=name,
@@ -391,8 +394,9 @@ class CommandParser:
                 continue
             dynamic_values = self._parameter_values(edge, [item.text for item in previous_tokens], ctx)
             if dynamic_values is not None:
+                prefix_key = prefix.lower()
                 for value in sorted(dynamic_values):
-                    if not prefix or value.startswith(prefix):
+                    if not prefix or value.lower().startswith(prefix_key):
                         candidates.append(
                             HelpCandidate(
                                 display=value,
@@ -420,12 +424,13 @@ class CommandParser:
         resolved_tokens: list[str],
         ctx: CliContext | None,
     ) -> list[_EdgeMatch]:
-        exact = node.literal_edges.get(value)
+        value_key = value.lower()
+        exact = node.literal_edges.get(value_key)
         if exact is not None:
             return [_EdgeMatch(exact)]
 
         literal_matches = [
-            edge for name, edge in sorted(node.literal_edges.items()) if name.startswith(value)
+            edge for name, edge in sorted(node.literal_edges.items()) if name.startswith(value_key)
         ]
         if literal_matches:
             return [_EdgeMatch(edge) for edge in literal_matches]
@@ -447,14 +452,21 @@ class CommandParser:
                 parameter_matches.append(_EdgeMatch(edge))
                 continue
 
-            if value in dynamic_values:
-                parameter_matches.append(_EdgeMatch(edge, TokenStyle.VALID, (value,)))
+            dynamic_value_by_lower = {
+                dynamic_value.lower(): dynamic_value
+                for dynamic_value in dynamic_values
+            }
+            value_key = value.lower()
+            if value_key in dynamic_value_by_lower:
+                parameter_matches.append(
+                    _EdgeMatch(edge, TokenStyle.VALID, (dynamic_value_by_lower[value_key],))
+                )
                 continue
 
             prefix_matches = tuple(
                 value_candidate
                 for value_candidate in sorted(dynamic_values)
-                if value_candidate.startswith(value)
+                if value_candidate.lower().startswith(value_key)
             )
             if prefix_matches:
                 parameter_matches.append(

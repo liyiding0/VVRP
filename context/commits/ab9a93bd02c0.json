@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-27_01-02-18",
+  "prompt": "Keep canonical interface names in CLI help",
+  "changed_files": [
+    "src\\CCmd\\parser.py",
+    "src\\IFNET\\commands.py",
+    "tests\\test_core.py"
+  ],
+  "note": "Fixed dynamic parameter matching so interface names can be entered case-insensitively while help output keeps only canonical names such as NULL0 and InLoopBack0. Removed lowercase aliases from IFNET parameter providers and moved case-insensitive comparison into the parser.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "ab9a93bd02c070fd2bfa35224044360cf2d374a5",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-007.html",
+    "src/CCmd/parser.py",
+    "src/CCmd/registry.py",
+    "src/IFNET/Null.py",
+    "src/IFNET/commands.py",
+    "src/IFNET/interfaces.py",
+    "src/IP/state.py",
+    "src/RM/routes.py",
+    "tests/test_core.py",
+    "tests/test_routing.py",
+    "context/commits/ab9a93bd02c0.json",
+    "context/sessions/2026-06-26_17-33-34.json",
+    "context/sessions/2026-06-26_17-51-17.json",
+    "src/IFNET/InLoopBack.py"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 27015 -> 27707 bytes\n context/replays/timeline/index.html    |  16 +++++-\n context/replays/timeline/page-007.html |  57 +++++++++++++++++++++\n src/CCmd/parser.py                     |  30 +++++++----\n src/CCmd/registry.py                   |   2 +-\n src/IFNET/Null.py                      |   2 +-\n src/IFNET/commands.py                  |  24 +++++++--\n src/IFNET/interfaces.py                |  13 +++--\n src/IP/state.py                        |   8 +++\n src/RM/routes.py                       |  11 ++++\n tests/test_core.py                     |  90 +++++++++++++++++++++++++++++++--\n tests/test_routing.py                  |  13 +++++\n 12 files changed, 244 insertions(+), 22 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex 5350ad5..b0c69c8 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 7a71372..0012c42 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>63 events, split into 7 page(s).</p>\n+    <p>65 events, split into 7 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -465,6 +465,20 @@\n               <td>9a2cb3f</td>\n               <td>main</td>\n             </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_17-33-34</td>\n+              <td><a href=\"page-007.html#63\">Add InLoopBack0 and IPv4 loopback direct routes</a></td>\n+              <td>ab9a93b</td>\n+              <td>main</td>\n+            </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_17-51-17</td>\n+              <td><a href=\"page-007.html#64\">Align built-in interfaces and CLI case handling</a></td>\n+              <td>ab9a93b</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-007.html b/context/replays/timeline/page-007.html\nindex ca424ad..da65f28 100644\n--- a/context/replays/timeline/page-007.html\n+++ b/context/replays/timeline/page-007.html\n@@ -129,6 +129,63 @@\n               </details>\n             </article>\n             \n+            <article class=\"card\" id=\"63\">\n+              <div class=\"meta\">\n+                <span>2026-06-26_17-33-34</span>\n+                <span>main</span>\n+                <span>ab9a93b</span>\n+              </div>\n+              <h2>Add InLoopBack0 and IPv4 loopback direct routes</h2>\n+              <p>Added built-in VVRP InLoopBack0 IFNET interface, IP-owned 127.0.0.1/8 address state, and RM generation of both 127.0.0.0/8 and 127.0.0.1/32 Direct routes. FIB sync now carries loopback forwarding entries alongside Ethernet connected routes.</p>\n+              <h3>Files</h3>\n+              <ul><li>src\\IFNET\\InLoopBack.py</li><li>src\\IFNET\\interfaces.py</li><li>src\\IP\\state.py</li><li>src\\RM\\routes.py</li><li>tests\\test_routing.py</li><li>tests\\test_core.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>None recorded</li></ul>\n+              <h3>Architecture</h3>\n+              <p>IFNET, IP, RM, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>src/IFNET/interfaces.py |  8 ++++++--\n+ src/IP/state.py         |  8 ++++++++\n+ src/RM/routes.py        | 11 +++++++++++\n+ tests/test_core.py      |  5 ++++-\n+ tests/test_routing.py   | 13 +++++++++++++\n+ 5 files changed, 42 insertions(+), 3 deletions(-)</pre>\n+              </details>\n+            </article>\n+            \n+            <article class=\"card\" id=\"64\">\n+              <div class=\"meta\">\n+                <span>2026-06-26_17-51-17</span>\n+                <span>main</span>\n+                <span>ab9a93b</span>\n+              </div>\n+              <h2>Align built-in interfaces and CLI case handling</h2>\n+              <p>Set InLoopBack0 IFNET index to 0x0 and NULL0 to 0xffff, blocked interface view entry for InLoopBack0, made VVRP interface lookups case-insensitive with canonical names, and made command literal parsing globally case-insensitive. Also retained IP-owned 127.0.0.1/8 loopback route generation.</p>\n+              <h3>Files</h3>\n+              <ul><li>src\\IFNET\\InLoopBack.py</li><li>src\\IFNET\\Null.py</li><li>src\\IFNET\\interfaces.py</li><li>src\\IFNET\\commands.py</li><li>src\\IP\\state.py</li><li>src\\RM\\routes.py</li><li>src\\CCmd\\registry.py</li><li>src\\CCmd\\parser.py</li><li>tests\\test_core.py</li><li>tests\\test_routing.py</li></ul>\n... truncated 474 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CCmd",
+      "IFNET",
+      "tests"
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-26_17-33-34",
+  "prompt": "Add InLoopBack0 and IPv4 loopback direct routes",
+  "changed_files": [
+    "src\\IFNET\\InLoopBack.py",
+    "src\\IFNET\\interfaces.py",
+    "src\\IP\\state.py",
+    "src\\RM\\routes.py",
+    "tests\\test_routing.py",
+    "tests\\test_core.py"
+  ],
+  "note": "Added built-in VVRP InLoopBack0 IFNET interface, IP-owned 127.0.0.1/8 address state, and RM generation of both 127.0.0.0/8 and 127.0.0.1/32 Direct routes. FIB sync now carries loopback forwarding entries alongside Ethernet connected routes.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "ab9a93bd02c070fd2bfa35224044360cf2d374a5",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "rc/IFNET/interfaces.py",
+    "src/IP/state.py",
+    "src/RM/routes.py",
+    "tests/test_core.py",
+    "tests/test_routing.py",
+    "src/IFNET/InLoopBack.py"
+  ],
+  "diff_stat": "src/IFNET/interfaces.py |  8 ++++++--\n src/IP/state.py         |  8 ++++++++\n src/RM/routes.py        | 11 +++++++++++\n tests/test_core.py      |  5 ++++-\n tests/test_routing.py   | 13 +++++++++++++\n 5 files changed, 42 insertions(+), 3 deletions(-)",
+  "diff_summary": "diff --git a/src/IFNET/interfaces.py b/src/IFNET/interfaces.py\nindex 68b5e67..cd0897c 100644\n--- a/src/IFNET/interfaces.py\n+++ b/src/IFNET/interfaces.py\n@@ -2,10 +2,10 @@ from __future__ import annotations\n \n from dataclasses import replace\n \n-from src.ETHERNET.device import ETHERNET_installed_device_names\n from src.IP.state import IP_apply_interface_state\n \n from .models import NetworkInterface\n+from .InLoopBack import IFNET_inloopback0_interface\n from .Null import IFNET_null0_interface\n from .state import IFNET_refresh_interface_status, apply_vvrp_interface_state\n \n@@ -23,14 +23,18 @@ def IFNET_interface_snapshots(\n         IFNET_refresh_interface_status(IFNET_state, IFNET_snapshot)\n         IFNET_snapshots.append(IFNET_snapshot)\n     IFNET_null0 = IFNET_null0_interface()\n+    IFNET_inloopback0 = IP_apply_interface_state(IFNET_state, IFNET_inloopback0_interface())\n     IFNET_refresh_interface_status(IFNET_state, IFNET_null0)\n-    return assign_ifnet_indices((IFNET_null0, *tuple(IFNET_snapshots)))\n+    IFNET_refresh_interface_status(IFNET_state, IFNET_inloopback0)\n+    return assign_ifnet_indices((IFNET_null0, IFNET_inloopback0, *tuple(IFNET_snapshots)))\n \n \n def IFNET_ethernet_interface_snapshots(\n     IFNET_state: dict,\n     IFNET_host_interfaces: tuple[NetworkInterface, ...],\n ) -> tuple[NetworkInterface, ...]:\n+    from src.ETHERNET.device import ETHERNET_installed_device_names\n+\n     IFNET_installed = ETHERNET_installed_device_names(IFNET_state)\n     return IFNET_interface_snapshots(\n         IFNET_state,\ndiff --git a/src/IP/state.py b/src/IP/state.py\nindex 5ced534..6d8bebb 100644\n--- a/src/IP/state.py\n+++ b/src/IP/state.py\n@@ -7,6 +7,12 @@ from src.IFNET.models import InterfaceAddress, NetworkInterface\n \n \n g_IP_INTERFACE_ADDRESSES_STATE_KEY = \"ip.interface_addresses\"\n+g_IP_INLOOPBACK0_NAME = \"InLoopBack0\"\n+g_IP_INLOOPBACK0_IPV4_ADDRESS = InterfaceAddress(\n+    family=\"ipv4\",\n+    address=\"127.0.0.1\",\n+    prefix_length=8,\n+)\n \n \n def IP_set_interface_addresses(\n@@ -29,6 +35,8 @@ def IP_addresses_for_interface(\n     IP_state: dict[str, Any],\n     IP_interface_name: str,\n ) -> tuple[InterfaceAddress, ...]:\n+    if IP_interface_name == g_IP_INLOOPBACK0_NAME:\n+        return (g_IP_INLOOPBACK0_IPV4_ADDRESS,)\n     IP_value = IP_interface_addresses(IP_state).get(IP_interface_name, ())\n     if not isinstance(IP_value, tuple):\n         IP_value = tuple(IP_value)\ndiff --git a/src/RM/routes.py b/src/RM/routes.py\nindex c8f7bcc..d582d0c 100644\n--- a/src/RM/routes.py\n+++ b/src/RM/routes.py\n@@ -58,6 +58,17 @@ def RM_connected_routes_from_im(\n                     preference=0,\n                 )\n             )\n+            if RM_interface.kind == \"loopback\":\n+                RM_routes.append(\n+                    RMRoute(\n+                        destination=ipaddress.IPv4Network(f\"{RM_address.address}/32\"),\n+                        source=\"connected\",\n+                        interface=RM_interface,\n+                        source_ip=RM_address.address,\n+                        next_hop=\"127.0.0.1\",\n+                        preference=0,\n+                    )\n... truncated 52 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "IFNET",
+      "IP",
+      "RM",
+      "tests"
+    ]
+  }
+}

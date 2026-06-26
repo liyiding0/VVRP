@@ -58,6 +58,17 @@ def RM_connected_routes_from_im(
                     preference=0,
                 )
             )
+            if RM_interface.kind == "loopback":
+                RM_routes.append(
+                    RMRoute(
+                        destination=ipaddress.IPv4Network(f"{RM_address.address}/32"),
+                        source="connected",
+                        interface=RM_interface,
+                        source_ip=RM_address.address,
+                        next_hop="127.0.0.1",
+                        preference=0,
+                    )
+                )
     return tuple(RM_routes)
 
 

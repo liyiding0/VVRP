@@ -154,7 +154,7 @@ class CommandRegistry:
             else:
                 if raw_token.startswith("<") or raw_token.endswith(">"):
                     raise ValueError(f"Invalid parameter token syntax: {raw_token!r}")
-                yield TokenSpec.literal_token(raw_token)
+                yield TokenSpec.literal_token(raw_token.lower())
 
     def _get_or_create_edge(self, node: TrieNode, token: TokenSpec) -> TrieEdge:
         if token.kind == "literal":

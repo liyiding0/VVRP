@@ -43,6 +43,19 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertEqual("eth4", RM_routes[0].interface.name)
         self.assertEqual("192.168.211.100", RM_routes[0].source_ip)
 
+    def test_rm_builds_loopback_network_and_host_routes(self):
+        RM_routes = RM_connected_routes_from_im(
+            {},
+            (routing_loopback("InLoopBack0", "127.0.0.1", 8),),
+        )
+
+        self.assertEqual(
+            ("127.0.0.0/8", "127.0.0.1/32"),
+            tuple(str(RM_route.destination) for RM_route in RM_routes),
+        )
+        self.assertEqual(("InLoopBack0", "InLoopBack0"), tuple(RM_route.interface.name for RM_route in RM_routes))
+        self.assertEqual("127.0.0.1", RM_routes[1].next_hop)
+
     def test_rm_lookup_route_uses_longest_prefix_match(self):
         RM_state = {}
         IP_set_interface_addresses(

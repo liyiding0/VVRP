@@ -132,6 +132,23 @@ class ParserTests(unittest.TestCase):
         self.assertEqual("show", result.complete_command)
         self.assertTrue(result.executable)
 
+    def test_literal_command_tokens_are_case_insensitive(self):
+        parser = CommandParser(build_registry())
+        result = parser.parse("SHOW INTERFACE eth3")
+
+        self.assertEqual(ParseStatus.VALID_UNIQUE, result.status)
+        self.assertEqual("show interface eth3", result.complete_command)
+        self.assertEqual({"name": "eth3"}, result.args)
+        self.assertTrue(result.executable)
+
+    def test_literal_abbreviations_are_case_insensitive(self):
+        parser = CommandParser(build_registry())
+        result = parser.parse("ShO InT eth3")
+
+        self.assertEqual(ParseStatus.VALID_UNIQUE, result.status)
+        self.assertEqual("show interface eth3", result.complete_command)
+        self.assertTrue(result.executable)
+
     def test_ambiguous_prefix(self):
         parser = CommandParser(build_registry())
 
@@ -391,6 +408,17 @@ class RegistryTests(unittest.TestCase):
         ctx = CliContext(output=io.StringIO())
 
         outcome = dispatch_line(ctx, registry, "show inter eth3")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual("show interface eth3", outcome.display_command)
+        self.assertEqual([("show interface", {"name": "eth3"})], calls)
+
+    def test_dispatch_accepts_uppercase_command_literals(self):
+        calls: list[tuple[str, dict[str, str]]] = []
+        registry = build_registry(calls)
+        ctx = CliContext(output=io.StringIO())
+
+        outcome = dispatch_line(ctx, registry, "SHOW INTERFACE eth3")
 
         self.assertTrue(outcome.executed)
         self.assertEqual("show interface eth3", outcome.display_command)
@@ -1188,7 +1216,7 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertIn("Hardware address is AA:BB:CC:DD:EE:FF", text)
         self.assertIn("Internet Address is unassigned", text)
 
-    def test_null0_is_builtin_vvrp_interface_with_zero_ifnet_index(self):
+    def test_builtin_vvrp_interfaces_use_reserved_ifnet_indices(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
         output = io.StringIO()
         ctx = CliContext(output=output)
@@ -1199,8 +1227,18 @@ class IFNETCommandTests(unittest.TestCase):
         text = output.getvalue()
         self.assertIn("NULL0 current state : UP", text)
         self.assertIn("Line protocol current state : UP(spoofing)", text)
-        self.assertIn("IFNET Index : 0x0", text)
+        self.assertIn("IFNET Index : 0xffff", text)
         self.assertIn("Interface type : null", text)
+        output.truncate(0)
+        output.seek(0)
+
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces InLoopBack0").executed)
+
+        text = output.getvalue()
+        self.assertIn("InLoopBack0 current state : UP", text)
+        self.assertIn("Line protocol current state : UP(spoofing)", text)
+        self.assertIn("IFNET Index : 0x0", text)
+        self.assertIn("Interface type : loopback", text)
 
     def test_null0_ip_interface_is_up_spoofing_without_ip_processing(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
@@ -1229,6 +1267,49 @@ class IFNETCommandTests(unittest.TestCase):
         ip_address = dispatch_line(ctx, registry, "ip address 192.0.2.1 24")
         self.assertTrue(ip_address.executed)
         self.assertEqual("% NULL interface does not support static IPv4: NULL0", ip_address.message)
+
+    def test_inloopback0_rejects_interface_configuration_view(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        ctx = CliContext(output=io.StringIO())
+        registry.initialize_context(ctx)
+        ctx.push_mode("hidden")
+
+        outcome = dispatch_line(ctx, registry, "interface InLoopBack0")
+
+        self.assertTrue(outcome.executed)
+        self.assertEqual("% Interface does not support configuration view: InLoopBack0", outcome.message)
+        self.assertEqual("hidden", ctx.mode)
+
+    def test_vvrp_interface_commands_match_names_case_insensitively(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        registry.initialize_context(ctx)
+        ctx.push_mode("hidden")
+
+        self.assertTrue(dispatch_line(ctx, registry, "interface null0").executed)
+        self.assertEqual("interface", ctx.mode)
+        self.assertEqual("NULL0", ctx.mode_label)
+        ctx.quit_mode()
+
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces null0").executed)
+        self.assertIn("NULL0 current state : UP", output.getvalue())
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces brief null0").executed)
+        self.assertIn("NULL0", output.getvalue())
+        output.truncate(0)
+        output.seek(0)
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces inloopback0").executed)
+        self.assertIn("InLoopBack0 current state : UP", output.getvalue())
+
+        parser = CommandParser(registry)
+        candidates = parser.help_candidates("show interfaces ", mode="hidden", ctx=ctx)
+        candidate_names = [candidate.display for candidate in candidates]
+        self.assertIn("NULL0", candidate_names)
+        self.assertIn("InLoopBack0", candidate_names)
+        self.assertNotIn("null0", candidate_names)
+        self.assertNotIn("inloopback0", candidate_names)
 
     def test_show_vvrp_interfaces_name_requires_installed_interface(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
@@ -1688,7 +1769,7 @@ class IFNETCommandTests(unittest.TestCase):
         dispatch_line(ctx, registry, "show dplane interfaces brief")
         text = output.getvalue()
         eth3_line = next(line for line in text.splitlines() if line.startswith("eth3"))
-        self.assertIn("0x1", text)
+        self.assertIn("0x1", eth3_line)
         self.assertIn("imported", eth3_line)
         ctx.quit_mode()
         output.truncate(0)
@@ -1774,7 +1855,10 @@ class IFNETCommandTests(unittest.TestCase):
 
         text = output.getvalue()
         self.assertIn("1.1.1.0/24", text)
+        self.assertIn("127.0.0.0/8", text)
+        self.assertIn("127.0.0.1/32", text)
         self.assertIn("eth4", text)
+        self.assertIn("InLoopBack0", text)
 
     def test_ip_address_change_with_default_dplane_backend_does_not_raise(self):
         registry = build_default_registry(

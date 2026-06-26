@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-26_17-51-17",
+  "prompt": "Align built-in interfaces and CLI case handling",
+  "changed_files": [
+    "src\\IFNET\\InLoopBack.py",
+    "src\\IFNET\\Null.py",
+    "src\\IFNET\\interfaces.py",
+    "src\\IFNET\\commands.py",
+    "src\\IP\\state.py",
+    "src\\RM\\routes.py",
+    "src\\CCmd\\registry.py",
+    "src\\CCmd\\parser.py",
+    "tests\\test_core.py",
+    "tests\\test_routing.py"
+  ],
+  "note": "Set InLoopBack0 IFNET index to 0x0 and NULL0 to 0xffff, blocked interface view entry for InLoopBack0, made VVRP interface lookups case-insensitive with canonical names, and made command literal parsing globally case-insensitive. Also retained IP-owned 127.0.0.1/8 loopback route generation.",
+  "decisions": [],
+  "codex_output": "",
+  "git_commit": "ab9a93bd02c070fd2bfa35224044360cf2d374a5",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-007.html",
+    "src/CCmd/parser.py",
+    "src/CCmd/registry.py",
+    "src/IFNET/Null.py",
+    "src/IFNET/commands.py",
+    "src/IFNET/interfaces.py",
+    "src/IP/state.py",
+    "src/RM/routes.py",
+    "tests/test_core.py",
+    "tests/test_routing.py",
+    "context/commits/ab9a93bd02c0.json",
+    "context/sessions/2026-06-26_17-33-34.json",
+    "src/IFNET/InLoopBack.py"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 27015 -> 27360 bytes\n context/replays/timeline/index.html    |   9 +++-\n context/replays/timeline/page-007.html |  25 +++++++++++\n src/CCmd/parser.py                     |  11 +++--\n src/CCmd/registry.py                   |   2 +-\n src/IFNET/Null.py                      |   2 +-\n src/IFNET/commands.py                  |  37 +++++++++++++---\n src/IFNET/interfaces.py                |  13 ++++--\n src/IP/state.py                        |   8 ++++\n src/RM/routes.py                       |  11 +++++\n tests/test_core.py                     |  78 +++++++++++++++++++++++++++++++--\n tests/test_routing.py                  |  13 ++++++\n 12 files changed, 191 insertions(+), 18 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex 5350ad5..d83a7e6 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 7a71372..2bfd283 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>63 events, split into 7 page(s).</p>\n+    <p>64 events, split into 7 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -465,6 +465,13 @@\n               <td>9a2cb3f</td>\n               <td>main</td>\n             </tr>\n+            \n+            <tr>\n+              <td>2026-06-26_17-33-34</td>\n+              <td><a href=\"page-007.html#63\">Add InLoopBack0 and IPv4 loopback direct routes</a></td>\n+              <td>ab9a93b</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-007.html b/context/replays/timeline/page-007.html\nindex ca424ad..9a17f7f 100644\n--- a/context/replays/timeline/page-007.html\n+++ b/context/replays/timeline/page-007.html\n@@ -129,6 +129,31 @@\n               </details>\n             </article>\n             \n+            <article class=\"card\" id=\"63\">\n+              <div class=\"meta\">\n+                <span>2026-06-26_17-33-34</span>\n+                <span>main</span>\n+                <span>ab9a93b</span>\n+              </div>\n+              <h2>Add InLoopBack0 and IPv4 loopback direct routes</h2>\n+              <p>Added built-in VVRP InLoopBack0 IFNET interface, IP-owned 127.0.0.1/8 address state, and RM generation of both 127.0.0.0/8 and 127.0.0.1/32 Direct routes. FIB sync now carries loopback forwarding entries alongside Ethernet connected routes.</p>\n+              <h3>Files</h3>\n+              <ul><li>src\\IFNET\\InLoopBack.py</li><li>src\\IFNET\\interfaces.py</li><li>src\\IP\\state.py</li><li>src\\RM\\routes.py</li><li>tests\\test_routing.py</li><li>tests\\test_core.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>None recorded</li></ul>\n+              <h3>Architecture</h3>\n+              <p>IFNET, IP, RM, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre>src/IFNET/interfaces.py |  8 ++++++--\n+ src/IP/state.py         |  8 ++++++++\n+ src/RM/routes.py        | 11 +++++++++++\n+ tests/test_core.py      |  5 ++++-\n+ tests/test_routing.py   | 13 +++++++++++++\n+ 5 files changed, 42 insertions(+), 3 deletions(-)</pre>\n+              </details>\n+            </article>\n+            \n     <nav><a href=\"page-001.html\">1</a> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a> <strong>7</strong></nav>\n   </main>\n </body>\ndiff --git a/src/CCmd/parser.py b/src/CCmd/parser.py\nindex 4e7a333..763109c 100644\n--- a/src/CCmd/parser.py\n+++ b/src/CCmd/parser.py\n@@ -286,12 +286,13 @@ class CommandParser:\n         candidates: list[CompletionCandidate] = []\n         start_position = -len(prefix) if prefix else 0\n         literal_names = sorted(node.literal_edges)\n+        prefix_key = prefix.lower()\n \n         for name in literal_names:\n             edge = node.literal_edges[name]\n             if self._edge_is_hidden(edge):\n                 continue\n... truncated 396 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CCmd",
+      "IFNET",
+      "IP",
+      "RM",
+      "tests"
+    ]
+  }
+}

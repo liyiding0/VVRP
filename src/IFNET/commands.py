@@ -14,6 +14,7 @@ from src.CCmd.running_config import (
 
 from .admin import InterfaceAdminProvider
 from .discovery import InterfaceDiscoveryError, InterfaceProvider
+from .InLoopBack import g_IFNET_INLOOPBACK0_NAME
 from .interfaces import IFNET_ethernet_interface_snapshots
 from .inventory import IfnetManager, get_ifnet_manager
 from .models import InterfaceAddress, NetworkInterface
@@ -96,6 +97,11 @@ def register_ifnet_commands(
         interface = _get_vvrp_interface(ctx, provider, admin_provider, args["name"])
         if isinstance(interface, CommandResult):
             return interface
+        if interface.name == g_IFNET_INLOOPBACK0_NAME:
+            return CommandResult(
+                ok=False,
+                message=f"% Interface does not support configuration view: {interface.name}",
+            )
         if ctx.mode == "interface":
             ctx.mode_stack[-1].label = interface.name
         else:
@@ -239,9 +245,9 @@ def _get_vvrp_interface(
     interfaces = _list_vvrp_interfaces(ctx, provider, admin_provider)
     if isinstance(interfaces, CommandResult):
         return interfaces
-    for interface in interfaces:
-        if interface.name == name:
-            return interface
+    interface = _find_interface_by_name(interfaces, name)
+    if interface is not None:
+        return interface
     return CommandResult(ok=False, message=f"% Interface not found: {name}")
 
 
@@ -294,10 +300,20 @@ def _find_interface(
     interfaces: tuple[NetworkInterface, ...],
     name: str,
 ) -> NetworkInterface | None:
+    return _find_interface_by_name(interfaces, name)
+
+
+def _find_interface_by_name(
+    interfaces: tuple[NetworkInterface, ...],
+    name: str,
+) -> NetworkInterface | None:
+    name_lower = name.lower()
     for interface in interfaces:
-        if interface.name == name:
+        if interface.name.lower() == name_lower:
             return interface
     return None
+
+
 
 
 def _format_interface_brief(

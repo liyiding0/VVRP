@@ -7,6 +7,12 @@ from src.IFNET.models import InterfaceAddress, NetworkInterface
 
 
 g_IP_INTERFACE_ADDRESSES_STATE_KEY = "ip.interface_addresses"
+g_IP_INLOOPBACK0_NAME = "InLoopBack0"
+g_IP_INLOOPBACK0_IPV4_ADDRESS = InterfaceAddress(
+    family="ipv4",
+    address="127.0.0.1",
+    prefix_length=8,
+)
 
 
 def IP_set_interface_addresses(
@@ -29,6 +35,8 @@ def IP_addresses_for_interface(
     IP_state: dict[str, Any],
     IP_interface_name: str,
 ) -> tuple[InterfaceAddress, ...]:
+    if IP_interface_name == g_IP_INLOOPBACK0_NAME:
+        return (g_IP_INLOOPBACK0_IPV4_ADDRESS,)
     IP_value = IP_interface_addresses(IP_state).get(IP_interface_name, ())
     if not isinstance(IP_value, tuple):
         IP_value = tuple(IP_value)
