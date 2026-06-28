@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from ipaddress import IPv4Network
 
-from src.CCmd.models import CommandResult
-from src.CCmd.registry import CommandRegistry
+from src.CMD.models import CommandResult
+from src.CMD.registry import CommandRegistry
 from src.IFNET.models import InterfaceAddress
 from src.IFNET.models import NetworkInterface
 
@@ -77,7 +77,7 @@ def RM_register_commands(
         modes=("user", "privileged", "config", "interface", "host-interface", "hidden"),
     )
     def RM_show_ip_command_group(RM_ctx, RM_args):
-        from src.CCmd.parser import CommandParser
+        from src.CMD.parser import CommandParser
 
         RM_candidates = CommandParser(RM_registry).help_candidates("show ip ", mode=RM_ctx.mode, ctx=RM_ctx)
         RM_lines = ["Available show ip commands:"]

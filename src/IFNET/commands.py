@@ -3,9 +3,9 @@ from __future__ import annotations
 import time
 from collections.abc import Sequence
 
-from src.CCmd.models import CommandResult
-from src.CCmd.registry import CommandRegistry
-from src.CCmd.running_config import (
+from src.CMD.models import CommandResult
+from src.CMD.registry import CommandRegistry
+from src.CMD.running_config import (
     _format_cli_token,
     remove_interface_config_command,
     render_interface_config,

@@ -5,9 +5,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
 
-from src.CCmd.models import CommandResult
-from src.CCmd.registry import CommandRegistry
-from src.CCmd.running_config import (
+from src.CMD.models import CommandResult
+from src.CMD.registry import CommandRegistry
+from src.CMD.running_config import (
     host_interface_config_commands,
     interface_config_commands,
     remove_host_interface_config_command,
@@ -621,7 +621,7 @@ def _IP_format_command_group_help(
     ctx,
     prefix: str,
 ) -> CommandResult:
-    from src.CCmd.parser import CommandParser
+    from src.CMD.parser import CommandParser
 
     candidates = CommandParser(registry).help_candidates(prefix, mode=ctx.mode, ctx=ctx)
     lines = [f"Available {prefix.strip()} commands:"]

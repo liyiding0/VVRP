@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from src.ARP import ArpTable
 from src.ARP.commands import ARP_TABLE_STATE_KEY
-from src.CCmd.models import CliContext, CommandResult
 from src.DPlane import DPlane_Backend, DPlane_create_backend
 from src.DPlane.backend import DPlane_AdminProviderAdapter, DPlane_InterfaceProviderAdapter
 from src.DPlane.input import DPlane_PacketInputService
@@ -19,6 +18,7 @@ from src.IFNET.inventory import get_ifnet_manager
 from src.IP.dhcp import IP_DhcpClientProvider
 from src.IP.static import IP_StaticIpv4Provider
 from src.RM.commands import RM_refresh_connected_routes_from_interfaces
+from .models import VVRP_RuntimeContext
 
 
 g_VVRP_RUNTIME_STATE_KEY = "vvrp.runtime"
@@ -63,38 +63,41 @@ class VVRP_Runtime:
             DPlane_backend=self.VVRP_dplane_backend,
         )
 
-    def VVRP_refresh_control_plane(self, VVRP_ctx: CliContext):
-        self.VVRP_bind_state(VVRP_ctx.state)
+    def VVRP_refresh_control_plane(self, VVRP_ctx):
+        VVRP_runtime_ctx = self._VVRP_runtime_context(VVRP_ctx)
+        self.VVRP_bind_state(VVRP_runtime_ctx.state)
         VVRP_rm_table = RM_refresh_connected_routes_from_interfaces(
-            VVRP_ctx,
+            VVRP_runtime_ctx,
             lambda VVRP_current_ctx: self.VVRP_list_ifnet_interfaces(VVRP_current_ctx),
         )
-        if not isinstance(VVRP_rm_table, CommandResult):
-            FIB_sync_active_routes(VVRP_ctx.state, VVRP_rm_table.RM_active_routes())
-        return self.VVRP_packet_input.DPlane_refresh(VVRP_ctx)
+        if not _VVRP_is_error_result(VVRP_rm_table):
+            FIB_sync_active_routes(VVRP_runtime_ctx.state, VVRP_rm_table.RM_active_routes())
+        return self.VVRP_packet_input.DPlane_refresh(VVRP_runtime_ctx)
 
     def VVRP_bind_state(self, VVRP_state: dict) -> None:
         VVRP_state[g_VVRP_RUNTIME_STATE_KEY] = self
         if self.VVRP_arp_table is not None:
             VVRP_state[ARP_TABLE_STATE_KEY] = self.VVRP_arp_table
 
-    def VVRP_list_ifnet_interfaces(self, VVRP_ctx: CliContext):
+    def VVRP_list_ifnet_interfaces(self, VVRP_ctx):
+        VVRP_runtime_ctx = self._VVRP_runtime_context(VVRP_ctx)
         VVRP_interfaces = get_ifnet_manager(
-            VVRP_ctx.state,
+            VVRP_runtime_ctx.state,
             provider=self.VVRP_ifnet_provider,
             admin_provider=self.VVRP_ifnet_admin_provider,
         ).list_interfaces()
-        return IFNET_ethernet_interface_snapshots(VVRP_ctx.state, VVRP_interfaces)
+        return IFNET_ethernet_interface_snapshots(VVRP_runtime_ctx.state, VVRP_interfaces)
 
-    def VVRP_socket_forwarder(self, VVRP_ctx: CliContext):
+    def VVRP_socket_forwarder(self, VVRP_ctx):
+        VVRP_runtime_ctx = self._VVRP_runtime_context(VVRP_ctx)
         return FWD_default_forwarder(
-            VVRP_ctx.state,
-            FWD_interfaces_provider=lambda: tuple(self.VVRP_list_ifnet_interfaces(VVRP_ctx)),
+            VVRP_runtime_ctx.state,
+            FWD_interfaces_provider=lambda: tuple(self.VVRP_list_ifnet_interfaces(VVRP_runtime_ctx)),
             FWD_ethernet_port_provider=lambda FWD_interface: self.VVRP_ethernet_port(
                 FWD_interface
             ),
             FWD_arp_table=self.VVRP_arp_table,
-            FWD_debug_ctx=VVRP_ctx,
+            FWD_debug_ctx=VVRP_runtime_ctx,
         )
 
     def VVRP_ethernet_port(self, VVRP_interface):
@@ -112,6 +115,21 @@ class VVRP_Runtime:
     def VVRP_shutdown(self) -> None:
         self.VVRP_packet_input.DPlane_stop()
         self.VVRP_ethernet_frame_debug.stop()
+
+    def _VVRP_runtime_context(self, VVRP_ctx) -> VVRP_RuntimeContext:
+        if isinstance(VVRP_ctx, VVRP_RuntimeContext):
+            return VVRP_ctx
+        output = getattr(VVRP_ctx, "output", None)
+        if output is None:
+            return VVRP_RuntimeContext(state=getattr(VVRP_ctx, "state", VVRP_ctx))
+        return VVRP_RuntimeContext(
+            state=getattr(VVRP_ctx, "state", VVRP_ctx),
+            output=output,
+        )
+
+
+def _VVRP_is_error_result(VVRP_value) -> bool:
+    return hasattr(VVRP_value, "ok") and getattr(VVRP_value, "ok") is False
 
 
 def VVRP_create_runtime(

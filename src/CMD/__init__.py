@@ -1,4 +1,4 @@
-"""CCmd command line interpreter primitives for VVRP."""
+"""CMD command line interpreter primitives for VVRP."""
 
 from .dispatch import DispatchOutcome, dispatch_line
 from .models import (

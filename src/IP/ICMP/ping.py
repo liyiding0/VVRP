@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import Callable, TextIO
 
 from src.ARP import ArpPacketError, ArpProtocol, arp_packet_from_ethernet, get_arp_table
-from src.CCmd.models import CliContext
 from src.ETHERNET import (
     ETHERTYPE_ARP,
     ETHERTYPE_IPV4,
@@ -32,6 +31,7 @@ from src.IP.ICMP.packet import (
     ICMP_parse_echo,
 )
 from src.IP.ICMP.replies import ICMP_wait_echo_reply
+from src.VVRP.models import VVRP_RuntimeContext
 
 
 g_ICMP_PING_ARGUMENT_PATTERN = r".+"
@@ -226,7 +226,7 @@ class ICMP_SocketPinger:
 class ICMP_VvrpPacketPinger:
     def __init__(
         self,
-        ICMP_ctx: CliContext,
+        ICMP_ctx: VVRP_RuntimeContext,
         *,
         ICMP_ifnet_provider: InterfaceProvider | None = None,
         ICMP_ifnet_admin_provider: InterfaceAdminProvider | None = None,
@@ -559,7 +559,7 @@ class ICMP_VvrpPacketPinger:
 def ICMP_run_ping(
     ICMP_arguments: str,
     ICMP_output: TextIO | None = None,
-    ICMP_ctx: CliContext | None = None,
+    ICMP_ctx: VVRP_RuntimeContext | None = None,
     ICMP_ifnet_provider: InterfaceProvider | None = None,
     ICMP_ifnet_admin_provider: InterfaceAdminProvider | None = None,
     ICMP_socket_forwarder=None,
@@ -585,7 +585,7 @@ def ICMP_run_ping(
         ICMP_active_pinger = ICMP_pinger
     else:
         if ICMP_ctx is None:
-            return ICMP_PingResult(ICMP_ok=False, ICMP_message="% VVRP ping requires a CLI context")
+            return ICMP_PingResult(ICMP_ok=False, ICMP_message="% VVRP ping requires a runtime context")
         ICMP_active_pinger = ICMP_VvrpPacketPinger(
             ICMP_ctx,
             ICMP_ifnet_provider=ICMP_ifnet_provider,

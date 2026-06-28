@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from src.CCmd.models import CliContext, CommandResult
-from src.CCmd.registry import CommandRegistry
-from src.CCmd.running_config import remove_interface_config_command, set_interface_config_command
+from src.CMD.models import CliContext, CommandResult
+from src.CMD.registry import CommandRegistry
+from src.CMD.running_config import remove_interface_config_command, set_interface_config_command
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots

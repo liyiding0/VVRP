@@ -4,9 +4,9 @@ from collections.abc import Sequence
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from src.CCmd.models import CommandResult
-from src.CCmd.registry import CommandRegistry
-from src.CCmd.running_config import (
+from src.CMD.models import CommandResult
+from src.CMD.registry import CommandRegistry
+from src.CMD.running_config import (
     RUNNING_CONFIG_LOADING_STATE_KEY,
     remove_host_interface_config_command,
     render_host_interface_config,

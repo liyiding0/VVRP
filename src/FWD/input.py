@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from src.CCmd.models import CliContext
 from src.ETHERNET.input import ETHERNET_InputHandler
 from src.IFNET.models import NetworkInterface
+from src.VVRP.models import VVRP_RuntimeContext
 
 from .models import FWD_InputHandler
 
@@ -10,7 +10,7 @@ from .models import FWD_InputHandler
 class FWD_InputDispatcher:
     def __init__(
         self,
-        FWD_ctx: CliContext,
+        FWD_ctx: VVRP_RuntimeContext,
         *,
         FWD_handlers: dict[str, FWD_InputHandler] | None = None,
     ) -> None:
@@ -34,7 +34,7 @@ class FWD_InputDispatcher:
 class FWD_EthernetInputHandler:
     def __init__(
         self,
-        FWD_ctx: CliContext,
+        FWD_ctx: VVRP_RuntimeContext,
         FWD_send_frame,
     ) -> None:
         self.FWD_ethernet_input = ETHERNET_InputHandler(FWD_ctx, FWD_send_frame)
@@ -48,7 +48,7 @@ class FWD_EthernetInputHandler:
 
 
 def FWD_default_input_dispatcher(
-    FWD_ctx: CliContext,
+    FWD_ctx: VVRP_RuntimeContext,
     *,
     FWD_ethernet_send_frame=None,
 ) -> FWD_InputDispatcher:

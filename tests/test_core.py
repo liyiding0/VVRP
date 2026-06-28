@@ -12,7 +12,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from src.CCmd import (
+from src.CMD import (
     CliContext,
     CommandParser,
     CommandRegistry,
@@ -22,9 +22,9 @@ from src.CCmd import (
     dispatch_line,
 )
 from src.ARP import ARP_REPLY, ArpPacket, ArpTable, get_arp_table
-from src.CCmd.examples import build_default_registry
-from src.CCmd.help import format_help
-from src.CCmd.interactive import (
+from src.CMD.examples import build_default_registry
+from src.CMD.help import format_help
+from src.CMD.interactive import (
     _PromptToolkitAnsiOutput,
     _format_colored_help_screen_update,
     _format_help_screen_update,
@@ -33,8 +33,8 @@ from src.CCmd.interactive import (
     _reload_context,
     run_interactive_cli,
 )
-from src.CCmd.models import TokenStatus
-from src.CCmd.running_config import (
+from src.CMD.models import TokenStatus
+from src.CMD.running_config import (
     default_saved_configuration_path,
     default_runtime_directory,
     load_saved_configuration,
@@ -93,7 +93,8 @@ from src.IP.static import (
     IP_parse_static_ipv4_address,
     IP_validate_static_ipv4_address_for_interface,
 )
-from src.VVRP import VVRP_Runtime
+from src.VVRP.core import VVRP_Core
+from src.VVRP.runtime import VVRP_Runtime
 
 
 def build_registry(calls: list[tuple[str, dict[str, str]]] | None = None) -> CommandRegistry:
@@ -582,10 +583,10 @@ class InteractiveTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with (
-                patch("src.CCmd.interactive.sys.stdin.isatty", return_value=False),
-                patch("src.CCmd.interactive.sys.stdout.isatty", return_value=False),
+                patch("src.CMD.interactive.sys.stdin.isatty", return_value=False),
+                patch("src.CMD.interactive.sys.stdout.isatty", return_value=False),
                 patch("builtins.input", side_effect=["show version", EOFError]),
-                patch("src.CCmd.models.sys.stdout", output),
+                patch("src.CMD.models.sys.stdout", output),
             ):
                 result = run_interactive_cli(
                     build_default_registry(),
@@ -593,9 +594,9 @@ class InteractiveTests(unittest.TestCase):
                 )
 
         self.assertEqual(0, result)
-        self.assertIn("VVRP CCmd version 0.1.0", output.getvalue())
+        self.assertIn("VVRP CMD version 0.1.0", output.getvalue())
 
-    def test_non_tty_fallback_starts_runtime_services_after_configuration_load(self):
+    def test_non_tty_fallback_does_not_start_runtime_services(self):
         output = io.StringIO()
         calls = []
 
@@ -606,10 +607,10 @@ class InteractiveTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with (
-                patch("src.CCmd.interactive.sys.stdin.isatty", return_value=False),
-                patch("src.CCmd.interactive.sys.stdout.isatty", return_value=False),
+                patch("src.CMD.interactive.sys.stdin.isatty", return_value=False),
+                patch("src.CMD.interactive.sys.stdout.isatty", return_value=False),
                 patch("builtins.input", side_effect=[EOFError]),
-                patch("src.CCmd.models.sys.stdout", output),
+                patch("src.CMD.models.sys.stdout", output),
             ):
                 result = run_interactive_cli(
                     build_default_registry(runtime=FakeRuntime()),
@@ -617,7 +618,7 @@ class InteractiveTests(unittest.TestCase):
                 )
 
         self.assertEqual(0, result)
-        self.assertEqual(["Router"], calls)
+        self.assertEqual([], calls)
 
     def test_non_tty_fallback_preserves_help_prefix_for_next_prompt(self):
         output = io.StringIO()
@@ -633,10 +634,10 @@ class InteractiveTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with (
-                patch("src.CCmd.interactive.sys.stdin.isatty", return_value=False),
-                patch("src.CCmd.interactive.sys.stdout.isatty", return_value=False),
+                patch("src.CMD.interactive.sys.stdin.isatty", return_value=False),
+                patch("src.CMD.interactive.sys.stdout.isatty", return_value=False),
                 patch("builtins.input", side_effect=fake_input),
-                patch("src.CCmd.models.sys.stdout", output),
+                patch("src.CMD.models.sys.stdout", output),
             ):
                 result = run_interactive_cli(
                     build_default_registry(),
@@ -646,12 +647,12 @@ class InteractiveTests(unittest.TestCase):
         self.assertEqual(0, result)
         self.assertEqual(["<Router> ", "<Router> show ", "<Router> "], prompts)
         self.assertIn("version", output.getvalue())
-        self.assertIn("VVRP CCmd version 0.1.0", output.getvalue())
+        self.assertIn("VVRP CMD version 0.1.0", output.getvalue())
 
 
 class ModuleBoundaryTests(unittest.TestCase):
-    def test_ping_module_lives_in_ip_not_ccmd(self):
-        self.assertIsNone(importlib.util.find_spec("src.CCmd.ping"))
+    def test_ping_module_lives_in_ip_not_cmd(self):
+        self.assertIsNone(importlib.util.find_spec("src.CMD.ping"))
         self.assertIsNotNone(importlib.util.find_spec("src.IP.ICMP.ping"))
         self.assertIsNotNone(importlib.util.find_spec("src.IFNET"))
         self.assertIsNotNone(importlib.util.find_spec("src.ETHERNET"))
@@ -882,6 +883,26 @@ class VVRPRuntimeTests(unittest.TestCase):
 
         self.assertIs(port, backend.port)
         self.assertTrue(port.opened)
+
+    def test_vvrp_core_start_refreshes_runtime_services(self):
+        calls = []
+
+        class FakeRuntime:
+            def VVRP_refresh_control_plane(self, ctx):
+                calls.append(ctx.state)
+                ctx.state["started"] = True
+                return "1 listener(s) running"
+
+            def VVRP_shutdown(self):
+                calls.append("shutdown")
+
+        core = VVRP_Core(runtime=FakeRuntime())
+
+        core.start()
+
+        self.assertTrue(core.started)
+        self.assertEqual([core.state], calls)
+        self.assertTrue(core.state["started"])
 
 
 def register_host_interface_commands_for_test(
@@ -1554,22 +1575,18 @@ class IFNETCommandTests(unittest.TestCase):
         self.assertIn("\x1b[38;2;242;242;242mmatched\x1b[0m", eth3_line)
         self.assertNotIn(r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}", eth3_line)
 
-    def test_ccmd_entrypoint_from_src_uses_canonical_src_package(self):
+    def test_vvrp_top_level_entrypoint_starts_without_cmd(self):
         project_root = Path(__file__).resolve().parents[1]
-        src_dir = project_root / "src"
 
         completed = subprocess.run(
-            [sys.executable, "-m", "CCmd"],
-            cwd=src_dir,
-            input="_\nshow dplane interfaces brief\nexit\n",
+            [sys.executable, "-m", "VVRP", "--no-cmd"],
+            cwd=project_root,
             text=True,
             capture_output=True,
             timeout=10,
         )
 
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("Host Interface", completed.stdout)
-        self.assertIn("OS Index", completed.stdout)
 
     def test_host_interface_help_has_ip_and_no_descriptions(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
@@ -3368,7 +3385,7 @@ class ConfigurationTests(unittest.TestCase):
         ctx.push_mode("hidden")
         ctx.push_mode("interface", "NULL0")
 
-        with patch("src.CCmd.examples.CCMD_process_reboot") as reboot:
+        with patch("src.CMD.examples.CMD_process_reboot") as reboot:
             outcome = dispatch_line(ctx, registry, "reboot")
 
         self.assertTrue(outcome.executed)
@@ -3379,25 +3396,25 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("Restarting VVRP process...", output.getvalue())
 
     def test_process_reboot_execs_current_python_with_vvrp_module(self):
-        from src.CCmd.process_reboot import CCMD_process_reboot
+        from src.CMD.process_reboot import CMD_process_reboot
 
         with patch.dict(os.environ, {"VVRP_REBOOT_MODULE": "VVRP"}):
-            with patch("src.CCmd.process_reboot.os.name", "posix"):
-                with patch("src.CCmd.process_reboot.os.execv") as execv:
-                    CCMD_process_reboot()
+            with patch("src.CMD.process_reboot.os.name", "posix"):
+                with patch("src.CMD.process_reboot.os.execv") as execv:
+                    CMD_process_reboot()
 
         self.assertEqual(sys.executable, execv.call_args.args[0])
         self.assertEqual([sys.executable, "-m", "VVRP"], execv.call_args.args[1])
 
     def test_process_reboot_waits_for_child_process_on_windows(self):
-        from src.CCmd.process_reboot import CCMD_process_reboot
+        from src.CMD.process_reboot import CMD_process_reboot
 
         with patch.dict(os.environ, {"VVRP_REBOOT_MODULE": "VVRP"}):
-            with patch("src.CCmd.process_reboot.os.name", "nt"):
-                with patch("src.CCmd.process_reboot.subprocess.call", return_value=7) as call:
-                    with patch("src.CCmd.process_reboot.os._exit", side_effect=SystemExit) as exit_:
+            with patch("src.CMD.process_reboot.os.name", "nt"):
+                with patch("src.CMD.process_reboot.subprocess.call", return_value=7) as call:
+                    with patch("src.CMD.process_reboot.os._exit", side_effect=SystemExit) as exit_:
                         with self.assertRaises(SystemExit):
-                            CCMD_process_reboot()
+                            CMD_process_reboot()
 
         call.assert_called_once_with([sys.executable, "-m", "VVRP"])
         exit_.assert_called_once_with(7)

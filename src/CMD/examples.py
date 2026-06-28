@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.ARP import ArpTable, register_arp_commands
-from src.CCmd.process_reboot import CCMD_process_reboot
+from src.CMD.process_reboot import CMD_process_reboot
 from src.DPlane import DPlane_Backend, register_dplane_commands
 from src.ETHERNET import register_ethernet_commands
 from src.FIB import FIB_register_commands
@@ -12,7 +12,7 @@ from src.IP import IP_register_commands
 from src.IP.dhcp import IP_DhcpClientProvider
 from src.IP.static import IP_StaticIpv4Provider
 from src.RM import RM_register_commands
-from src.VVRP import VVRP_Runtime, VVRP_create_runtime
+from src.VVRP.runtime import VVRP_Runtime, VVRP_create_runtime
 
 from .models import CommandResult
 from .parser import CommandParser
@@ -68,7 +68,7 @@ def build_default_registry(
 
     @registry.command("show version", help_text="Show software version", modes=USER_MODES)
     def show_version(ctx, args):
-        return CommandResult(message="VVRP CCmd version 0.1.0")
+        return CommandResult(message="VVRP CMD version 0.1.0")
 
     @registry.command(
         "show running-configuration",
@@ -187,7 +187,7 @@ def build_default_registry(
         active_runtime.VVRP_shutdown()
         ctx.write("Restarting VVRP process...")
         ctx.output.flush()
-        CCMD_process_reboot()
+        CMD_process_reboot()
         return CommandResult(ok=False, message="% Reboot failed: process replacement returned")
 
     @registry.command(

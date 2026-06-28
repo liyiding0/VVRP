@@ -9,8 +9,5 @@ dependencies = [
     "pywin32>=306; sys_platform == 'win32'",
 ]
 
-[project.scripts]
-ccmd = "src.CCmd.__main__:main"
-
 [tool.setuptools.packages.find]
 include = ["src*"]

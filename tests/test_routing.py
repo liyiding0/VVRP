@@ -23,7 +23,7 @@ from src.RM import (
     RM_route_table,
     RM_route_table_from_im,
 )
-from src.CCmd import CliContext, CommandRegistry, dispatch_line
+from src.CMD import CliContext, CommandRegistry, dispatch_line
 
 
 class RoutingModuleTests(unittest.TestCase):

@@ -10,10 +10,10 @@ from .models import CliContext, ModeFrame
 
 DEFAULT_SAVED_CONFIGURATION_FILE = "saved-configuration"
 DEFAULT_RUNNING_CONFIG_FILE = DEFAULT_SAVED_CONFIGURATION_FILE
-RUNNING_CONFIG_STATE_KEY = "ccmd.running_configuration"
-SAVED_CONFIGURATION_PATH_STATE_KEY = "ccmd.saved_configuration.path"
+RUNNING_CONFIG_STATE_KEY = "cmd.running_configuration"
+SAVED_CONFIGURATION_PATH_STATE_KEY = "cmd.saved_configuration.path"
 RUNNING_CONFIG_PATH_STATE_KEY = SAVED_CONFIGURATION_PATH_STATE_KEY
-RUNNING_CONFIG_LOADING_STATE_KEY = "ccmd.saved_configuration.loading"
+RUNNING_CONFIG_LOADING_STATE_KEY = "cmd.saved_configuration.loading"
 
 
 def default_saved_configuration_path() -> Path:

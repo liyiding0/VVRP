@@ -6,7 +6,7 @@ import unittest
 from dataclasses import replace
 
 from src.ARP import ARP_REQUEST, ArpPacket
-from src.CCmd import CliContext
+from src.CMD import CliContext
 from src.DPlane import DPlane_PlatformInfo, DPlane_Result
 from src.DPlane.input import DPlane_PacketInputService
 from src.DPlane.Windows.npcap import NpcapDevice

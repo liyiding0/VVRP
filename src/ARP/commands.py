@@ -4,8 +4,8 @@ import ipaddress
 import time
 from collections.abc import Sequence
 
-from src.CCmd.models import CommandResult
-from src.CCmd.registry import CommandRegistry
+from src.CMD.models import CommandResult
+from src.CMD.registry import CommandRegistry
 from src.events import VVRP_event_bus
 
 from .table import ArpEntry, ArpTable

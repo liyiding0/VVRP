@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from src.ARP import ArpPacketError, ArpProtocol, get_arp_table
-from src.CCmd.models import CliContext
 from src.IFNET.models import NetworkInterface
 from src.IP.ICMP.input import ICMP_handle_ipv4_packet
+from src.VVRP.models import VVRP_RuntimeContext
 
 from .debug import debug_ethernet_frame
 from .frame import ETHERTYPE_ARP, ETHERTYPE_IPV4, EthernetFrame, EthernetFrameError, parse_ethernet_ii_frame
@@ -15,7 +15,7 @@ from .output import ETHERNET_frame_belongs_to_interface, ETHERNET_is_group_addre
 class ETHERNET_InputHandler:
     def __init__(
         self,
-        ETHERNET_ctx: CliContext,
+        ETHERNET_ctx: VVRP_RuntimeContext,
         ETHERNET_send_frame: Callable[[bytes], None],
     ) -> None:
         self.ETHERNET_ctx = ETHERNET_ctx

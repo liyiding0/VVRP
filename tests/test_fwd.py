@@ -29,7 +29,7 @@ from src.FWD import (
     FWD_default_input_dispatcher,
 )
 from src.IFNET import InterfaceAddress, NetworkInterface
-from src.CCmd import CliContext
+from src.CMD import CliContext
 from src.IP.ipv4 import IP_build_ipv4_packet
 from src.RM import RMRoute
 from src.SOCK import SOCK_AF_INET, SOCK_IPPROTO_ICMP, SOCK_SOCK_RAW, SOCK_sendto, SOCK_socket
@@ -330,7 +330,7 @@ class FwdTests(unittest.TestCase):
         self.assertEqual([("eth4", b"frame")], calls)
 
     def test_default_fwd_input_dispatcher_delivers_ethernet_frame(self):
-        from src.CCmd import CliContext
+        from src.CMD import CliContext
         from src.ETHERNET import build_ethernet_ii_frame
         from src.IP.ICMP.packet import ICMP_build_echo_request, ICMP_parse_echo
         from src.IP.ICMP.ping import (
@@ -389,7 +389,7 @@ class FwdTests(unittest.TestCase):
         self.assertTrue(echo.ICMP_is_echo_reply)
 
     def test_default_fwd_input_dispatcher_replies_to_arp_request_for_local_ip(self):
-        from src.CCmd import CliContext
+        from src.CMD import CliContext
 
         ctx = CliContext()
         interface = NetworkInterface(

@@ -1,4 +1,4 @@
-"""Interface network discovery and CCmd registrations for VVRP."""
+"""Interface network discovery and CMD registrations for VVRP."""
 
 from .commands import register_ifnet_commands
 from .admin import InterfaceAdminProvider, InterfaceAdminResult

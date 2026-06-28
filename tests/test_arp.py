@@ -14,8 +14,8 @@ from src.ARP import (
     parse_arp_packet,
     register_arp_commands,
 )
-from src.CCmd import CliContext, CommandParser, CommandRegistry, dispatch_line
-from src.CCmd.examples import build_default_registry
+from src.CMD import CliContext, CommandParser, CommandRegistry, dispatch_line
+from src.CMD.examples import build_default_registry
 from src.ETHERNET import BROADCAST_MAC, ETHERTYPE_ARP, ETHERTYPE_IPV4, EthernetFrame
 from src.IFNET import InterfaceAddress, NetworkInterface
 

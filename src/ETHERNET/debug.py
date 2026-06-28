@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from src.CCmd.models import CliContext
+from src.VVRP.models import VVRP_RuntimeContext
 
 from .frame import ETHERTYPE_ARP, ETHERTYPE_IPV4, ETHERTYPE_IPV6, EthernetFrame
 
@@ -11,16 +11,16 @@ ETHERNET_FRAME_BRIEF_DEBUG_STATE_KEY = "ethernet.debug.frame_brief"
 EthernetFrameDirection = Literal["rx", "tx"]
 
 
-def is_ethernet_frame_brief_debug_enabled(ctx: CliContext) -> bool:
+def is_ethernet_frame_brief_debug_enabled(ctx: VVRP_RuntimeContext) -> bool:
     return bool(ctx.state.get(ETHERNET_FRAME_BRIEF_DEBUG_STATE_KEY))
 
 
-def set_ethernet_frame_brief_debug(ctx: CliContext, enabled: bool) -> None:
+def set_ethernet_frame_brief_debug(ctx: VVRP_RuntimeContext, enabled: bool) -> None:
     ctx.state[ETHERNET_FRAME_BRIEF_DEBUG_STATE_KEY] = bool(enabled)
 
 
 def debug_ethernet_frame(
-    ctx: CliContext,
+    ctx: VVRP_RuntimeContext,
     interface_name: str,
     direction: EthernetFrameDirection,
     frame: EthernetFrame,

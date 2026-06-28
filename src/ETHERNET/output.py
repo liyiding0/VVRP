@@ -6,7 +6,6 @@ from collections.abc import Callable
 
 from src.ARP import ARP_EntryLearned, ArpProtocol, ArpTable, get_arp_table
 from src.ARP.packet import ArpPacketError
-from src.CCmd.models import CliContext
 from src.ETHERNET.debug import debug_ethernet_frame
 from src.ETHERNET.frame import (
     ETHERTYPE_ARP,
@@ -17,6 +16,7 @@ from src.ETHERNET.frame import (
 )
 from src.FIB import FIBEntry
 from src.IFNET.models import NetworkInterface
+from src.VVRP.models import VVRP_RuntimeContext
 from src.events import VVRP_event_bus
 
 
@@ -31,7 +31,7 @@ class ETHERNET_OutputHandler:
         ETHERNET_port_provider: Callable[[NetworkInterface], object] | None = None,
         ETHERNET_arp_table: ArpTable | None = None,
         ETHERNET_arp_timeout_seconds: float = g_ETHERNET_ARP_RESOLVE_TIMEOUT_SECONDS,
-        ETHERNET_debug_ctx: CliContext | None = None,
+        ETHERNET_debug_ctx: VVRP_RuntimeContext | None = None,
     ) -> None:
         self.ETHERNET_state = ETHERNET_state
         self.ETHERNET_port_provider = ETHERNET_port_provider
@@ -66,7 +66,7 @@ class ETHERNET_OutputHandler:
         )
         ETHERNET_raw_frame = ETHERNET_frame.to_bytes(pad=True)
         debug_ethernet_frame(
-            self.ETHERNET_debug_ctx or CliContext(state=self.ETHERNET_state),
+            self.ETHERNET_debug_ctx or VVRP_RuntimeContext(state=self.ETHERNET_state),
             ETHERNET_interface.name,
             "tx",
             ETHERNET_frame,
@@ -102,7 +102,7 @@ class ETHERNET_OutputHandler:
             ETHERNET_interface.name,
         )
         debug_ethernet_frame(
-            self.ETHERNET_debug_ctx or CliContext(state=self.ETHERNET_state),
+            self.ETHERNET_debug_ctx or VVRP_RuntimeContext(state=self.ETHERNET_state),
             ETHERNET_interface.name,
             "tx",
             ETHERNET_request,
@@ -154,7 +154,7 @@ class ETHERNET_OutputHandler:
         ):
             return
         debug_ethernet_frame(
-            self.ETHERNET_debug_ctx or CliContext(state=self.ETHERNET_state),
+            self.ETHERNET_debug_ctx or VVRP_RuntimeContext(state=self.ETHERNET_state),
             ETHERNET_interface.name,
             "rx",
             ETHERNET_frame,
@@ -168,7 +168,7 @@ class ETHERNET_OutputHandler:
             return
         if ETHERNET_reply is not None:
             debug_ethernet_frame(
-                self.ETHERNET_debug_ctx or CliContext(state=self.ETHERNET_state),
+                self.ETHERNET_debug_ctx or VVRP_RuntimeContext(state=self.ETHERNET_state),
                 ETHERNET_interface.name,
                 "tx",
                 ETHERNET_reply,

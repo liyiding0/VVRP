@@ -22,8 +22,8 @@ from src.ETHERNET import (
     parse_mac_address,
     register_ethernet_commands,
 )
-from src.CCmd import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
-from src.CCmd.examples import build_default_registry
+from src.CMD import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
+from src.CMD.examples import build_default_registry
 from src.ARP import ARP_REPLY, ARP_REQUEST, ArpPacket, get_arp_table
 from src.DPlane import DPlane_PlatformInfo, DPlane_Result
 from src.ETHERNET.frame_debug import ETHERNET_FrameDebugService

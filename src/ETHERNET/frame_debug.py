@@ -4,7 +4,6 @@ import threading
 from dataclasses import dataclass
 
 from src.ARP import ArpPacketError, ArpProtocol, get_arp_table
-from src.CCmd.models import CliContext
 from src.DPlane.backend import DPlane_create_backend
 from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
 from src.IFNET.admin import InterfaceAdminProvider
@@ -12,6 +11,7 @@ from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET.inventory import get_ifnet_manager
 from src.IFNET.models import NetworkInterface
+from src.VVRP.models import VVRP_RuntimeContext
 
 from .debug import debug_ethernet_frame
 from .frame import ETHERTYPE_ARP, EthernetFrameError, parse_ethernet_ii_frame
@@ -45,7 +45,7 @@ class ETHERNET_FrameDebugService:
         self.packet_filter = packet_filter
         self._sessions: dict[str, _ETHERNET_FrameDebugSession] = {}
 
-    def start(self, ctx: CliContext) -> str:
+    def start(self, ctx: VVRP_RuntimeContext) -> str:
         bindings = self._bindings(ctx)
         active_names = {binding.interface.name for binding in bindings}
         for name in tuple(self._sessions):
@@ -89,7 +89,7 @@ class ETHERNET_FrameDebugService:
         names = ", ".join(sorted(self._sessions))
         return f"listeners running on {names}"
 
-    def _bindings(self, ctx: CliContext) -> tuple[ETHERNET_FrameDebugPortBinding, ...]:
+    def _bindings(self, ctx: VVRP_RuntimeContext) -> tuple[ETHERNET_FrameDebugPortBinding, ...]:
         try:
             interfaces = get_ifnet_manager(
                 ctx.state,
@@ -121,7 +121,7 @@ class ETHERNET_FrameDebugService:
 class _ETHERNET_FrameDebugSession:
     def __init__(
         self,
-        ctx: CliContext,
+        ctx: VVRP_RuntimeContext,
         interface: NetworkInterface,
         host_mac_address: str,
         port,
@@ -172,7 +172,7 @@ class _ETHERNET_FrameDebugSession:
                 pass
 
 
-def _learn_arp_from_frame(ctx: CliContext, interface: NetworkInterface, frame) -> None:
+def _learn_arp_from_frame(ctx: VVRP_RuntimeContext, interface: NetworkInterface, frame) -> None:
     if frame.ethertype != ETHERTYPE_ARP:
         return
     try:

@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 
-from src.CCmd.models import CliContext
 from src.DPlane.backend import DPlane_create_backend
 from src.DPlane.models import DPlane_Backend, DPlane_PacketDevice
 from src.IFNET.admin import InterfaceAdminProvider
@@ -25,7 +24,7 @@ class DPlane_PacketInputService:
         DPlane_ifnet_admin_provider: InterfaceAdminProvider | None = None,
         DPlane_backend: DPlane_Backend | None = None,
         DPlane_port_factory=None,
-        DPlane_frame_handler_factory: Callable[[CliContext, object], object] | None = None,
+        DPlane_frame_handler_factory: Callable[[object, object], object] | None = None,
     ) -> None:
         self.DPlane_ifnet_provider = DPlane_ifnet_provider
         self.DPlane_ifnet_admin_provider = DPlane_ifnet_admin_provider
@@ -39,7 +38,7 @@ class DPlane_PacketInputService:
         )
         self.DPlane_sessions: dict[str, _DPlane_PacketInputSession] = {}
 
-    def DPlane_refresh(self, DPlane_ctx: CliContext) -> str:
+    def DPlane_refresh(self, DPlane_ctx) -> str:
         self.DPlane_stop()
         try:
             DPlane_bindings = self._DPlane_bindings(DPlane_ctx)
@@ -68,7 +67,7 @@ class DPlane_PacketInputService:
 
     def _DPlane_bindings(
         self,
-        DPlane_ctx: CliContext,
+        DPlane_ctx,
     ) -> tuple[tuple[NetworkInterface, DPlane_PacketDevice], ...]:
         DPlane_interfaces = get_ifnet_manager(
             DPlane_ctx.state,
@@ -93,7 +92,7 @@ class DPlane_PacketInputService:
     def _DPlane_default_port_factory(self, DPlane_device: DPlane_PacketDevice):
         return self.DPlane_backend.DPlane_open_packet_port(DPlane_device)
 
-    def _DPlane_default_frame_handler_factory(self, DPlane_ctx: CliContext, DPlane_port):
+    def _DPlane_default_frame_handler_factory(self, DPlane_ctx, DPlane_port):
         from src.FWD import FWD_default_input_dispatcher
 
         return FWD_default_input_dispatcher(
@@ -105,7 +104,7 @@ class DPlane_PacketInputService:
 class _DPlane_PacketInputSession:
     def __init__(
         self,
-        DPlane_ctx: CliContext,
+        DPlane_ctx,
         DPlane_interface: NetworkInterface,
         DPlane_port,
         DPlane_frame_handler,

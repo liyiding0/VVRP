@@ -67,15 +67,15 @@ def _run_plain_cli(
     prompt: str | None = None,
     hostname: str = "Router",
     saved_configuration_file: str | os.PathLike[str] | None = None,
+    state: dict | None = None,
 ) -> int:
-    ctx = CliContext(hostname=hostname)
+    ctx = CliContext(hostname=hostname, state=state if state is not None else {})
     registry.initialize_context(ctx)
     set_saved_configuration_path(ctx, saved_configuration_file)
     _print_saved_configuration_errors(
         ctx,
         load_saved_configuration(ctx, registry, saved_configuration_file),
     )
-    _start_runtime_services(ctx)
     pending_input = ""
     while not ctx.exit_requested:
         try:
@@ -91,6 +91,7 @@ def _run_plain_cli(
                 hostname=hostname,
                 output=ctx.output,
                 saved_configuration_file=saved_configuration_file,
+                state=ctx.state,
             )
             pending_input = ""
             continue
@@ -119,6 +120,7 @@ def run_interactive_cli(
     hostname: str = "Router",
     history_file: str | os.PathLike[str] | None = None,
     saved_configuration_file: str | os.PathLike[str] | None = None,
+    state: dict | None = None,
 ) -> int:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         return _run_plain_cli(
@@ -126,6 +128,7 @@ def run_interactive_cli(
             prompt=prompt,
             hostname=hostname,
             saved_configuration_file=saved_configuration_file,
+            state=state,
         )
 
     try:
@@ -146,11 +149,13 @@ def run_interactive_cli(
             prompt=prompt,
             hostname=hostname,
             saved_configuration_file=saved_configuration_file,
+            state=state,
         )
 
     parser = CommandParser(registry)
     ctx = CliContext(
         hostname=hostname,
+        state=state if state is not None else {},
         output=_PromptToolkitAnsiOutput(print_formatted_text, ANSI),
     )
     registry.initialize_context(ctx)
@@ -159,7 +164,6 @@ def run_interactive_cli(
         ctx,
         load_saved_configuration(ctx, registry, saved_configuration_file),
     )
-    _start_runtime_services(ctx)
 
     class RouterCommandLexer(Lexer):
         def lex_document(self, document):
@@ -294,7 +298,7 @@ def run_interactive_cli(
         }
     )
 
-    history_path = Path(history_file or Path.home() / ".vvrp_ccmd_history")
+    history_path = Path(history_file or Path.home() / ".vvrp_cmd_history")
     try:
         history_path.parent.mkdir(parents=True, exist_ok=True)
         with history_path.open("ab"):
@@ -326,6 +330,7 @@ def run_interactive_cli(
                 hostname=hostname,
                 output=ctx.output,
                 saved_configuration_file=saved_configuration_file,
+                state=ctx.state,
             )
 
     return 0
@@ -336,33 +341,19 @@ def _reload_context(
     hostname: str,
     output,
     saved_configuration_file: str | os.PathLike[str] | None,
+    state: dict | None = None,
 ) -> CliContext:
     output.write("System is reloading...\n")
     output.write("Reloading saved configuration...\n")
-    ctx = CliContext(hostname=hostname, output=output)
+    ctx = CliContext(hostname=hostname, output=output, state=state if state is not None else {})
     registry.initialize_context(ctx)
     set_saved_configuration_path(ctx, saved_configuration_file)
     _print_saved_configuration_errors(
         ctx,
         load_saved_configuration(ctx, registry, saved_configuration_file),
     )
-    _start_runtime_services(ctx)
     output.write("Reload complete.\n")
     return ctx
-
-
-def _start_runtime_services(ctx: CliContext) -> None:
-    try:
-        from src.VVRP.runtime import g_VVRP_RUNTIME_STATE_KEY
-    except ImportError:
-        return
-    runtime = ctx.state.get(g_VVRP_RUNTIME_STATE_KEY)
-    refresh = getattr(runtime, "VVRP_refresh_control_plane", None)
-    if refresh is None:
-        return
-    message = refresh(ctx)
-    if isinstance(message, str) and message.startswith("DPlane packet input refresh failed"):
-        ctx.write(f"% {message}")
 
 
 def _print_saved_configuration_errors(ctx: CliContext, errors: list[str]) -> None:
