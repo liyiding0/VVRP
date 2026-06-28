@@ -8,13 +8,8 @@ from src.IFNET.models import NetworkInterface
 from src.IP.ICMP.input import ICMP_handle_ipv4_packet
 
 from .debug import debug_ethernet_frame
-from .frame import (
-    ETHERTYPE_ARP,
-    ETHERTYPE_IPV4,
-    EthernetFrame,
-    EthernetFrameError,
-    parse_ethernet_ii_frame,
-)
+from .frame import ETHERTYPE_ARP, ETHERTYPE_IPV4, EthernetFrame, EthernetFrameError, parse_ethernet_ii_frame
+from .output import ETHERNET_frame_belongs_to_interface, ETHERNET_is_group_address
 
 
 class ETHERNET_InputHandler:
@@ -35,8 +30,6 @@ class ETHERNET_InputHandler:
             ETHERNET_frame = parse_ethernet_ii_frame(ETHERNET_raw_frame)
         except EthernetFrameError:
             return
-        if not ETHERNET_frame_belongs_to_interface(ETHERNET_frame, ETHERNET_interface):
-            return
         debug_ethernet_frame(
             self.ETHERNET_ctx,
             ETHERNET_interface.name,
@@ -46,6 +39,8 @@ class ETHERNET_InputHandler:
         if ETHERNET_frame.ethertype == ETHERTYPE_ARP:
             self._ETHERNET_handle_arp(ETHERNET_interface, ETHERNET_frame)
         elif ETHERNET_frame.ethertype == ETHERTYPE_IPV4:
+            if not ETHERNET_frame_belongs_to_interface(ETHERNET_frame, ETHERNET_interface):
+                return
             self._ETHERNET_handle_ipv4(ETHERNET_interface, ETHERNET_frame)
 
     def _ETHERNET_handle_arp(
@@ -96,24 +91,4 @@ class ETHERNET_InputHandler:
         )
         self.ETHERNET_send_frame(ETHERNET_reply_frame.to_bytes(pad=True))
 
-
-def ETHERNET_frame_belongs_to_interface(
-    ETHERNET_frame: EthernetFrame,
-    ETHERNET_interface: NetworkInterface,
-) -> bool:
-    ETHERNET_mac = ETHERNET_interface.mac_address.lower()
-    ETHERNET_source = ETHERNET_frame.source.lower()
-    ETHERNET_destination = ETHERNET_frame.destination.lower()
-    return ETHERNET_source != ETHERNET_mac and (
-        ETHERNET_destination == ETHERNET_mac
-        or ETHERNET_is_group_address(ETHERNET_destination)
-    )
-
-
-def ETHERNET_is_group_address(ETHERNET_mac_address: str) -> bool:
-    try:
-        ETHERNET_first_octet = int(ETHERNET_mac_address.split(":", 1)[0], 16)
-    except (ValueError, IndexError):
-        return False
-    return bool(ETHERNET_first_octet & 1)
 

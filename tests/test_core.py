@@ -21,7 +21,7 @@ from src.CCmd import (
     TokenStyle,
     dispatch_line,
 )
-from src.ARP import ARP_REPLY, ArpPacket
+from src.ARP import ARP_REPLY, ArpPacket, ArpTable, get_arp_table
 from src.CCmd.examples import build_default_registry
 from src.CCmd.help import format_help
 from src.CCmd.interactive import (
@@ -140,6 +140,15 @@ class ParserTests(unittest.TestCase):
         self.assertEqual("show interface eth3", result.complete_command)
         self.assertEqual({"name": "eth3"}, result.args)
         self.assertTrue(result.executable)
+
+    def test_default_registry_binds_runtime_arp_table_to_context_state(self):
+        table = ArpTable()
+        registry = build_default_registry(arp_table=table)
+        ctx = CliContext(output=io.StringIO())
+
+        registry.initialize_context(ctx)
+
+        self.assertIs(table, get_arp_table(ctx.state))
 
     def test_literal_abbreviations_are_case_insensitive(self):
         parser = CommandParser(build_registry())
@@ -585,6 +594,30 @@ class InteractiveTests(unittest.TestCase):
 
         self.assertEqual(0, result)
         self.assertIn("VVRP CCmd version 0.1.0", output.getvalue())
+
+    def test_non_tty_fallback_starts_runtime_services_after_configuration_load(self):
+        output = io.StringIO()
+        calls = []
+
+        class FakeRuntime(VVRP_Runtime):
+            def VVRP_refresh_control_plane(self, ctx):
+                calls.append(ctx.hostname)
+                return "1 listener(s) running"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                patch("src.CCmd.interactive.sys.stdin.isatty", return_value=False),
+                patch("src.CCmd.interactive.sys.stdout.isatty", return_value=False),
+                patch("builtins.input", side_effect=[EOFError]),
+                patch("src.CCmd.models.sys.stdout", output),
+            ):
+                result = run_interactive_cli(
+                    build_default_registry(runtime=FakeRuntime()),
+                    saved_configuration_file=Path(temp_dir) / "saved-configuration",
+                )
+
+        self.assertEqual(0, result)
+        self.assertEqual(["Router"], calls)
 
     def test_non_tty_fallback_preserves_help_prefix_for_next_prompt(self):
         output = io.StringIO()

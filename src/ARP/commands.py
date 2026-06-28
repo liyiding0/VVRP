@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 from src.CCmd.models import CommandResult
 from src.CCmd.registry import CommandRegistry
+from src.events import VVRP_event_bus
 
 from .table import ArpEntry, ArpTable
 
@@ -80,7 +81,7 @@ def get_arp_table(state: dict, table: ArpTable | None = None) -> ArpTable:
     value = state.get(ARP_TABLE_STATE_KEY)
     if isinstance(value, ArpTable):
         return value
-    value = ArpTable()
+    value = ArpTable(event_publisher=VVRP_event_bus(state).VVRP_publish)
     state[ARP_TABLE_STATE_KEY] = value
     return value
 

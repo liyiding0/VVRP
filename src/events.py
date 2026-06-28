@@ -20,8 +20,17 @@ class VVRP_EventBus:
     def VVRP_subscribe(self, VVRP_event_type: type, VVRP_handler: Callable[[Any], None]) -> None:
         self._VVRP_handlers.setdefault(VVRP_event_type, []).append(VVRP_handler)
 
+    def VVRP_unsubscribe(self, VVRP_event_type: type, VVRP_handler: Callable[[Any], None]) -> None:
+        VVRP_handlers = self._VVRP_handlers.get(VVRP_event_type)
+        if VVRP_handlers is None:
+            return
+        try:
+            VVRP_handlers.remove(VVRP_handler)
+        except ValueError:
+            return
+
     def VVRP_publish(self, VVRP_event: Any) -> None:
-        for VVRP_handler in self._VVRP_handlers.get(type(VVRP_event), ()):
+        for VVRP_handler in tuple(self._VVRP_handlers.get(type(VVRP_event), ())):
             VVRP_handler(VVRP_event)
 
 

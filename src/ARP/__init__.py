@@ -15,7 +15,7 @@ from .packet import (
 )
 from .commands import get_arp_table, register_arp_commands
 from .protocol import ArpProtocol
-from .table import DEFAULT_ARP_AGE_SECONDS, ArpEntry, ArpTable
+from .table import DEFAULT_ARP_AGE_SECONDS, ARP_EntryLearned, ArpEntry, ArpTable
 
 __all__ = [
     "ARP_ETHERNET_HARDWARE_LENGTH",
@@ -24,6 +24,7 @@ __all__ = [
     "ARP_PACKET_LENGTH",
     "ARP_REPLY",
     "ARP_REQUEST",
+    "ARP_EntryLearned",
     "DEFAULT_ARP_AGE_SECONDS",
     "ZERO_MAC",
     "ArpEntry",

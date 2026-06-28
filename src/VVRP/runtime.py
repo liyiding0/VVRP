@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.ARP import ArpTable
+from src.ARP.commands import ARP_TABLE_STATE_KEY
 from src.CCmd.models import CliContext, CommandResult
 from src.DPlane import DPlane_Backend, DPlane_create_backend
 from src.DPlane.backend import DPlane_AdminProviderAdapter, DPlane_InterfaceProviderAdapter
@@ -18,6 +19,9 @@ from src.IFNET.inventory import get_ifnet_manager
 from src.IP.dhcp import IP_DhcpClientProvider
 from src.IP.static import IP_StaticIpv4Provider
 from src.RM.commands import RM_refresh_connected_routes_from_interfaces
+
+
+g_VVRP_RUNTIME_STATE_KEY = "vvrp.runtime"
 
 
 @dataclass
@@ -60,6 +64,7 @@ class VVRP_Runtime:
         )
 
     def VVRP_refresh_control_plane(self, VVRP_ctx: CliContext):
+        self.VVRP_bind_state(VVRP_ctx.state)
         VVRP_rm_table = RM_refresh_connected_routes_from_interfaces(
             VVRP_ctx,
             lambda VVRP_current_ctx: self.VVRP_list_ifnet_interfaces(VVRP_current_ctx),
@@ -67,6 +72,11 @@ class VVRP_Runtime:
         if not isinstance(VVRP_rm_table, CommandResult):
             FIB_sync_active_routes(VVRP_ctx.state, VVRP_rm_table.RM_active_routes())
         return self.VVRP_packet_input.DPlane_refresh(VVRP_ctx)
+
+    def VVRP_bind_state(self, VVRP_state: dict) -> None:
+        VVRP_state[g_VVRP_RUNTIME_STATE_KEY] = self
+        if self.VVRP_arp_table is not None:
+            VVRP_state[ARP_TABLE_STATE_KEY] = self.VVRP_arp_table
 
     def VVRP_list_ifnet_interfaces(self, VVRP_ctx: CliContext):
         VVRP_interfaces = get_ifnet_manager(
@@ -84,6 +94,7 @@ class VVRP_Runtime:
                 FWD_interface
             ),
             FWD_arp_table=self.VVRP_arp_table,
+            FWD_debug_ctx=VVRP_ctx,
         )
 
     def VVRP_ethernet_port(self, VVRP_interface):

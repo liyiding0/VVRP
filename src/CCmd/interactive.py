@@ -75,6 +75,7 @@ def _run_plain_cli(
         ctx,
         load_saved_configuration(ctx, registry, saved_configuration_file),
     )
+    _start_runtime_services(ctx)
     pending_input = ""
     while not ctx.exit_requested:
         try:
@@ -158,6 +159,7 @@ def run_interactive_cli(
         ctx,
         load_saved_configuration(ctx, registry, saved_configuration_file),
     )
+    _start_runtime_services(ctx)
 
     class RouterCommandLexer(Lexer):
         def lex_document(self, document):
@@ -344,8 +346,23 @@ def _reload_context(
         ctx,
         load_saved_configuration(ctx, registry, saved_configuration_file),
     )
+    _start_runtime_services(ctx)
     output.write("Reload complete.\n")
     return ctx
+
+
+def _start_runtime_services(ctx: CliContext) -> None:
+    try:
+        from src.VVRP.runtime import g_VVRP_RUNTIME_STATE_KEY
+    except ImportError:
+        return
+    runtime = ctx.state.get(g_VVRP_RUNTIME_STATE_KEY)
+    refresh = getattr(runtime, "VVRP_refresh_control_plane", None)
+    if refresh is None:
+        return
+    message = refresh(ctx)
+    if isinstance(message, str) and message.startswith("DPlane packet input refresh failed"):
+        ctx.write(f"% {message}")
 
 
 def _print_saved_configuration_errors(ctx: CliContext, errors: list[str]) -> None:

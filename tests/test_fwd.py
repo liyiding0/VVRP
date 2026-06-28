@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 import unittest
+import io
 from ipaddress import IPv4Network
 
-from src.ARP import ARP_REPLY, ARP_REQUEST, ZERO_MAC, ArpPacket, ArpTable, get_arp_table, parse_arp_packet
+from src.ARP import (
+    ARP_EntryLearned,
+    ARP_REPLY,
+    ARP_REQUEST,
+    ZERO_MAC,
+    ArpPacket,
+    ArpTable,
+    get_arp_table,
+    parse_arp_packet,
+)
 from src.ETHERNET import BROADCAST_MAC, ETHERTYPE_ARP, ETHERTYPE_IPV4, EthernetFrame, parse_ethernet_ii_frame
+from src.ETHERNET.debug import set_ethernet_frame_brief_debug
 from src.FIB import FIBEntry, FIB_table
 from src.FWD import (
     FWD_Adjacency,
@@ -18,17 +29,25 @@ from src.FWD import (
     FWD_default_input_dispatcher,
 )
 from src.IFNET import InterfaceAddress, NetworkInterface
+from src.CCmd import CliContext
 from src.IP.ipv4 import IP_build_ipv4_packet
 from src.RM import RMRoute
 from src.SOCK import SOCK_AF_INET, SOCK_IPPROTO_ICMP, SOCK_SOCK_RAW, SOCK_sendto, SOCK_socket
+from src.events import VVRP_event_bus
 
 
 class FakeRawFramePort:
-    def __init__(self):
+    def __init__(self, received_frames=()):
         self.frames = []
+        self.received_frames = list(received_frames)
 
     def send_frame(self, frame: bytes) -> None:
         self.frames.append(bytes(frame))
+
+    def recv_frame(self) -> bytes | None:
+        if not self.received_frames:
+            return None
+        return self.received_frames.pop(0)
 
 
 class FwdTests(unittest.TestCase):
@@ -151,7 +170,7 @@ class FwdTests(unittest.TestCase):
         interface = fwd_interface("eth4")
         route = fwd_route(interface, "192.0.2.0/24", "192.0.2.10")
         packet = IP_build_ipv4_packet("192.0.2.10", "192.0.2.1", 1, b"hello")
-        arp = ArpTable()
+        arp = ArpTable(event_publisher=VVRP_event_bus(state).VVRP_publish)
 
         class ResolvingPort(FakeRawFramePort):
             def send_frame(self, frame: bytes) -> None:
@@ -168,7 +187,6 @@ class FwdTests(unittest.TestCase):
             FWD_port_provider=lambda current_interface: port,
             FWD_arp_table=arp,
             FWD_arp_timeout_seconds=0.1,
-            FWD_sleep=lambda seconds: None,
         ).FWD_send_packet(packet, route, interface)
 
         self.assertTrue(result.FWD_ok)
@@ -183,6 +201,107 @@ class FwdTests(unittest.TestCase):
         self.assertEqual(ETHERTYPE_IPV4, ipv4_frame.ethertype)
         self.assertEqual("66:77:88:99:aa:bb", ipv4_frame.destination)
         self.assertEqual(packet, ipv4_frame.payload[: len(packet)])
+        self.assertEqual([], VVRP_event_bus(state)._VVRP_handlers.get(ARP_EntryLearned, []))
+
+    def test_fwd_writes_tx_frames_to_ethernet_debug(self):
+        state = {}
+        output = io.StringIO()
+        ctx = CliContext(state=state, output=output)
+        set_ethernet_frame_brief_debug(ctx, True)
+        interface = fwd_interface("eth4")
+        route = fwd_route(interface, "192.0.2.0/24", "192.0.2.10")
+        packet = IP_build_ipv4_packet("192.0.2.10", "192.0.2.1", 1, b"hello")
+        arp = ArpTable()
+        arp.learn("192.0.2.1", "66:77:88:99:aa:bb", "eth4")
+
+        result = FWD_EthernetOutputHandler(
+            state,
+            FWD_port_provider=lambda current_interface: FakeRawFramePort(),
+            FWD_arp_table=arp,
+            FWD_debug_ctx=ctx,
+        ).FWD_send_packet(packet, route, interface)
+
+        self.assertTrue(result.FWD_ok)
+        self.assertIn("ETHERNET/FRAME: eth4 TX", output.getvalue())
+        self.assertIn("type=IPv4(0x0800)", output.getvalue())
+
+    def test_fwd_learns_arp_reply_from_output_port_while_resolving(self):
+        state = {}
+        interface = fwd_interface("eth4")
+        route = fwd_route(interface, "192.0.2.0/24", "192.0.2.10")
+        packet = IP_build_ipv4_packet("192.0.2.10", "192.0.2.1", 1, b"hello")
+        reply = EthernetFrame(
+            destination=interface.mac_address,
+            source="66:77:88:99:aa:bb",
+            ethertype=ETHERTYPE_ARP,
+            payload=ArpPacket(
+                operation=ARP_REPLY,
+                sender_mac="66:77:88:99:aa:bb",
+                sender_ip="192.0.2.1",
+                target_mac=interface.mac_address,
+                target_ip="192.0.2.10",
+            ).to_bytes(),
+        ).to_bytes(pad=True)
+        port = FakeRawFramePort(received_frames=(reply,))
+        arp = ArpTable(event_publisher=VVRP_event_bus(state).VVRP_publish)
+
+        result = FWD_EthernetOutputHandler(
+            state,
+            FWD_port_provider=lambda current_interface: port,
+            FWD_arp_table=arp,
+            FWD_arp_timeout_seconds=0.1,
+        ).FWD_send_packet(packet, route, interface)
+
+        self.assertTrue(result.FWD_ok)
+        self.assertIsNotNone(arp.lookup("192.0.2.1", "eth4"))
+        self.assertEqual(2, len(port.frames))
+        self.assertEqual(ETHERTYPE_IPV4, parse_ethernet_ii_frame(port.frames[1]).ethertype)
+
+    def test_fwd_subscribes_for_arp_event_before_sending_request(self):
+        state = {}
+        interface = fwd_interface("eth4")
+        route = fwd_route(interface, "192.0.2.0/24", "192.0.2.10")
+        packet = IP_build_ipv4_packet("192.0.2.10", "192.0.2.1", 1, b"hello")
+        arp = ArpTable(event_publisher=VVRP_event_bus(state).VVRP_publish)
+        test_case = self
+
+        class AssertingPort(FakeRawFramePort):
+            def send_frame(self, frame: bytes) -> None:
+                parsed = parse_ethernet_ii_frame(frame)
+                if parsed.ethertype == ETHERTYPE_ARP:
+                    test_case.assertTrue(VVRP_event_bus(state)._VVRP_handlers.get(ARP_EntryLearned))
+                super().send_frame(frame)
+                if parsed.ethertype == ETHERTYPE_ARP:
+                    arp.learn("192.0.2.1", "66:77:88:99:aa:bb", "eth4")
+
+        port = AssertingPort()
+        result = FWD_EthernetOutputHandler(
+            state,
+            FWD_port_provider=lambda current_interface: port,
+            FWD_arp_table=arp,
+            FWD_arp_timeout_seconds=0.1,
+        ).FWD_send_packet(packet, route, interface)
+
+        self.assertTrue(result.FWD_ok)
+        self.assertEqual(2, len(port.frames))
+
+    def test_fwd_arp_wait_unsubscribes_after_timeout(self):
+        state = {}
+        interface = fwd_interface("eth4")
+        route = fwd_route(interface, "192.0.2.0/24", "192.0.2.10")
+        packet = IP_build_ipv4_packet("192.0.2.10", "192.0.2.1", 1, b"hello")
+        port = FakeRawFramePort()
+        bus = VVRP_event_bus(state)
+
+        result = FWD_EthernetOutputHandler(
+            state,
+            FWD_port_provider=lambda current_interface: port,
+            FWD_arp_table=ArpTable(event_publisher=bus.VVRP_publish),
+            FWD_arp_timeout_seconds=0,
+        ).FWD_send_packet(packet, route, interface)
+
+        self.assertFalse(result.FWD_ok)
+        self.assertEqual([], bus._VVRP_handlers.get(ARP_EntryLearned, []))
 
     def test_fwd_reports_unsupported_future_interface_type(self):
         state = {}

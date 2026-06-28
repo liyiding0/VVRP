@@ -37,3 +37,6 @@ class FWD_InputHandler(Protocol):
 class FWD_RawFramePort(Protocol):
     def send_frame(self, FWD_frame: bytes) -> None:
         """Send one raw link-layer frame."""
+
+    def recv_frame(self) -> bytes | None:
+        """Receive one raw link-layer frame, or None when no frame is available."""

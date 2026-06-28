@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -27,10 +28,20 @@ class ArpEntry:
         return now - self.updated_at >= self.age_seconds
 
 
+@dataclass(frozen=True)
+class ARP_EntryLearned:
+    entry: ArpEntry
+
+
 class ArpTable:
-    def __init__(self, default_age_seconds: int = DEFAULT_ARP_AGE_SECONDS) -> None:
+    def __init__(
+        self,
+        default_age_seconds: int = DEFAULT_ARP_AGE_SECONDS,
+        event_publisher: Callable[[object], None] | None = None,
+    ) -> None:
         self.default_age_seconds = int(default_age_seconds)
         self._entries: dict[tuple[str, str], ArpEntry] = {}
+        self._event_publisher = event_publisher
 
     def learn(
         self,
@@ -52,6 +63,8 @@ class ArpTable:
             age_seconds=self.default_age_seconds,
         )
         self._entries[(entry.interface_name, entry.ip_address)] = entry
+        if self._event_publisher is not None:
+            self._event_publisher(ARP_EntryLearned(entry))
         return entry
 
     def lookup(self, ip_address: str, interface_name: str, now: float | None = None) -> ArpEntry | None:

@@ -51,6 +51,10 @@ def build_default_registry(
         VVRP_dplane_backend=dplane_backend,
     )
 
+    @registry.context_initializer
+    def initialize_runtime_state(ctx):
+        active_runtime.VVRP_bind_state(ctx.state)
+
     @registry.command("show", help_text="Show command group", modes=SHOW_MODES)
     def show(ctx, args):
         candidates = CommandParser(registry).help_candidates("show ", mode=ctx.mode, ctx=ctx)

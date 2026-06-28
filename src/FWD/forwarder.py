@@ -58,6 +58,7 @@ def FWD_default_forwarder(
     FWD_ethernet_port_provider=None,
     FWD_arp_table=None,
     FWD_adjacency_registry: FWD_AdjacencyRegistry | None = None,
+    FWD_debug_ctx=None,
 ) -> FWD_Forwarder:
     FWD_adjacency_registry = FWD_adjacency_registry or FWD_default_adjacency_registry()
     FWD_forwarder = FWD_Forwarder(
@@ -71,6 +72,7 @@ def FWD_default_forwarder(
             FWD_port_provider=FWD_ethernet_port_provider,
             FWD_arp_table=FWD_arp_table,
             FWD_adjacency_registry=FWD_adjacency_registry,
+            FWD_debug_ctx=FWD_debug_ctx,
         ),
     )
     return FWD_forwarder

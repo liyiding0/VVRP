@@ -24,7 +24,7 @@ from src.ETHERNET import (
 )
 from src.CCmd import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
 from src.CCmd.examples import build_default_registry
-from src.ARP import ARP_REPLY, ArpPacket, get_arp_table
+from src.ARP import ARP_REPLY, ARP_REQUEST, ArpPacket, get_arp_table
 from src.DPlane import DPlane_PlatformInfo, DPlane_Result
 from src.ETHERNET.frame_debug import ETHERNET_FrameDebugService
 from src.DPlane.Windows.npcap import NpcapDevice
@@ -328,6 +328,31 @@ class EthernetDebugTests(unittest.TestCase):
         self.assertTrue(dispatch_line(ctx, registry, "no debugging ethernet frame brief").executed)
         self.assertFalse(is_ethernet_frame_brief_debug_enabled(ctx))
         self.assertIn("off", output.getvalue())
+
+    def test_ethernet_input_learns_arp_seen_on_interface_even_for_other_subnet(self):
+        from src.ETHERNET.input import ETHERNET_InputHandler
+
+        ctx = CliContext(output=io.StringIO())
+        interface = fake_interface()
+        arp = ArpPacket(
+            operation=ARP_REQUEST,
+            sender_mac="66:77:88:99:aa:bb",
+            sender_ip="192.168.21.1",
+            target_mac="00:00:00:00:00:00",
+            target_ip="192.168.21.2",
+        )
+        raw = build_ethernet_ii_frame(
+            destination="ff:ff:ff:ff:ff:ff",
+            source="66:77:88:99:aa:bb",
+            ethertype=ETHERTYPE_ARP,
+            payload=arp.to_bytes(),
+        )
+
+        ETHERNET_InputHandler(ctx, lambda frame: None).ETHERNET_handle_frame(interface, raw)
+
+        learned = get_arp_table(ctx.state).lookup("192.168.21.1", interface.name)
+        self.assertIsNotNone(learned)
+        self.assertEqual("66:77:88:99:aa:bb", learned.mac_address)
 
     def test_debugging_ethernet_filters_host_mac_after_VVRP_mac_override(self):
         host_raw = build_ethernet_ii_frame(
