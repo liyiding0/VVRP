@@ -27,8 +27,8 @@
     <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
   </header>
   <main>
-    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <strong>7</strong></nav>
-    
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <strong>7</strong> <a href="page-008.html">8</a></nav>
+
             <article class="card" id="60">
               <div class="meta">
                 <span>2026-06-26_17-11-28</span>
@@ -58,7 +58,7 @@
  10 files changed, 106 insertions(+), 25 deletions(-)</pre>
               </details>
             </article>
-            
+
             <article class="card" id="61">
               <div class="meta">
                 <span>2026-06-26_17-17-26</span>
@@ -93,7 +93,7 @@
  15 files changed, 139 insertions(+), 37 deletions(-)</pre>
               </details>
             </article>
-            
+
             <article class="card" id="62">
               <div class="meta">
                 <span>2026-06-26_17-22-43</span>
@@ -128,7 +128,7 @@
  15 files changed, 146 insertions(+), 37 deletions(-)</pre>
               </details>
             </article>
-            
+
             <article class="card" id="63">
               <div class="meta">
                 <span>2026-06-26_17-33-34</span>
@@ -153,7 +153,7 @@
  5 files changed, 42 insertions(+), 3 deletions(-)</pre>
               </details>
             </article>
-            
+
             <article class="card" id="64">
               <div class="meta">
                 <span>2026-06-26_17-51-17</span>
@@ -185,7 +185,7 @@
  12 files changed, 191 insertions(+), 18 deletions(-)</pre>
               </details>
             </article>
-            
+
             <article class="card" id="65">
               <div class="meta">
                 <span>2026-06-27_01-02-18</span>
@@ -217,7 +217,7 @@
  12 files changed, 244 insertions(+), 22 deletions(-)</pre>
               </details>
             </article>
-            
+
             <article class="card" id="66">
               <div class="meta">
                 <span>2026-06-27_01-08-58</span>
@@ -239,8 +239,78 @@
  2 files changed, 31 insertions(+), 2 deletions(-)</pre>
               </details>
             </article>
-            
-    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <strong>7</strong></nav>
+
+            <article class="card" id="67">
+              <div class="meta">
+                <span>2026-06-29_10-09-02</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Pull and analyze the latest GitHub architecture changes</h2>
+              <p>Fast-forwarded main from 984c583 to b9e1b90; reviewed Ethernet adjacency ownership, VVRP core/CMD lifecycle, launch packaging, and validation results</p>
+              <h3>Files</h3>
+              <ul><li>&quot;openWRT runtime readme.txt&quot;</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Preserve the untracked OpenWRT runtime note; use fast-forward-only pull</li><li>Treat CMD as a management-plane module while VVRP core owns runtime startup and shutdown</li></ul>
+              <h3>Architecture</h3>
+              <p>No module tags</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+
+            <article class="card" id="68">
+              <div class="meta">
+                <span>2026-06-29_10-12-20</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Study Codex CLI transcript for recent architecture changes</h2>
+              <p>Reviewed the 4,297-line Codex CLI transcript and correlated its design decisions, implementation iterations, Npcap ARP debugging, FWD/ETHERNET ownership rule, and VVRP/CMD three-stage decoupling with commits d6865ab and b9e1b90</p>
+              <h3>Files</h3>
+              <ul><li>ontext/replays/timeline.zip</li><li>context/replays/timeline/index.html</li><li>context/replays/timeline/page-007.html</li><li>context/commits/b9e1b90ec9a7.json</li><li>context/sessions/2026-06-29_10-09-02.json</li><li>&quot;openWRT runtime readme.txt&quot;</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Treat FWD as a thin media dispatcher that must never parse or construct Ethernet frames</li><li>Treat VVRP as the process and runtime owner; CMD is only an in-process operator shell module</li><li>Do not preserve standalone CMD/legacy CCmd launch compatibility</li></ul>
+              <h3>Architecture</h3>
+              <p>context</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+
+            <article class="card" id="69">
+              <div class="meta">
+                <span>2026-06-29_10-18-50</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Move Ethernet adjacency ownership out of FWD</h2>
+              <p>Removed the FWD adjacency registry and Ethernet adjacency handler; Ethernet now owns gateway/direct target selection, ARP resolution, and frame output while FWD remains a thin interface-kind dispatcher</p>
+              <h3>Files</h3>
+              <ul><li>src/ETHERNET/adjacency.py</li><li>src/ETHERNET/output.py</li><li>src/FWD/adjacency.py</li><li>src/FWD/__init__.py</li><li>src/FWD/ethernet.py</li><li>src/FWD/forwarder.py</li><li>tests/test_ethernet.py</li><li>tests/test_fwd.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Delete the obsolete FWD adjacency API instead of retaining compatibility wrappers</li><li>Each future media handler such as PPP or Tunnel will own its own adjacency semantics</li></ul>
+              <h3>Architecture</h3>
+              <p>ETHERNET, FWD, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 28196 -&gt; 28865 bytes
+ context/replays/timeline/index.html    |  16 +++++++-
+ context/replays/timeline/page-007.html |  40 ++++++++++++++++++
+ src/ETHERNET/output.py                 |  12 +++++-
+ src/FWD/__init__.py                    |  14 -------
+ src/FWD/adjacency.py                   |  73 ---------------------------------
+ src/FWD/ethernet.py                    |  16 --------
+ src/FWD/forwarder.py                   |   4 --
+ tests/test_ethernet.py                 |  34 +++++++++++++++
+ tests/test_fwd.py                      |  49 ----------------------
+ 10 files changed, 99 insertions(+), 159 deletions(-)</pre>
+              </details>
+            </article>
+
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <strong>7</strong> <a href="page-008.html">8</a></nav>
   </main>
 </body>
 </html>

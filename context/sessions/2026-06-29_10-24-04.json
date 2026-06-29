@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-29_10-24-04",
+  "prompt": "Remove legacy ICMP Ethernet path and repair documentation",
+  "changed_files": [
+    "src/IP/ICMP/ping.py",
+    "README.md",
+    "src/ETHERNET/input.py"
+  ],
+  "note": "Deleted unused direct Ethernet/ARP send-receive methods from ICMP so ping can only use SOCK/FWD/ETHERNET; rebuilt README as valid UTF-8 Traditional Chinese and removed the Ethernet input EOF whitespace warning",
+  "decisions": [
+    "Do not retain compatibility methods that bypass the VVRP socket and forwarding pipeline",
+    "Rebuild the invalidly encoded README from current architecture instead of attempting another lossy transcoding"
+  ],
+  "codex_output": "",
+  "git_commit": "b9e1b90ec9a7f74cb4263b0af8986be57a55846e",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "EADME.md",
+    "context/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-007.html",
+    "src/ETHERNET/input.py",
+    "src/ETHERNET/output.py",
+    "src/FWD/__init__.py",
+    "src/FWD/adjacency.py",
+    "src/FWD/ethernet.py",
+    "src/FWD/forwarder.py",
+    "src/IP/ICMP/ping.py",
+    "tests/test_ethernet.py",
+    "tests/test_fwd.py",
+    "context/commits/b9e1b90ec9a7.json",
+    "context/sessions/2026-06-29_10-09-02.json",
+    "context/sessions/2026-06-29_10-12-20.json",
+    "context/sessions/2026-06-29_10-18-50.json",
+    "\"openWRT runtime readme.txt\"",
+    "src/ETHERNET/adjacency.py"
+  ],
+  "diff_stat": "README.md                              | 160 +++++++++++-----------\n context/replays/timeline.zip           | Bin 28196 -> 29244 bytes\n context/replays/timeline/index.html    |  23 +++-\n context/replays/timeline/page-007.html |  70 ++++++++++\n src/ETHERNET/input.py                  |   2 -\n src/ETHERNET/output.py                 |  12 +-\n src/FWD/__init__.py                    |  14 --\n src/FWD/adjacency.py                   |  73 -----------\n src/FWD/ethernet.py                    |  16 ---\n src/FWD/forwarder.py                   |   4 -\n src/IP/ICMP/ping.py                    | 233 ---------------------------------\n tests/test_ethernet.py                 |  34 +++++\n tests/test_fwd.py                      |  49 -------\n 13 files changed, 217 insertions(+), 473 deletions(-)",
+  "diff_summary": "",
+  "architecture": {
+    "touched_modules": [
+      "ETHERNET",
+      "IP"
+    ]
+  }
+}

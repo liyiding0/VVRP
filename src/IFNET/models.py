@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-InterfaceKind = Literal["ethernet", "loopback", "null"]
+InterfaceKind = Literal["ethernet", "loopback", "null", "serial"]
 AddressFamily = Literal["ipv4", "ipv6"]
 
 

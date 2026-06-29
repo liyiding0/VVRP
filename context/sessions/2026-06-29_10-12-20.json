@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-29_10-12-20",
+  "prompt": "Study Codex CLI transcript for recent architecture changes",
+  "changed_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-007.html",
+    "context/commits/b9e1b90ec9a7.json",
+    "context/sessions/2026-06-29_10-09-02.json",
+    "\"openWRT runtime readme.txt\""
+  ],
+  "note": "Reviewed the 4,297-line Codex CLI transcript and correlated its design decisions, implementation iterations, Npcap ARP debugging, FWD/ETHERNET ownership rule, and VVRP/CMD three-stage decoupling with commits d6865ab and b9e1b90",
+  "decisions": [
+    "Treat FWD as a thin media dispatcher that must never parse or construct Ethernet frames",
+    "Treat VVRP as the process and runtime owner; CMD is only an in-process operator shell module",
+    "Do not preserve standalone CMD/legacy CCmd launch compatibility"
+  ],
+  "codex_output": "",
+  "git_commit": "b9e1b90ec9a7f74cb4263b0af8986be57a55846e",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-007.html",
+    "context/commits/b9e1b90ec9a7.json",
+    "context/sessions/2026-06-29_10-09-02.json",
+    "\"openWRT runtime readme.txt\""
+  ],
+  "diff_stat": "",
+  "diff_summary": "",
+  "architecture": {
+    "touched_modules": [
+      "context"
+    ]
+  }
+}

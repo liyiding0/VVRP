@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import replace
 from typing import Any
 
@@ -12,6 +13,8 @@ IFNET_INTERFACE_PHYSICALS_STATE_KEY = "ifnet.interface_physicals"
 IFNET_INTERFACE_MACS_STATE_KEY = "ifnet.interface_macs"
 IFNET_INTERFACE_MTUS_STATE_KEY = "ifnet.interface_mtus"
 IFNET_INTERFACE_PROTOCOLS_STATE_KEY = "ifnet.interface_protocols"
+IFNET_INTERFACE_LAST_PHYSICAL_UP_TIMES_STATE_KEY = "ifnet.last_physical_up_times"
+IFNET_INTERFACE_LAST_PHYSICAL_DOWN_TIMES_STATE_KEY = "ifnet.last_physical_down_times"
 
 
 IFNET_STATUS_VALUES = {"up", "down"}
@@ -89,7 +92,16 @@ def IFNET_set_interface_physical_state(
     physical_state: str,
 ) -> None:
     IFNET_validate_status(physical_state, "physical")
-    IFNET_interface_physicals(state)[name] = physical_state
+    IFNET_physicals = IFNET_interface_physicals(state)
+    IFNET_previous = IFNET_physicals.get(name)
+    IFNET_physicals[name] = physical_state
+    if IFNET_previous == physical_state:
+        return
+    IFNET_timestamp = time.time()
+    if physical_state == "up":
+        IFNET_last_physical_up_times(state)[name] = IFNET_timestamp
+    else:
+        IFNET_last_physical_down_times(state)[name] = IFNET_timestamp
 
 
 def IFNET_set_interface_admin_status(
@@ -188,6 +200,32 @@ def IFNET_interface_protocols(state: dict[str, Any]) -> dict[str, str]:
         value = {}
         state[IFNET_INTERFACE_PROTOCOLS_STATE_KEY] = value
     return value
+
+
+def IFNET_last_physical_up_times(state: dict[str, Any]) -> dict[str, float]:
+    value = state.setdefault(IFNET_INTERFACE_LAST_PHYSICAL_UP_TIMES_STATE_KEY, {})
+    if not isinstance(value, dict):
+        value = {}
+        state[IFNET_INTERFACE_LAST_PHYSICAL_UP_TIMES_STATE_KEY] = value
+    return value
+
+
+def IFNET_last_physical_down_times(state: dict[str, Any]) -> dict[str, float]:
+    value = state.setdefault(IFNET_INTERFACE_LAST_PHYSICAL_DOWN_TIMES_STATE_KEY, {})
+    if not isinstance(value, dict):
+        value = {}
+        state[IFNET_INTERFACE_LAST_PHYSICAL_DOWN_TIMES_STATE_KEY] = value
+    return value
+
+
+def IFNET_last_physical_up_time(state: dict[str, Any], name: str) -> float | None:
+    value = IFNET_last_physical_up_times(state).get(name)
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def IFNET_last_physical_down_time(state: dict[str, Any], name: str) -> float | None:
+    value = IFNET_last_physical_down_times(state).get(name)
+    return float(value) if isinstance(value, (int, float)) else None
 
 
 def IFNET_protocol_state_for_interface(

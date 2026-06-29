@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Condition
 
@@ -37,10 +38,13 @@ class ICMP_EchoReplyInbox:
         ICMP_identifier: int,
         ICMP_sequence: int,
         ICMP_timeout_seconds: float,
+        ICMP_cancelled: Callable[[], bool] | None = None,
     ) -> ICMP_EchoReply | None:
         ICMP_deadline = time.monotonic() + ICMP_timeout_seconds
         with self._ICMP_condition:
             while True:
+                if ICMP_cancelled is not None and ICMP_cancelled():
+                    return None
                 for ICMP_index, ICMP_reply in enumerate(self._ICMP_replies):
                     if (
                         ICMP_reply.ICMP_source == ICMP_source
@@ -52,7 +56,10 @@ class ICMP_EchoReplyInbox:
                 ICMP_remaining = ICMP_deadline - time.monotonic()
                 if ICMP_remaining <= 0:
                     return None
-                self._ICMP_condition.wait(ICMP_remaining)
+                ICMP_wait_seconds = ICMP_remaining
+                if ICMP_cancelled is not None:
+                    ICMP_wait_seconds = min(0.05, ICMP_remaining)
+                self._ICMP_condition.wait(ICMP_wait_seconds)
 
 
 def ICMP_echo_reply_inbox(ICMP_state: dict) -> ICMP_EchoReplyInbox:
@@ -95,6 +102,7 @@ def ICMP_wait_echo_reply(
     ICMP_identifier: int,
     ICMP_sequence: int,
     ICMP_timeout_seconds: float,
+    ICMP_cancelled: Callable[[], bool] | None = None,
 ) -> ICMP_EchoReply | None:
     return ICMP_echo_reply_inbox(ICMP_state).ICMP_wait(
         ICMP_source=ICMP_source,
@@ -102,4 +110,5 @@ def ICMP_wait_echo_reply(
         ICMP_identifier=ICMP_identifier,
         ICMP_sequence=ICMP_sequence,
         ICMP_timeout_seconds=ICMP_timeout_seconds,
+        ICMP_cancelled=ICMP_cancelled,
     )

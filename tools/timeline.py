@@ -14,6 +14,10 @@ TIMELINE_ZIP = os.path.join(REPLAY_DIR, "timeline.zip")
 PAGE_SIZE = 10
 
 
+def _clean_html(value):
+    return "\n".join(line.rstrip() for line in value.splitlines()) + "\n"
+
+
 def _esc(value):
     return html.escape("" if value is None else str(value))
 
@@ -189,21 +193,23 @@ def main():
     records = load_records()
     page_count = max(1, (len(records) + PAGE_SIZE - 1) // PAGE_SIZE)
     with open(os.path.join(TIMELINE_DIR, "index.html"), "w", encoding="utf-8") as fp:
-        fp.write(render_index(records, page_count))
+        fp.write(_clean_html(render_index(records, page_count)))
     for page_index in range(page_count):
         start = page_index * PAGE_SIZE
         page_records = records[start : start + PAGE_SIZE]
         with open(os.path.join(TIMELINE_DIR, _page_name(page_index)), "w", encoding="utf-8") as fp:
             fp.write(
+                _clean_html(
                 render_timeline_page(
                     page_records,
                     page_count=page_count,
                     current_index=page_index,
                     record_offset=start,
                 )
+                )
             )
     with open(OUT, "w", encoding="utf-8") as fp:
-        fp.write(_render_redirect())
+        fp.write(_clean_html(_render_redirect()))
     _write_zip()
     print(f"[Timeline] saved -> {os.path.join(TIMELINE_DIR, 'index.html')}")
     print(f"[Timeline] archive -> {TIMELINE_ZIP}")

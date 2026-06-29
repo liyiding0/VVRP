@@ -19,6 +19,8 @@ from src.IFNET.models import NetworkInterface
 from src.VVRP.models import VVRP_RuntimeContext
 from src.events import VVRP_event_bus
 
+from .adjacency import ETHERNET_resolve_adjacency
+
 
 g_ETHERNET_ARP_RESOLVE_TIMEOUT_SECONDS = 2.0
 
@@ -44,11 +46,17 @@ class ETHERNET_OutputHandler:
         ETHERNET_packet: bytes,
         ETHERNET_route: FIBEntry,
         ETHERNET_interface: NetworkInterface,
-        *,
-        ETHERNET_target_ip: str,
     ):
         if self.ETHERNET_port_provider is None:
             return None, "% Ethernet output port is not available"
+        try:
+            ETHERNET_adjacency = ETHERNET_resolve_adjacency(
+                ETHERNET_packet,
+                ETHERNET_route,
+            )
+        except ValueError as ETHERNET_exc:
+            return None, f"% Ethernet adjacency resolution failed: {ETHERNET_exc}"
+        ETHERNET_target_ip = ETHERNET_adjacency.ETHERNET_target_ip
         ETHERNET_port = self.ETHERNET_port_provider(ETHERNET_interface)
         ETHERNET_arp_entry = self._ETHERNET_resolve_arp(
             ETHERNET_target_ip,

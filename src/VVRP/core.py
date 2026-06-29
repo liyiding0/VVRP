@@ -13,9 +13,12 @@ class VVRP_Core:
     state: dict = field(default_factory=dict)
     started: bool = False
 
-    def start(self) -> None:
-        self.runtime.VVRP_refresh_control_plane(VVRP_RuntimeContext(state=self.state))
+    def start(self) -> str:
+        VVRP_status = self.runtime.VVRP_refresh_control_plane(
+            VVRP_RuntimeContext(state=self.state)
+        )
         self.started = True
+        return VVRP_status
 
     def stop(self) -> None:
         self.runtime.VVRP_shutdown()

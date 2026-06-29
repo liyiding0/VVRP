@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from datetime import datetime
 
 from src.CMD.models import CommandResult
 from src.CMD.registry import CommandRegistry
@@ -22,6 +23,8 @@ from .policy import interface_can_shutdown
 from .state import (
     IFNET_is_physical_up,
     IFNET_is_protocol_up,
+    IFNET_last_physical_down_time,
+    IFNET_last_physical_up_time,
     IFNET_physical_state_for_interface,
     IFNET_protocol_state_for_interface,
     is_admin_down,
@@ -354,40 +357,153 @@ def _format_vvrp_interfaces_detail(
 
 
 def _format_vvrp_interface_detail(interface: NetworkInterface, state: dict) -> str:
+    if interface.kind == "ethernet":
+        return _format_ethernet_interface_detail(interface, state)
+    if interface.kind == "null":
+        return _format_null_interface_detail(interface, state)
+    if interface.kind == "serial":
+        return _format_serial_interface_detail(interface, state)
+    return _format_generic_interface_detail(interface, state)
+
+
+def _format_ethernet_interface_detail(interface: NetworkInterface, state: dict) -> str:
+    IFNET_mac = _format_huawei_mac_address(interface.mac_address)
     lines = [
         f"{interface.name} current state : {_display_detail_state_upper(interface, state)}",
         f"Line protocol current state : {_display_protocol_upper(interface, state)}",
         "Description:",
-        f"Route Port,The Maximum Transmit Unit is {_display_mtu(interface.mtu)}",
+        f"Route Port, The Maximum Transmit Unit is {_display_mtu(interface.mtu)}",
+        f"IFNET Index : {_display_ifnet_index(interface.ifnet_index)}",
+    ]
+
+    ipv4_addresses = interface.addresses_by_family("ipv4")
+    if ipv4_addresses:
+        lines.extend(f"Internet Address is {address.display}" for address in ipv4_addresses)
+    else:
+        lines.append("Internet protocol processing : disabled")
+
+    lines.extend(
+        [
+            f"IP Sending Frames' Format is PKTFMT_ETHNT_2, Hardware address is {IFNET_mac}",
+            f"Last physical up time   : {_format_physical_time(IFNET_last_physical_up_time(state, interface.name))}",
+            f"Last physical down time : {_format_physical_time(IFNET_last_physical_down_time(state, interface.name))}",
+            f"Current system time: {_format_current_system_time()}",
+            f"Hardware address is {IFNET_mac}",
+            "    Last 300 seconds input rate 0 bytes/sec, 0 packets/sec",
+            "    Last 300 seconds output rate 0 bytes/sec, 0 packets/sec",
+            "    Input: 0 bytes, 0 packets",
+            "    Output: 0 bytes, 0 packets",
+            "    Input:",
+            "      Unicast: 0 packets, Multicast: 0 packets",
+            "      Broadcast: 0 packets",
+            "    Output:",
+            "      Unicast: 0 packets, Multicast: 0 packets",
+            "      Broadcast: 0 packets",
+            "    Input bandwidth utilization  :    0%",
+            "    Output bandwidth utilization :    0%",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _format_null_interface_detail(interface: NetworkInterface, state: dict) -> str:
+    return "\n".join(
+        [
+            f"{interface.name} current state : {_display_detail_state_upper(interface, state)}",
+            f"Line protocol current state : {_display_protocol_upper(interface, state)}",
+            "Description:",
+            f"Route Port, The Maximum Transmit Unit is {_display_mtu(interface.mtu)}",
+            f"IFNET Index : {_display_ifnet_index(interface.ifnet_index)}",
+            "Internet protocol processing : disabled",
+            "Physical is NULL DEV",
+            f"Current system time: {_format_current_system_time()}",
+            "    Last 300 seconds input rate 0 bits/sec, 0 packets/sec",
+            "    Last 300 seconds output rate 0 bits/sec, 0 packets/sec",
+            "    Realtime 0 seconds input rate 0 bits/sec, 0 packets/sec",
+            "    Realtime 0 seconds output rate 0 bits/sec, 0 packets/sec",
+            "    Input: 0 packets,0 bytes",
+            "           0 unicast,0 broadcast,0 multicast",
+            "           0 errors,0 unknown protocol",
+            "    Output:0 packets,0 bytes",
+            "           0 unicast,0 broadcast,0 multicast",
+            "           0 errors",
+            "    Input bandwidth utilization  :    0%",
+            "    Output bandwidth utilization :    0%",
+        ]
+    )
+
+
+def _format_serial_interface_detail(interface: NetworkInterface, state: dict) -> str:
+    return "\n".join(
+        [
+            f"{interface.name} current state : {_display_detail_state_upper(interface, state)}",
+            f"Line protocol current state : {_display_protocol_upper(interface, state)}",
+            "Description:",
+            f"Route Port,The Maximum Transmit Unit is {_display_mtu(interface.mtu)}, Hold timer is 10(sec)",
+            f"IFNET Index : {_display_ifnet_index(interface.ifnet_index)}",
+            "Internet protocol processing : disabled",
+            "Link layer protocol is PPP",
+            "LCP initial",
+            f"Last physical up time   : {_format_physical_time(IFNET_last_physical_up_time(state, interface.name))}",
+            f"Last physical down time : {_format_physical_time(IFNET_last_physical_down_time(state, interface.name))}",
+            f"Current system time: {_format_current_system_time()}",
+            "Interface is V35",
+            "    Last 300 seconds input rate 0 bytes/sec, 0 packets/sec",
+            "    Last 300 seconds output rate 0 bytes/sec, 0 packets/sec",
+            "    Input: 0 bytes, 0 Packets",
+            "    Ouput: 0 bytes, 0 Packets",
+            "    Input bandwidth utilization  :    0%",
+            "    Output bandwidth utilization :    0%",
+        ]
+    )
+
+
+def _format_generic_interface_detail(interface: NetworkInterface, state: dict) -> str:
+    lines = [
+        f"{interface.name} current state : {_display_detail_state_upper(interface, state)}",
+        f"Line protocol current state : {_display_protocol_upper(interface, state)}",
+        "Description:",
+        f"Route Port, The Maximum Transmit Unit is {_display_mtu(interface.mtu)}",
         f"IFNET Index : {_display_ifnet_index(interface.ifnet_index)}",
         f"Interface type : {interface.kind}",
         f"Hardware address is {_display_value(interface.mac_address)}",
         f"Port BW: {_display_speed(interface.speed_mbps)}",
     ]
-
     ipv4_addresses = interface.addresses_by_family("ipv4")
-    if ipv4_addresses:
-        for index, address in enumerate(ipv4_addresses):
-            role = "Primary" if index == 0 else "Sub"
-            lines.append(f"Internet Address is {address.display} {role}")
-    else:
-        lines.append("Internet Address is unassigned")
-
-    ipv6_addresses = interface.addresses_by_family("ipv6")
-    if ipv6_addresses:
-        lines.append(f"IPv6 Address is {_join_addresses(ipv6_addresses)}")
-
-    lines.extend(
-        [
-            "Last physical up time   : -",
-            "Last physical down time : -",
-            "Current system time     : -",
-            "Input: 0 packets, 0 bytes",
-            "Output: 0 packets, 0 bytes",
-            "Input error: 0, Output error: 0",
-        ]
+    lines.append(
+        f"Internet Address is {_join_addresses(ipv4_addresses)}"
+        if ipv4_addresses
+        else "Internet protocol processing : disabled"
     )
+    lines.append(f"Current system time: {_format_current_system_time()}")
     return "\n".join(lines)
+
+
+def _format_huawei_mac_address(mac_address: str) -> str:
+    IFNET_hex = "".join(character for character in mac_address if character.isalnum()).lower()
+    if len(IFNET_hex) != 12:
+        return _display_value(mac_address)
+    return "-".join(IFNET_hex[index:index + 4] for index in range(0, 12, 4))
+
+
+def _format_physical_time(timestamp: float | None) -> str:
+    if timestamp is None:
+        return "-"
+    return f"{_format_local_datetime(timestamp, include_utc=True)}"
+
+
+def _format_current_system_time() -> str:
+    return _format_local_datetime(time.time(), include_utc=False)
+
+
+def _format_local_datetime(timestamp: float, *, include_utc: bool) -> str:
+    IFNET_datetime = datetime.fromtimestamp(timestamp).astimezone()
+    IFNET_offset = IFNET_datetime.strftime("%z")
+    if len(IFNET_offset) == 5:
+        IFNET_offset = f"{IFNET_offset[:3]}:{IFNET_offset[3:]}"
+    if include_utc:
+        return f"{IFNET_datetime:%Y-%m-%d %H:%M:%S} UTC{IFNET_offset}"
+    return f"{IFNET_datetime:%Y-%m-%d %H:%M:%S}{IFNET_offset}"
 
 
 def _join_addresses(addresses: tuple[InterfaceAddress, ...]) -> str:
@@ -432,7 +548,7 @@ def _display_protocol_upper(interface: NetworkInterface, state: dict) -> str:
     if is_admin_down(state, interface.name):
         return "DOWN"
     if interface.kind in {"loopback", "null"} and IFNET_is_physical_up(state, interface.name):
-        return "UP(spoofing)"
+        return "UP (spoofing)"
     return "UP" if IFNET_is_protocol_up(state, interface.name) else "DOWN"
 
 

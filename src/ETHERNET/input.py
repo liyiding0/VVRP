@@ -90,5 +90,3 @@ class ETHERNET_InputHandler:
             ETHERNET_reply_frame,
         )
         self.ETHERNET_send_frame(ETHERNET_reply_frame.to_bytes(pad=True))
-
-

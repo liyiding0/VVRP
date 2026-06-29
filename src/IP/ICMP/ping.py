@@ -10,21 +10,16 @@ import time
 from dataclasses import dataclass
 from typing import Callable, TextIO
 
-from src.ARP import ArpPacketError, ArpProtocol, arp_packet_from_ethernet, get_arp_table
-from src.ETHERNET import (
-    ETHERTYPE_ARP,
-    ETHERTYPE_IPV4,
-    EthernetFrame,
-    debug_ethernet_frame,
-    parse_ethernet_ii_frame,
-)
-from src.ETHERNET.frame import EthernetFrameError
 from src.FIB import FIBEntry, FIB_resolve_forwarding
 from src.IFNET.admin import InterfaceAdminProvider
 from src.IFNET.discovery import InterfaceDiscoveryError, InterfaceProvider
 from src.IFNET.inventory import get_ifnet_manager
-from src.IFNET.models import InterfaceAddress, NetworkInterface
 from src.SOCK import SOCK_AF_INET, SOCK_SOCK_RAW, SOCK_sendto, SOCK_socket
+from src.VVRP.interrupt import (
+    VVRP_clear_interrupt,
+    VVRP_interrupt_event,
+    VVRP_interrupt_requested,
+)
 from src.IP.ICMP.packet import (
     ICMP_build_echo_request,
     ICMP_checksum,
@@ -270,11 +265,17 @@ class ICMP_VvrpPacketPinger:
         ICMP_sent = 0
         ICMP_received = 0
         ICMP_rtts: list[int] = []
+        ICMP_interrupted = False
+        VVRP_clear_interrupt(self.ICMP_ctx.state)
+        ICMP_interrupt_event = VVRP_interrupt_event(self.ICMP_ctx.state)
         if ICMP_options.ICMP_brief:
             ICMP_output.write("    ")
             ICMP_output.flush()
 
         for ICMP_sequence in range(1, ICMP_options.ICMP_count + 1):
+            if VVRP_interrupt_requested(self.ICMP_ctx.state):
+                ICMP_interrupted = True
+                break
             ICMP_sent += 1
             ICMP_reply = self._ICMP_send_socket_one(
                 ICMP_socket,
@@ -284,6 +285,9 @@ class ICMP_VvrpPacketPinger:
                 ICMP_sequence,
                 ICMP_payload,
             )
+            if VVRP_interrupt_requested(self.ICMP_ctx.state):
+                ICMP_interrupted = True
+                break
             if ICMP_reply.ICMP_ok:
                 ICMP_received += 1
                 if ICMP_reply.ICMP_rtt_ms is not None:
@@ -294,9 +298,14 @@ class ICMP_VvrpPacketPinger:
                 ICMP_output.write(ICMP_format_ping_reply(ICMP_reply) + "\n")
             ICMP_output.flush()
             if ICMP_sequence < ICMP_options.ICMP_count and ICMP_options.ICMP_interval_seconds > 0:
-                self.ICMP_sleep(ICMP_options.ICMP_interval_seconds)
+                if ICMP_interrupt_event.wait(ICMP_options.ICMP_interval_seconds):
+                    ICMP_interrupted = True
+                    break
         if ICMP_options.ICMP_brief:
             ICMP_output.write("\n")
+            ICMP_output.flush()
+        if ICMP_interrupted:
+            ICMP_output.write("  Ping terminated by user.\n")
             ICMP_output.flush()
 
         ICMP_output.write(
@@ -342,6 +351,7 @@ class ICMP_VvrpPacketPinger:
             ICMP_identifier=self.ICMP_identifier,
             ICMP_sequence=ICMP_sequence,
             ICMP_timeout_seconds=ICMP_options.ICMP_timeout_seconds,
+            ICMP_cancelled=lambda: VVRP_interrupt_requested(self.ICMP_ctx.state),
         )
         if ICMP_reply is None:
             return ICMP_PingReply(
@@ -374,187 +384,6 @@ class ICMP_VvrpPacketPinger:
         if ICMP_fib_entry is None:
             raise ValueError(f"No VVRP route to host: {ICMP_target_ip}")
         return ICMP_fib_entry
-
-    def _ICMP_send_one(
-        self,
-        ICMP_port,
-        ICMP_route: FIBEntry,
-        ICMP_arp_protocol: ArpProtocol,
-        ICMP_options: ICMP_PingOptions,
-        ICMP_resolved_address: str,
-        ICMP_sequence: int,
-    ) -> ICMP_PingReply:
-        ICMP_started = self.ICMP_monotonic()
-        ICMP_interface = _ICMP_interface_from_fib_entry(ICMP_route)
-        ICMP_target_mac = self._ICMP_resolve_mac(
-            ICMP_port,
-            ICMP_route,
-            ICMP_interface,
-            ICMP_arp_protocol,
-            ICMP_resolved_address,
-            ICMP_deadline=ICMP_started + ICMP_options.ICMP_timeout_seconds,
-        )
-        if ICMP_target_mac is None:
-            return ICMP_PingReply(
-                ICMP_ok=False,
-                ICMP_sequence=ICMP_sequence,
-                ICMP_message="Request time out",
-            )
-
-        ICMP_payload = _ICMP_payload(ICMP_options.ICMP_packet_size)
-        ICMP_icmp_payload = ICMP_build_echo_packet(
-            self.ICMP_identifier,
-            ICMP_sequence,
-            ICMP_payload,
-        )
-        ICMP_ipv4_payload = ICMP_build_ipv4_packet(
-            ICMP_route.source_ip,
-            ICMP_resolved_address,
-            g_ICMP_IPV4_PROTOCOL_ICMP,
-            ICMP_icmp_payload,
-            ICMP_ttl=ICMP_options.ICMP_ttl,
-            ICMP_identification=self.ICMP_identifier,
-        )
-        ICMP_frame = EthernetFrame(
-            destination=ICMP_target_mac,
-            source=ICMP_route.source_mac,
-            ethertype=ETHERTYPE_IPV4,
-            payload=ICMP_ipv4_payload,
-        )
-        debug_ethernet_frame(self.ICMP_ctx, ICMP_route.out_if_name, "tx", ICMP_frame)
-        ICMP_port.send_frame(ICMP_frame.to_bytes(pad=True))
-
-        ICMP_deadline = ICMP_started + ICMP_options.ICMP_timeout_seconds
-        while self.ICMP_monotonic() < ICMP_deadline:
-            ICMP_frame = self._ICMP_recv_vvrp_frame(
-                ICMP_port,
-                ICMP_interface,
-                ICMP_deadline,
-            )
-            if ICMP_frame is None:
-                continue
-            if ICMP_frame.ethertype == ETHERTYPE_ARP:
-                self._ICMP_handle_arp_frame(
-                    ICMP_port,
-                    ICMP_route,
-                    ICMP_interface,
-                    ICMP_arp_protocol,
-                    ICMP_frame,
-                )
-                continue
-            if ICMP_frame.ethertype != ETHERTYPE_IPV4:
-                continue
-            ICMP_packet = ICMP_parse_ipv4_packet(ICMP_frame.payload)
-            if (
-                ICMP_packet.ICMP_protocol != g_ICMP_IPV4_PROTOCOL_ICMP
-                or ICMP_packet.ICMP_source != ICMP_resolved_address
-                or ICMP_packet.ICMP_destination != ICMP_route.source_ip
-            ):
-                continue
-            if ICMP_parse_reply(ICMP_packet.ICMP_raw, self.ICMP_identifier, ICMP_sequence) is None:
-                continue
-            ICMP_rtt_ms = max(0, int(round((self.ICMP_monotonic() - ICMP_started) * 1000)))
-            ICMP_bytes_received = max(0, len(ICMP_packet.ICMP_payload) - 8)
-            return ICMP_PingReply(
-                ICMP_ok=True,
-                ICMP_sequence=ICMP_sequence,
-                ICMP_address=ICMP_packet.ICMP_source,
-                ICMP_bytes_received=ICMP_bytes_received,
-                ICMP_ttl=ICMP_packet.ICMP_ttl,
-                ICMP_rtt_ms=ICMP_rtt_ms,
-            )
-
-        return ICMP_PingReply(
-            ICMP_ok=False,
-            ICMP_sequence=ICMP_sequence,
-            ICMP_message="Request time out",
-        )
-
-    def _ICMP_resolve_mac(
-        self,
-        ICMP_port,
-        ICMP_route: FIBEntry,
-        ICMP_interface: NetworkInterface,
-        ICMP_arp_protocol: ArpProtocol,
-        ICMP_target_ip: str,
-        *,
-        ICMP_deadline: float,
-    ) -> str | None:
-        ICMP_entry = ICMP_arp_protocol.table.lookup(ICMP_target_ip, ICMP_route.out_if_name)
-        if ICMP_entry is not None:
-            return ICMP_entry.mac_address
-
-        ICMP_request = ICMP_arp_protocol.build_request(
-            ICMP_interface,
-            ICMP_target_ip,
-            sender_ip=ICMP_route.source_ip,
-        )
-        debug_ethernet_frame(self.ICMP_ctx, ICMP_route.out_if_name, "tx", ICMP_request)
-        ICMP_port.send_frame(ICMP_request.to_bytes(pad=True))
-
-        while self.ICMP_monotonic() < ICMP_deadline:
-            ICMP_frame = self._ICMP_recv_vvrp_frame(
-                ICMP_port,
-                ICMP_interface,
-                ICMP_deadline,
-            )
-            if ICMP_frame is None:
-                continue
-            if ICMP_frame.ethertype != ETHERTYPE_ARP:
-                continue
-            ICMP_packet = self._ICMP_handle_arp_frame(
-                ICMP_port,
-                ICMP_route,
-                ICMP_interface,
-                ICMP_arp_protocol,
-                ICMP_frame,
-            )
-            if (
-                ICMP_packet is not None
-                and ICMP_packet.is_reply
-                and ICMP_packet.sender_ip == ICMP_target_ip
-                and ICMP_packet.target_ip == ICMP_route.source_ip
-            ):
-                return ICMP_packet.sender_mac
-        return None
-
-    def _ICMP_recv_vvrp_frame(
-        self,
-        ICMP_port,
-        ICMP_interface: NetworkInterface,
-        ICMP_deadline: float,
-    ) -> EthernetFrame | None:
-        while self.ICMP_monotonic() < ICMP_deadline:
-            ICMP_raw = ICMP_port.recv_frame()
-            if ICMP_raw is None:
-                continue
-            try:
-                ICMP_frame = parse_ethernet_ii_frame(ICMP_raw)
-            except EthernetFrameError:
-                continue
-            if not _ICMP_frame_belongs_to_interface(ICMP_frame, ICMP_interface):
-                continue
-            debug_ethernet_frame(self.ICMP_ctx, ICMP_interface.name, "rx", ICMP_frame)
-            return ICMP_frame
-        return None
-
-    def _ICMP_handle_arp_frame(
-        self,
-        ICMP_port,
-        ICMP_route: FIBEntry,
-        ICMP_interface: NetworkInterface,
-        ICMP_arp_protocol: ArpProtocol,
-        ICMP_frame: EthernetFrame,
-    ):
-        try:
-            ICMP_packet = arp_packet_from_ethernet(ICMP_frame)
-            ICMP_reply = ICMP_arp_protocol.handle_frame(ICMP_interface, ICMP_frame)
-        except (ArpPacketError, EthernetFrameError, ValueError):
-            return None
-        if ICMP_reply is not None:
-            debug_ethernet_frame(self.ICMP_ctx, ICMP_route.out_if_name, "tx", ICMP_reply)
-            ICMP_port.send_frame(ICMP_reply.to_bytes(pad=True))
-        return ICMP_packet
 
 def ICMP_run_ping(
     ICMP_arguments: str,
@@ -835,48 +664,6 @@ def ICMP_parse_reply(
     ):
         return True
     return None
-
-
-def _ICMP_interface_from_fib_entry(ICMP_route: FIBEntry) -> NetworkInterface:
-    return NetworkInterface(
-        name=ICMP_route.out_if_name,
-        ifnet_index=ICMP_route.out_if_index or 0,
-        index=None,
-        kind="ethernet",
-        is_up=True,
-        mac_address=ICMP_route.source_mac,
-        mtu=ICMP_route.mtu,
-        speed_mbps=None,
-        addresses=(
-            InterfaceAddress(
-                family="ipv4",
-                address=ICMP_route.source_ip,
-                prefix_length=ICMP_route.destination.prefixlen,
-            ),
-        ),
-    )
-
-
-def _ICMP_frame_belongs_to_interface(
-    ICMP_frame: EthernetFrame,
-    ICMP_interface: NetworkInterface,
-) -> bool:
-    ICMP_mac = ICMP_interface.mac_address.lower()
-    ICMP_source = ICMP_frame.source.lower()
-    ICMP_destination = ICMP_frame.destination.lower()
-    return (
-        ICMP_source == ICMP_mac
-        or ICMP_destination == ICMP_mac
-        or _ICMP_is_group_address(ICMP_destination)
-    )
-
-
-def _ICMP_is_group_address(ICMP_mac_address: str) -> bool:
-    try:
-        ICMP_first_octet = int(ICMP_mac_address.split(":", 1)[0], 16)
-    except (ValueError, IndexError):
-        return False
-    return bool(ICMP_first_octet & 1)
 
 
 def _ICMP_payload(ICMP_size: int) -> bytes:

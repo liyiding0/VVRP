@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import time
 import unittest
+from ipaddress import IPv4Network
 
 from src.ETHERNET import (
     ETHERNET_MIN_FRAME_LENGTH,
@@ -26,11 +27,14 @@ from src.CMD import CliContext, CommandParser, CommandRegistry, ParseStatus, dis
 from src.CMD.examples import build_default_registry
 from src.ARP import ARP_REPLY, ARP_REQUEST, ArpPacket, get_arp_table
 from src.DPlane import DPlane_PlatformInfo, DPlane_Result
+from src.ETHERNET.adjacency import ETHERNET_resolve_adjacency
 from src.ETHERNET.frame_debug import ETHERNET_FrameDebugService
 from src.DPlane.Windows.npcap import NpcapDevice
 from src.ETHERNET.device import ETHERNET_commit_device_changes, ETHERNET_stage_device_install
+from src.FIB import FIBEntry
 from src.IFNET.state import set_interface_mac_address
 from src.IFNET import InterfaceAddress, NetworkInterface
+from src.IP.ipv4 import IP_build_ipv4_packet
 
 
 class FakePacketPort:
@@ -124,6 +128,36 @@ class DebugPacketPort(FakePacketPort):
         if frame is None:
             time.sleep(0.01)
         return frame
+
+
+class EthernetAdjacencyTests(unittest.TestCase):
+    def test_gateway_route_uses_fib_next_hop(self):
+        packet = IP_build_ipv4_packet("192.0.2.10", "198.51.100.1", 1, b"hello")
+        route = self._route(next_hop_ip="192.0.2.254")
+
+        adjacency = ETHERNET_resolve_adjacency(packet, route)
+
+        self.assertEqual("192.0.2.254", adjacency.ETHERNET_target_ip)
+
+    def test_direct_route_uses_ipv4_destination(self):
+        packet = IP_build_ipv4_packet("192.0.2.10", "198.51.100.1", 1, b"hello")
+
+        adjacency = ETHERNET_resolve_adjacency(packet, self._route())
+
+        self.assertEqual("198.51.100.1", adjacency.ETHERNET_target_ip)
+
+    @staticmethod
+    def _route(*, next_hop_ip: str = "") -> FIBEntry:
+        interface = fake_interface()
+        return FIBEntry(
+            destination=IPv4Network("0.0.0.0/0"),
+            out_if_name=interface.name,
+            out_if_index=interface.ifnet_index,
+            source_ip="192.0.2.10",
+            source_mac=interface.mac_address,
+            next_hop_ip=next_hop_ip,
+            mtu=interface.mtu,
+        )
 
 
 class EthernetFrameTests(unittest.TestCase):

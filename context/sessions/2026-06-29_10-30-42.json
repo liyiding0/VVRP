@@ -1,0 +1,62 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-29_10-30-42",
+  "prompt": "Add OpenWRT runtime notes and VVRP startup progress",
+  "changed_files": [
+    "openWRT runtime readme.txt",
+    "src/VVRP/__main__.py",
+    "src/VVRP/core.py",
+    "src/CMD/module.py",
+    "tests/test_core.py"
+  ],
+  "note": "Added the OpenWRT dependency notes to Git tracking and introduced ordered VVRP startup progress for runtime initialization, core services, packet input, and CMD readiness before the CLI prompt",
+  "decisions": [
+    "Report only real lifecycle stages and surface the runtime packet-input result",
+    "Invoke the CMD ready callback after registry creation and before entering the interactive CLI to preserve output ordering"
+  ],
+  "codex_output": "",
+  "git_commit": "b9e1b90ec9a7f74cb4263b0af8986be57a55846e",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "EADME.md",
+    "context/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-001.html",
+    "context/replays/timeline/page-002.html",
+    "context/replays/timeline/page-003.html",
+    "context/replays/timeline/page-004.html",
+    "context/replays/timeline/page-005.html",
+    "context/replays/timeline/page-006.html",
+    "context/replays/timeline/page-007.html",
+    "\"openWRT runtime readme.txt\"",
+    "src/CMD/module.py",
+    "src/ETHERNET/input.py",
+    "src/ETHERNET/output.py",
+    "src/FWD/__init__.py",
+    "src/FWD/adjacency.py",
+    "src/FWD/ethernet.py",
+    "src/FWD/forwarder.py",
+    "src/IP/ICMP/ping.py",
+    "src/VVRP/__main__.py",
+    "src/VVRP/core.py",
+    "tests/test_core.py",
+    "tests/test_ethernet.py",
+    "tests/test_fwd.py",
+    "context/commits/b9e1b90ec9a7.json",
+    "context/replays/timeline/page-008.html",
+    "context/sessions/2026-06-29_10-09-02.json",
+    "context/sessions/2026-06-29_10-12-20.json",
+    "context/sessions/2026-06-29_10-18-50.json",
+    "context/sessions/2026-06-29_10-24-04.json",
+    "src/ETHERNET/adjacency.py"
+  ],
+  "diff_stat": "README.md                              | 160 +++++++++++-----------\n context/replays/timeline.zip           | Bin 28196 -> 30914 bytes\n context/replays/timeline/index.html    |  30 ++++-\n context/replays/timeline/page-001.html |   4 +-\n context/replays/timeline/page-002.html |   4 +-\n context/replays/timeline/page-003.html |   4 +-\n context/replays/timeline/page-004.html |   4 +-\n context/replays/timeline/page-005.html |   4 +-\n context/replays/timeline/page-006.html |   4 +-\n context/replays/timeline/page-007.html |  74 ++++++++++-\n src/CMD/module.py                      |   6 +\n src/ETHERNET/input.py                  |   2 -\n src/ETHERNET/output.py                 |  12 +-\n src/FWD/__init__.py                    |  14 --\n src/FWD/adjacency.py                   |  73 -----------\n src/FWD/ethernet.py                    |  16 ---\n src/FWD/forwarder.py                   |   4 -\n src/IP/ICMP/ping.py                    | 233 ---------------------------------\n src/VVRP/__main__.py                   |  18 ++-\n src/VVRP/core.py                       |   7 +-\n tests/test_core.py                     |  31 ++++-\n tests/test_ethernet.py                 |  34 +++++\n tests/test_fwd.py                      |  49 -------\n 23 files changed, 296 insertions(+), 491 deletions(-)",
+  "diff_summary": "",
+  "architecture": {
+    "touched_modules": [
+      "CMD",
+      "VVRP",
+      "tests"
+    ]
+  }
+}

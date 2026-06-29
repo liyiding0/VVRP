@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    nav { margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a, nav strong { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; }
+    nav a { color: #1f4f9a; text-decoration: none; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <strong>8</strong></nav>
+
+            <article class="card" id="70">
+              <div class="meta">
+                <span>2026-06-29_10-24-04</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Remove legacy ICMP Ethernet path and repair documentation</h2>
+              <p>Deleted unused direct Ethernet/ARP send-receive methods from ICMP so ping can only use SOCK/FWD/ETHERNET; rebuilt README as valid UTF-8 Traditional Chinese and removed the Ethernet input EOF whitespace warning</p>
+              <h3>Files</h3>
+              <ul><li>src/IP/ICMP/ping.py</li><li>README.md</li><li>src/ETHERNET/input.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Do not retain compatibility methods that bypass the VVRP socket and forwarding pipeline</li><li>Rebuild the invalidly encoded README from current architecture instead of attempting another lossy transcoding</li></ul>
+              <h3>Architecture</h3>
+              <p>ETHERNET, IP</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>README.md                              | 160 +++++++++++-----------
+ context/replays/timeline.zip           | Bin 28196 -&gt; 29244 bytes
+ context/replays/timeline/index.html    |  23 +++-
+ context/replays/timeline/page-007.html |  70 ++++++++++
+ src/ETHERNET/input.py                  |   2 -
+ src/ETHERNET/output.py                 |  12 +-
+ src/FWD/__init__.py                    |  14 --
+ src/FWD/adjacency.py                   |  73 -----------
+ src/FWD/ethernet.py                    |  16 ---
+ src/FWD/forwarder.py                   |   4 -
+ src/IP/ICMP/ping.py                    | 233 ---------------------------------
+ tests/test_ethernet.py                 |  34 +++++
+ tests/test_fwd.py                      |  49 -------
+ 13 files changed, 217 insertions(+), 473 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="71">
+              <div class="meta">
+                <span>2026-06-29_10-30-42</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Add OpenWRT runtime notes and VVRP startup progress</h2>
+              <p>Added the OpenWRT dependency notes to Git tracking and introduced ordered VVRP startup progress for runtime initialization, core services, packet input, and CMD readiness before the CLI prompt</p>
+              <h3>Files</h3>
+              <ul><li>openWRT runtime readme.txt</li><li>src/VVRP/__main__.py</li><li>src/VVRP/core.py</li><li>src/CMD/module.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Report only real lifecycle stages and surface the runtime packet-input result</li><li>Invoke the CMD ready callback after registry creation and before entering the interactive CLI to preserve output ordering</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, VVRP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>README.md                              | 160 +++++++++++-----------
+ context/replays/timeline.zip           | Bin 28196 -&gt; 30914 bytes
+ context/replays/timeline/index.html    |  30 ++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |  74 ++++++++++-
+ src/CMD/module.py                      |   6 +
+ src/ETHERNET/input.py                  |   2 -
+ src/ETHERNET/output.py                 |  12 +-
+ src/FWD/__init__.py                    |  14 --
+ src/FWD/adjacency.py                   |  73 -----------
+ src/FWD/ethernet.py                    |  16 ---
+ src/FWD/forwarder.py                   |   4 -
+ src/IP/ICMP/ping.py                    | 233 ---------------------------------
+ src/VVRP/__main__.py                   |  18 ++-
+ src/VVRP/core.py                       |   7 +-
+ tests/test_core.py                     |  31 ++++-
+ tests/test_ethernet.py                 |  34 +++++
+ tests/test_fwd.py                      |  49 -------
+ 23 files changed, 296 insertions(+), 491 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="72">
+              <div class="meta">
+                <span>2026-06-29_11-00-03</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Add CMD console login banner and Enter gate</h2>
+              <p>Added the copyright/security notice and con0 availability banner after VVRP startup; CMD now waits for Enter before creating the interactive CLI prompt</p>
+              <h3>Files</h3>
+              <ul><li>src/CMD/banner.py</li><li>src/CMD/module.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep the login banner in CMD because it belongs to operator console interaction, not VVRP core lifecycle</li><li>Display CMD readiness and startup completion before the banner, then gate the CLI prompt on Enter</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>README.md                              | 160 +++++++++++-----------
+ context/replays/timeline.zip           | Bin 28196 -&gt; 31376 bytes
+ context/replays/timeline/index.html    |  37 +++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |  74 ++++++++++-
+ src/CMD/module.py                      |   8 ++
+ src/ETHERNET/input.py                  |   2 -
+ src/ETHERNET/output.py                 |  12 +-
+ src/FWD/__init__.py                    |  14 --
+ src/FWD/adjacency.py                   |  73 -----------
+ src/FWD/ethernet.py                    |  16 ---
+ src/FWD/forwarder.py                   |   4 -
+ src/IP/ICMP/ping.py                    | 233 ---------------------------------
+ src/VVRP/__main__.py                   |  18 ++-
+ src/VVRP/core.py                       |   7 +-
+ tests/test_core.py                     |  51 +++++++-
+ tests/test_ethernet.py                 |  34 +++++
+ tests/test_fwd.py                      |  49 -------
+ 23 files changed, 325 insertions(+), 491 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="73">
+              <div class="meta">
+                <span>2026-06-29_11-02-49</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Update VVRP console copyright line</h2>
+              <p>Changed the console banner copyright to Copyright (C) 2010-2026 Huavvei Technologies Co., Ltd. with the requested spacing</p>
+              <h3>Files</h3>
+              <ul><li>src/CMD/banner.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+
+            <article class="card" id="74">
+              <div class="meta">
+                <span>2026-06-29_11-24-27</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Handle Ctrl-C during VVRP ping</h2>
+              <p>Converted main-thread KeyboardInterrupt into a shared VVRP cancellation event; ICMP reply waits and ping intervals are now cancellable, ping prints partial statistics, and CMD returns to the prompt without terminating VVRP</p>
+              <h3>Files</h3>
+              <ul><li>src/VVRP/interrupt.py</li><li>src/CMD/module.py</li><li>src/IP/ICMP/replies.py</li><li>src/IP/ICMP/ping.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep cancellation in VVRP runtime control rather than making ICMP depend on CMD</li><li>Wait on a CMD completion event instead of interrupting Thread.join on Windows</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, IP, VVRP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>README.md                              | 160 +++++++++++----------
+ context/replays/timeline.zip           | Bin 28196 -&gt; 31791 bytes
+ context/replays/timeline/index.html    |  51 ++++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |  74 +++++++++-
+ src/CMD/module.py                      |  34 +++--
+ src/ETHERNET/input.py                  |   2 -
+ src/ETHERNET/output.py                 |  12 +-
+ src/FWD/__init__.py                    |  14 --
+ src/FWD/adjacency.py                   |  73 ----------
+ src/FWD/ethernet.py                    |  16 ---
+ src/FWD/forwarder.py                   |   4 -
+ src/IP/ICMP/ping.py                    | 255 +++------------------------------
+ src/IP/ICMP/replies.py                 |  11 +-
+ src/VVRP/__main__.py                   |  18 ++-
+ src/VVRP/core.py                       |   7 +-
+ tests/test_core.py                     | 111 +++++++++++++-
+ tests/test_ethernet.py                 |  34 +++++
+ tests/test_fwd.py                      |  49 -------
+ 24 files changed, 448 insertions(+), 501 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="75">
+              <div class="meta">
+                <span>2026-06-29_12-59-21</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Align show interfaces detail with VRP media templates</h2>
+              <p>Added per-media show interfaces detail output for Ethernet and NULL0, preinstalled the Serial PPP/V35 template, formatted Huawei-style MAC addresses and live system time, and persisted last physical up/down transition timestamps in IFNET state</p>
+              <h3>Files</h3>
+              <ul><li>src/IFNET/commands.py</li><li>src/IFNET/models.py</li><li>src/IFNET/state.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep show interfaces brief unchanged and dispatch detail formatting by IFNET interface kind</li><li>Store physical transition timestamps when state changes rather than synthesizing them during show commands</li><li>Allow serial as an IFNET interface kind before a concrete Serial driver is implemented</li></ul>
+              <h3>Architecture</h3>
+              <p>IFNET, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>README.md                              | 160 +++++++++++----------
+ context/replays/timeline.zip           | Bin 28196 -&gt; 32153 bytes
+ context/replays/timeline/index.html    |  58 +++++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |  74 +++++++++-
+ src/CMD/module.py                      |  34 +++--
+ src/ETHERNET/input.py                  |   2 -
+ src/ETHERNET/output.py                 |  12 +-
+ src/FWD/__init__.py                    |  14 --
+ src/FWD/adjacency.py                   |  73 ----------
+ src/FWD/ethernet.py                    |  16 ---
+ src/FWD/forwarder.py                   |   4 -
+ src/IFNET/commands.py                  | 153 +++++++++++++++++---
+ src/IFNET/models.py                    |   2 +-
+ src/IFNET/state.py                     |  40 +++++-
+ src/IP/ICMP/ping.py                    | 255 +++------------------------------
+ src/IP/ICMP/replies.py                 |  11 +-
+ src/VVRP/__main__.py                   |  18 ++-
+ src/VVRP/core.py                       |   7 +-
+ tests/test_core.py                     | 237 +++++++++++++++++++++++++++---
+ tests/test_ethernet.py                 |  34 +++++
+ tests/test_fwd.py                      |  49 -------
+ 27 files changed, 737 insertions(+), 540 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="76">
+              <div class="meta">
+                <span>2026-06-29_13-01-43</span>
+                <span>main</span>
+                <span>b9e1b90</span>
+              </div>
+              <h2>Add IFNET Index to media detail output</h2>
+              <p>Inserted the real hexadecimal IFNET Index between Route Port and Internet fields for Ethernet, NULL0, and Serial detail templates</p>
+              <h3>Files</h3>
+              <ul><li>src/IFNET/commands.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>None recorded</li></ul>
+              <h3>Architecture</h3>
+              <p>IFNET, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <strong>8</strong></nav>
+  </main>
+</body>
+</html>

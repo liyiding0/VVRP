@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.CMD import (
@@ -34,6 +35,8 @@ from src.CMD.interactive import (
     run_interactive_cli,
 )
 from src.CMD.models import TokenStatus
+from src.CMD.module import CMD_Module
+from src.CMD.banner import CMD_wait_for_login, g_CMD_LOGIN_BANNER
 from src.CMD.running_config import (
     default_saved_configuration_path,
     default_runtime_directory,
@@ -64,7 +67,7 @@ from src.IFNET.discovery import (
     assign_ifnet_indices,
 )
 from src.ETHERNET.device import ETHERNET_commit_device_changes, ETHERNET_stage_device_install
-from src.IFNET.state import set_interface_mac_address
+from src.IFNET.state import set_interface_mac_address, shutdown_interface
 from src.IP.state import IP_set_interface_addresses
 from src.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
 from src.IP.dhcp import IP_DhcpClientResult
@@ -94,6 +97,7 @@ from src.IP.static import (
     IP_validate_static_ipv4_address_for_interface,
 )
 from src.VVRP.core import VVRP_Core
+from src.VVRP.interrupt import VVRP_interrupt_requested, VVRP_request_interrupt
 from src.VVRP.runtime import VVRP_Runtime
 
 
@@ -898,11 +902,70 @@ class VVRPRuntimeTests(unittest.TestCase):
 
         core = VVRP_Core(runtime=FakeRuntime())
 
-        core.start()
+        status = core.start()
 
         self.assertTrue(core.started)
+        self.assertEqual("1 listener(s) running", status)
         self.assertEqual([core.state], calls)
         self.assertTrue(core.state["started"])
+
+    def test_cmd_reports_ready_before_entering_interactive_cli(self):
+        calls = []
+        core = VVRP_Core(runtime=object())
+        module = CMD_Module(
+            core,
+            CMD_on_ready=lambda: calls.append("ready"),
+        )
+
+        def run_cli(*args, **kwargs):
+            calls.append("interactive")
+            return 0
+
+        with (
+            patch("src.CMD.module.build_default_registry", return_value=object()),
+            patch("src.CMD.module.CMD_wait_for_login"),
+            patch("src.CMD.module.run_interactive_cli", side_effect=run_cli),
+        ):
+            module._run()
+
+        self.assertEqual(["ready", "interactive"], calls)
+        self.assertEqual(0, module._exit_code)
+
+    def test_cmd_join_converts_keyboard_interrupt_to_vvrp_interrupt(self):
+        core = VVRP_Core(runtime=object())
+        module = CMD_Module(core)
+
+        def interrupt_wait(timeout):
+            module._completed.set()
+            raise KeyboardInterrupt
+
+        with (
+            patch.object(module._completed, "wait", side_effect=interrupt_wait),
+            patch.object(module._thread, "join") as thread_join,
+        ):
+            result = module.join()
+
+        self.assertEqual(0, result)
+        self.assertTrue(VVRP_interrupt_requested(core.state))
+        thread_join.assert_called_once_with()
+
+    def test_cmd_login_banner_waits_for_enter(self):
+        output = io.StringIO()
+        calls = []
+
+        CMD_wait_for_login(
+            CMD_input=lambda: calls.append("enter") or "",
+            CMD_output=output,
+        )
+
+        self.assertEqual(["enter"], calls)
+        self.assertEqual(g_CMD_LOGIN_BANNER, output.getvalue())
+        self.assertIn(
+            "Copyright (C) 2010-2026 Huavvei Technologies Co., Ltd.",
+            output.getvalue(),
+        )
+        self.assertIn("User interface con0 is available", output.getvalue())
+        self.assertTrue(output.getvalue().endswith("Please Press ENTER.\n"))
 
 
 def register_host_interface_commands_for_test(
@@ -1285,13 +1348,104 @@ class IFNETCommandTests(unittest.TestCase):
         text = output.getvalue()
         self.assertLess(text.index("loopback_0 current state"), text.index("eth3 current state"))
         self.assertIn("loopback_0 current state : UP", text)
-        self.assertIn("Line protocol current state : UP(spoofing)", text)
+        self.assertIn("Line protocol current state : UP (spoofing)", text)
         self.assertIn("IFNET Index : 0x1", text)
         self.assertIn("eth3 current state : UP", text)
-        self.assertIn("IFNET Index : 0x2", text)
-        self.assertIn("Route Port,The Maximum Transmit Unit is 1500", text)
-        self.assertIn("Hardware address is AA:BB:CC:DD:EE:FF", text)
-        self.assertIn("Internet Address is unassigned", text)
+        self.assertIn("Route Port, The Maximum Transmit Unit is 1500", text)
+        self.assertIn("Hardware address is aabb-ccdd-eeff", text)
+        self.assertIn("Internet protocol processing : disabled", text)
+
+    def test_show_ethernet_interface_uses_vrp_detail_format(self):
+        registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+        registry.initialize_context(ctx)
+        ETHERNET_stage_device_install(ctx.state, "eth3")
+        ETHERNET_commit_device_changes(ctx.state)
+        IP_set_interface_addresses(
+            ctx.state,
+            "eth3",
+            (InterfaceAddress(family="ipv4", address="1.1.1.1", prefix_length=24),),
+        )
+        shutdown_interface(ctx.state, "eth3")
+
+        self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth3").executed)
+
+        text = output.getvalue()
+        self.assertIn("eth3 current state : Administratively DOWN", text)
+        self.assertIn("Line protocol current state : DOWN", text)
+        self.assertIn("Route Port, The Maximum Transmit Unit is 1500", text)
+        self.assertIn("IFNET Index : 0x1", text)
+        self.assertIn("Internet Address is 1.1.1.1/24", text)
+        self.assertIn(
+            "IP Sending Frames' Format is PKTFMT_ETHNT_2, Hardware address is aabb-ccdd-eeff",
+            text,
+        )
+        self.assertRegex(
+            text,
+            r"Last physical up time   : \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC[+-]\d{2}:\d{2}",
+        )
+        self.assertIn("Last physical down time : -", text)
+        self.assertRegex(
+            text,
+            r"Current system time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}",
+        )
+        self.assertIn("Last 300 seconds input rate 0 bytes/sec, 0 packets/sec", text)
+        self.assertIn("Unicast: 0 packets, Multicast: 0 packets", text)
+        self.assertIn("Input bandwidth utilization  :    0%", text)
+
+    def test_serial_interface_detail_formatter_is_preinstalled(self):
+        from src.IFNET.commands import _format_vvrp_interface_detail
+        from src.IFNET.state import IFNET_refresh_interface_status
+
+        state = {}
+        interface = NetworkInterface(
+            name="Serial0/0/0",
+            ifnet_index=1,
+            index=None,
+            kind="serial",
+            is_up=False,
+            mac_address="",
+            mtu=1500,
+            speed_mbps=None,
+        )
+        IFNET_refresh_interface_status(state, interface)
+
+        text = _format_vvrp_interface_detail(interface, state)
+
+        self.assertIn("Serial0/0/0 current state : DOWN", text)
+        self.assertIn("Line protocol current state : DOWN", text)
+        self.assertIn(
+            "Route Port,The Maximum Transmit Unit is 1500, Hold timer is 10(sec)",
+            text,
+        )
+        self.assertIn("IFNET Index : 0x1", text)
+        self.assertIn("Link layer protocol is PPP", text)
+        self.assertIn("LCP initial", text)
+        self.assertIn("Last physical up time   : -", text)
+        self.assertRegex(
+            text,
+            r"Last physical down time : \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC[+-]\d{2}:\d{2}",
+        )
+        self.assertIn("Interface is V35", text)
+        self.assertIn("Ouput: 0 bytes, 0 Packets", text)
+
+    def test_ifnet_physical_transition_times_are_persistent(self):
+        from src.IFNET.state import (
+            IFNET_last_physical_down_time,
+            IFNET_last_physical_up_time,
+            IFNET_refresh_interface_status,
+        )
+
+        state = {}
+        interface = fake_ethernet_without_ipv4("eth0", index=7)
+        with patch("src.IFNET.state.time.time", side_effect=(100.0, 200.0)):
+            IFNET_refresh_interface_status(state, interface)
+            IFNET_refresh_interface_status(state, interface)
+            IFNET_refresh_interface_status(state, replace(interface, is_up=False))
+
+        self.assertEqual(100.0, IFNET_last_physical_up_time(state, "eth0"))
+        self.assertEqual(200.0, IFNET_last_physical_down_time(state, "eth0"))
 
     def test_builtin_vvrp_interfaces_use_reserved_ifnet_indices(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
@@ -1303,9 +1457,13 @@ class IFNETCommandTests(unittest.TestCase):
 
         text = output.getvalue()
         self.assertIn("NULL0 current state : UP", text)
-        self.assertIn("Line protocol current state : UP(spoofing)", text)
+        self.assertIn("Line protocol current state : UP (spoofing)", text)
         self.assertIn("IFNET Index : 0xffff", text)
-        self.assertIn("Interface type : null", text)
+        self.assertIn("Physical is NULL DEV", text)
+        self.assertIn("Internet protocol processing : disabled", text)
+        self.assertIn("Realtime 0 seconds input rate 0 bits/sec, 0 packets/sec", text)
+        self.assertIn("0 errors,0 unknown protocol", text)
+        self.assertIn("Output bandwidth utilization :    0%", text)
         output.truncate(0)
         output.seek(0)
 
@@ -1313,7 +1471,7 @@ class IFNETCommandTests(unittest.TestCase):
 
         text = output.getvalue()
         self.assertIn("InLoopBack0 current state : UP", text)
-        self.assertIn("Line protocol current state : UP(spoofing)", text)
+        self.assertIn("Line protocol current state : UP (spoofing)", text)
         self.assertIn("IFNET Index : 0x0", text)
         self.assertIn("Interface type : loopback", text)
 
@@ -1587,6 +1745,12 @@ class IFNETCommandTests(unittest.TestCase):
         )
 
         self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("VVRP is starting...", completed.stdout)
+        self.assertIn("[1/4] Initializing runtime modules...", completed.stdout)
+        self.assertIn("[2/4] Starting core services...", completed.stdout)
+        self.assertIn("Packet input:", completed.stdout)
+        self.assertIn("[3/4] CMD module disabled by --no-cmd.", completed.stdout)
+        self.assertIn("[4/4] VVRP startup sequence complete.", completed.stdout)
 
     def test_host_interface_help_has_ip_and_no_descriptions(self):
         registry = build_default_registry(ifnet_provider=FakeInterfaceProvider(fake_interfaces()))
@@ -1681,7 +1845,7 @@ class IFNETCommandTests(unittest.TestCase):
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth2").executed)
-        self.assertIn("Hardware address is 02:00:00:00:00:01", output.getvalue())
+        self.assertIn("Hardware address is 0200-0000-0001", output.getvalue())
 
         output.truncate(0)
         output.seek(0)
@@ -1699,7 +1863,7 @@ class IFNETCommandTests(unittest.TestCase):
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth2").executed)
-        self.assertIn("Hardware address is AA:BB:CC:DD:EE:FF", output.getvalue())
+        self.assertIn("Hardware address is aabb-ccdd-eeff", output.getvalue())
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
@@ -1743,7 +1907,7 @@ class IFNETCommandTests(unittest.TestCase):
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth2").executed)
-        self.assertIn("Route Port,The Maximum Transmit Unit is 1600", output.getvalue())
+        self.assertIn("Route Port, The Maximum Transmit Unit is 1600", output.getvalue())
 
         output.truncate(0)
         output.seek(0)
@@ -1761,7 +1925,7 @@ class IFNETCommandTests(unittest.TestCase):
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth2").executed)
-        self.assertIn("Route Port,The Maximum Transmit Unit is 1500", output.getvalue())
+        self.assertIn("Route Port, The Maximum Transmit Unit is 1500", output.getvalue())
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show this").executed)
@@ -2973,7 +3137,7 @@ class StaticIpv4CommandTests(unittest.TestCase):
         output.truncate(0)
         output.seek(0)
         self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth3").executed)
-        self.assertIn("Internet Address is 1.1.1.1/8 Primary", output.getvalue())
+        self.assertIn("Internet Address is 1.1.1.1/8", output.getvalue())
 
     def test_host_ip_address_static_sub_calls_provider_with_secondary_flag(self):
         static_provider = FakeStaticIpv4Provider()
@@ -3725,7 +3889,7 @@ class ConfigurationTests(unittest.TestCase):
 
             ctx.push_mode("privileged")
             self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth3").executed)
-            self.assertIn("Internet Address is 1.1.1.1/8 Primary", output.getvalue())
+            self.assertIn("Internet Address is 1.1.1.1/8", output.getvalue())
 
     def test_load_saved_vvrp_interface_mtu_restores_state(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -3774,7 +3938,7 @@ class ConfigurationTests(unittest.TestCase):
 
             ctx.push_mode("privileged")
             self.assertTrue(dispatch_line(ctx, registry, "show interfaces eth3").executed)
-            self.assertIn("Route Port,The Maximum Transmit Unit is 1600", output.getvalue())
+            self.assertIn("Route Port, The Maximum Transmit Unit is 1600", output.getvalue())
 
     def test_load_saved_configuration_skips_children_after_missing_interface(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -4002,6 +4166,46 @@ class PingTests(unittest.TestCase):
         self.assertIn("Sequence=1", text)
         self.assertIn("ttl=64", text)
         self.assertIn("1 packet(s) received", text)
+
+    def test_vvrp_packet_ping_stops_on_vvrp_interrupt(self):
+        ctx = CliContext(output=io.StringIO())
+        pinger = ICMP_VvrpPacketPinger(ctx, ICMP_identifier=0x1234)
+        output = io.StringIO()
+
+        def interrupt_ping(*args, **kwargs):
+            VVRP_request_interrupt(ctx.state)
+            return ICMP_PingReply(
+                ICMP_ok=False,
+                ICMP_sequence=1,
+                ICMP_message="Request time out",
+            )
+
+        with (
+            patch.object(
+                pinger,
+                "_ICMP_resolve_forwarding",
+                return_value=SimpleNamespace(source_ip="192.0.2.10"),
+            ),
+            patch.object(
+                pinger,
+                "_ICMP_send_socket_one",
+                side_effect=interrupt_ping,
+            ),
+        ):
+            result = pinger.ICMP_ping(
+                ICMP_PingOptions(
+                    ICMP_target="192.0.2.1",
+                    ICMP_count=5,
+                    ICMP_interval_seconds=1,
+                ),
+                "192.0.2.1",
+                output,
+            )
+
+        self.assertFalse(result.ICMP_ok)
+        self.assertIn("Ping terminated by user.", output.getvalue())
+        self.assertIn("1 packet(s) transmitted", output.getvalue())
+        self.assertIn("0 packet(s) received", output.getvalue())
 
     def test_ping_command_is_available_in_all_modes(self):
         registry = build_default_registry()
