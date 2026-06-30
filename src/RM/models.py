@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import ipaddress
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Literal
 
 from src.IFNET.models import NetworkInterface
@@ -23,6 +24,8 @@ class RMRoute:
     description: str = ""
     permanent: bool = False
     no_advertise: bool = False
+    eligible: bool = True
+    created_at: float = field(default_factory=time.monotonic, compare=False)
 
     @property
     def prefix_length(self) -> int:

@@ -3,6 +3,7 @@
 from .ethernet import FWD_EthernetOutputHandler
 from .forwarder import FWD_Forwarder, FWD_default_forwarder
 from .input import FWD_EthernetInputHandler, FWD_InputDispatcher, FWD_default_input_dispatcher
+from .loopback import FWD_LoopbackOutputHandler
 from .models import FWD_InputHandler, FWD_OutputHandler, FWD_RawFramePort, FWD_Result
 from .null import FWD_NullOutputHandler
 
@@ -12,6 +13,7 @@ __all__ = [
     "FWD_Forwarder",
     "FWD_InputDispatcher",
     "FWD_InputHandler",
+    "FWD_LoopbackOutputHandler",
     "FWD_NullOutputHandler",
     "FWD_OutputHandler",
     "FWD_RawFramePort",

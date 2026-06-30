@@ -68,7 +68,8 @@ from src.IFNET.discovery import (
     assign_ifnet_indices,
 )
 from src.ETHERNET.device import ETHERNET_commit_device_changes, ETHERNET_stage_device_install
-from src.IFNET.state import set_interface_mac_address, shutdown_interface
+from src.ETHERNET.state import ETHERNET_set_interface_mac_address
+from src.IFNET.state import shutdown_interface
 from src.IP.state import IP_set_interface_addresses
 from src.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
 from src.IP.dhcp import IP_DhcpClientResult
@@ -4147,7 +4148,7 @@ class PingTests(unittest.TestCase):
             "eth3",
             (InterfaceAddress(family="ipv4", address="192.0.2.10", prefix_length=24),),
         )
-        set_interface_mac_address(ctx.state, "eth3", "02:00:00:00:00:01")
+        ETHERNET_set_interface_mac_address(ctx.state, "eth3", "02:00:00:00:00:01")
         provider = FakeInterfaceProvider((fake_ethernet("eth3"),))
         from src.FIB import FIB_sync_active_routes
         from src.RM import RMRoute
@@ -4208,7 +4209,7 @@ class PingTests(unittest.TestCase):
             "eth3",
             (InterfaceAddress(family="ipv4", address="192.0.2.10", prefix_length=24),),
         )
-        set_interface_mac_address(ctx.state, "eth3", "02:00:00:00:00:01")
+        ETHERNET_set_interface_mac_address(ctx.state, "eth3", "02:00:00:00:00:01")
         provider = FakeInterfaceProvider((fake_ethernet("eth3"),))
         FIB_sync_active_routes(
             ctx.state,

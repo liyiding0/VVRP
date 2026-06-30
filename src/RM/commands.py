@@ -15,11 +15,16 @@ from src.CMD.running_config import (
 from src.IFNET.models import InterfaceAddress
 from src.IFNET.models import NetworkInterface
 
-from .IM import RM_IM_Interface, RM_IM_interface_table_from_ifnet
+from .IM import (
+    RM_IM_Interface,
+    RM_IM_ReconcileResult,
+    RM_IM_interface_table,
+    RM_IM_reconcile_from_ifnet,
+)
 from .rib import RM_RouteTable, RM_route_table_from_routes
 from .routes import (
     RM_connected_routes_from_im,
-    RM_sync_connected_routes_from_im_table,
+    RM_sync_connected_routes_for_interface,
 )
 from .state import RM_clear_router_id, RM_router_id, RM_set_router_id
 from .static import (
@@ -236,6 +241,22 @@ def RM_register_commands(
         return CommandResult(message=RM_format_ip_routing_table(RM_table.RM_active_routes()))
 
     @RM_registry.command(
+        "show ip routing-table verbose",
+        help_text="Show verbose information of routing table",
+        modes=RM_ALL_SHOW_MODES,
+    )
+    def RM_show_ip_routing_table_verbose(RM_ctx, RM_args):
+        RM_table = RM_get_route_table(
+            RM_ctx,
+            RM_interfaces_provider,
+        )
+        if isinstance(RM_table, CommandResult):
+            return RM_table
+        return CommandResult(
+            message=RM_format_ip_routing_table_verbose(RM_ctx.state, RM_table)
+        )
+
+    @RM_registry.command(
         "show ip routing-table protocol direct",
         help_text="Show Direct routes",
         modes=RM_ALL_SHOW_MODES,
@@ -247,12 +268,15 @@ def RM_register_commands(
         )
         if isinstance(RM_table, CommandResult):
             return RM_table
-        RM_routes = tuple(
+        RM_routes = RM_table.RM_routes_for_source("connected")
+        RM_active_routes = tuple(
             RM_route
             for RM_route in RM_table.RM_active_routes()
             if RM_route.source == "connected"
         )
-        return CommandResult(message=RM_format_direct_routing_table(RM_routes))
+        return CommandResult(
+            message=RM_format_direct_routing_table(RM_routes, RM_active_routes)
+        )
 
     def RM_static_route_status(RM_ctx):
         RM_table = RM_get_route_table(RM_ctx, RM_interfaces_provider)
@@ -322,8 +346,17 @@ def RM_static_route_status_entries(RM_state: dict, RM_table: RM_RouteTable) -> t
     return tuple(RM_entries)
 
 
-def RM_format_direct_routing_table(RM_routes: tuple) -> str:
+def RM_format_direct_routing_table(
+    RM_routes: tuple,
+    RM_active_routes: tuple,
+) -> str:
     RM_routes = tuple(RM_routes)
+    RM_active_routes = tuple(RM_active_routes)
+    RM_inactive_routes = tuple(
+        RM_route
+        for RM_route in RM_routes
+        if RM_route not in RM_active_routes
+    )
     RM_destinations = len({RM_route.destination for RM_route in RM_routes})
     RM_lines = [
         "Route Flags: R - relay, D - download to fib",
@@ -332,41 +365,151 @@ def RM_format_direct_routing_table(RM_routes: tuple) -> str:
         f"         Destinations : {RM_destinations}        Routes : {len(RM_routes)}",
         "",
         "Direct routing table status : <Active>",
-        f"         Destinations : {RM_destinations}        Routes : {len(RM_routes)}",
+        (
+            f"         Destinations : "
+            f"{len({RM_route.destination for RM_route in RM_active_routes})}        "
+            f"Routes : {len(RM_active_routes)}"
+        ),
     ]
-    if RM_routes:
-        RM_lines.extend(
-            (
-                "",
-                "Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface",
-                "",
-            )
-        )
-        for RM_route in sorted(
-            RM_routes,
-            key=lambda RM_route: (
-                int(RM_route.destination.network_address),
-                RM_route.destination.prefixlen,
-                RM_route.interface.name,
-            ),
-        ):
-            RM_lines.append(
-                f"{str(RM_route.destination):>19}  "
-                f"{'Direct':<7} "
-                f"{RM_route.preference:<4} "
-                f"{0:<9} "
-                f"{'D':<5} "
-                f"{RM_display_next_hop(RM_route):<15} "
-                f"{RM_route.interface.name}"
-            )
+    if RM_active_routes:
+        RM_lines.extend(("", *RM_direct_route_table_lines(RM_active_routes, True)))
     RM_lines.extend(
         (
             "",
             "Direct routing table status : <Inactive>",
-            "         Destinations : 0        Routes : 0",
+            (
+                f"         Destinations : "
+                f"{len({RM_route.destination for RM_route in RM_inactive_routes})}        "
+                f"Routes : {len(RM_inactive_routes)}"
+            ),
         )
     )
+    if RM_inactive_routes:
+        RM_lines.extend(("", *RM_direct_route_table_lines(RM_inactive_routes, False)))
     return "\n".join(RM_lines)
+
+
+def RM_direct_route_table_lines(
+    RM_routes: tuple,
+    RM_is_active: bool,
+) -> tuple[str, ...]:
+    RM_lines = [
+        "Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface",
+        "",
+    ]
+    for RM_route in sorted(
+        RM_routes,
+        key=lambda RM_route: (
+            int(RM_route.destination.network_address),
+            RM_route.destination.prefixlen,
+            RM_route.interface.name,
+        ),
+    ):
+        RM_lines.append(
+            f"{str(RM_route.destination):>19}  "
+            f"{'Direct':<7} "
+            f"{RM_route.preference:<4} "
+            f"{0:<9} "
+            f"{('D' if RM_is_active else ''):<5} "
+            f"{RM_display_next_hop(RM_route):<15} "
+            f"{RM_route.interface.name}"
+        )
+    return tuple(RM_lines)
+
+
+def RM_format_ip_routing_table_verbose(
+    RM_state: dict,
+    RM_table: RM_RouteTable,
+) -> str:
+    RM_direct_routes = RM_table.RM_routes_for_source("connected")
+    RM_active_direct_routes = tuple(
+        RM_route
+        for RM_route in RM_table.RM_active_routes()
+        if RM_route.source == "connected"
+    )
+    RM_static_entries = RM_static_route_status_entries(RM_state, RM_table)
+    RM_records = [
+        (
+            RM_route.destination,
+            0,
+            (RM_route, RM_route in RM_active_direct_routes),
+        )
+        for RM_route in RM_direct_routes
+    ]
+    RM_records.extend(
+        (RM_entry[0].destination, 1, RM_entry)
+        for RM_entry in RM_static_entries
+    )
+    RM_records.sort(
+        key=lambda RM_record: (
+            int(RM_record[0].network_address),
+            RM_record[0].prefixlen,
+            RM_record[1],
+        )
+    )
+    RM_destinations = len({RM_record[0] for RM_record in RM_records})
+    RM_static_indices = {
+        RM_config.RM_identity: RM_index
+        for RM_index, RM_config in enumerate(
+            (RM_entry[0] for RM_entry in RM_static_entries),
+            start=1,
+        )
+    }
+    RM_lines = [
+        "Route Flags: R - relay, D - download to fib",
+        "------------------------------------------------------------------------------",
+        "Routing Tables: Public",
+        f"         Destinations : {RM_destinations}        Routes : {len(RM_records)}",
+        "",
+        "",
+    ]
+    for _, RM_kind, RM_value in RM_records:
+        if RM_kind == 0:
+            RM_lines.extend(RM_verbose_direct_route_lines(*RM_value))
+        else:
+            RM_config = RM_value[0]
+            RM_lines.extend(
+                RM_verbose_static_route_lines(
+                    RM_value,
+                    RM_static_indices[RM_config.RM_identity],
+                )
+            )
+        RM_lines.append("")
+    return "\n".join(RM_lines).rstrip()
+
+
+def RM_verbose_direct_route_lines(
+    RM_route,
+    RM_is_active: bool,
+) -> tuple[str, ...]:
+    RM_no_advertise = (
+        RM_route.next_hop == "127.0.0.1"
+        or RM_route.interface.name == "InLoopBack0"
+    )
+    RM_state_prefix = "Active" if RM_is_active else "Inactive"
+    RM_state = (
+        f"{RM_state_prefix} NoAdv"
+        if RM_no_advertise
+        else f"{RM_state_prefix} Adv"
+    )
+    return (
+        f"Destination: {RM_route.destination}",
+        "     Protocol: Direct          Process ID: 0",
+        f"   Preference: {RM_route.preference:<22} Cost: 0",
+        (
+            f"      NextHop: {RM_display_next_hop(RM_route):<15} "
+            "Neighbour: 0.0.0.0"
+        ),
+        f"        State: {RM_state:<22} Age: {RM_route_age(RM_route.created_at)}",
+        f"          Tag: {(RM_route.tag or 0):<17} Priority: high",
+        "        Label: NULL               QoSInfo: 0x0",
+        "   IndirectID: 0x0",
+        (
+            " RelayNextHop: 0.0.0.0          "
+            f"Interface: {RM_route.interface.name}"
+        ),
+        f"     TunnelID: 0x0                  Flags: {' D' if RM_is_active else ''}",
+    )
 
 
 def RM_format_static_routing_table(RM_entries: tuple) -> str:
@@ -420,38 +563,42 @@ def RM_format_static_routing_table_verbose(RM_entries: tuple) -> str:
         "",
     ]
     for RM_index, RM_entry in enumerate(RM_entries, start=1):
-        RM_config, RM_route, RM_is_active = RM_entry
-        RM_flags = RM_static_route_flags(RM_config, RM_is_active)
-        RM_state = "Active"
-        if RM_is_active:
-            RM_state += " NoAdv" if RM_config.no_advertise else " Adv"
-            if RM_config.next_hop:
-                RM_state += " Relied"
-        else:
-            RM_state = "Invalid"
-            RM_state += " NoAdv" if RM_config.no_advertise else " Adv"
-        RM_lines.extend(
-            (
-                f"Destination: {RM_config.destination}",
-                "     Protocol: Static          Process ID: 0",
-                f"   Preference: {RM_config.preference:<22} Cost: 0",
-                (
-                    f"      NextHop: {(RM_config.next_hop or '0.0.0.0'):<15} "
-                    "Neighbour: 0.0.0.0"
-                ),
-                f"        State: {RM_state:<22} Age: {RM_static_route_age(RM_config)}",
-                f"          Tag: {(RM_config.tag or 0):<17} Priority: medium",
-                "        Label: NULL               QoSInfo: 0x0",
-                f"   IndirectID: 0x{0x80000000 + RM_index:x}",
-                (
-                    f" RelayNextHop: 0.0.0.0          "
-                    f"Interface: {RM_static_route_interface(RM_route)}"
-                ),
-                f"     TunnelID: 0x0                  Flags: {RM_flags}",
-                "",
-            )
-        )
+        RM_lines.extend((*RM_verbose_static_route_lines(RM_entry, RM_index), ""))
     return "\n".join(RM_lines).rstrip()
+
+
+def RM_verbose_static_route_lines(
+    RM_entry: tuple,
+    RM_index: int,
+) -> tuple[str, ...]:
+    RM_config, RM_route, RM_is_active = RM_entry
+    RM_flags = RM_static_route_flags(RM_config, RM_is_active)
+    RM_state = "Active"
+    if RM_is_active:
+        RM_state += " NoAdv" if RM_config.no_advertise else " Adv"
+        if RM_config.next_hop:
+            RM_state += " Relied"
+    else:
+        RM_state = "Invalid"
+        RM_state += " NoAdv" if RM_config.no_advertise else " Adv"
+    return (
+        f"Destination: {RM_config.destination}",
+        "     Protocol: Static          Process ID: 0",
+        f"   Preference: {RM_config.preference:<22} Cost: 0",
+        (
+            f"      NextHop: {(RM_config.next_hop or '0.0.0.0'):<15} "
+            "Neighbour: 0.0.0.0"
+        ),
+        f"        State: {RM_state:<22} Age: {RM_static_route_age(RM_config)}",
+        f"          Tag: {(RM_config.tag or 0):<17} Priority: medium",
+        "        Label: NULL               QoSInfo: 0x0",
+        f"   IndirectID: 0x{0x80000000 + RM_index:x}",
+        (
+            f" RelayNextHop: 0.0.0.0          "
+            f"Interface: {RM_static_route_interface(RM_route)}"
+        ),
+        f"     TunnelID: 0x0                  Flags: {RM_flags}",
+    )
 
 
 def RM_static_summary_line(
@@ -497,10 +644,18 @@ def RM_static_route_interface(RM_route) -> str:
 
 
 def RM_static_route_age(RM_config: RM_StaticRouteConfig) -> str:
-    RM_seconds = max(0, int(time.monotonic() - RM_config.configured_at))
+    return RM_route_age(RM_config.configured_at)
+
+
+def RM_route_age(RM_created_at: float) -> str:
+    RM_seconds = max(0, int(time.monotonic() - RM_created_at))
+    RM_days, RM_seconds = divmod(RM_seconds, 86400)
     RM_hours, RM_remainder = divmod(RM_seconds, 3600)
     RM_minutes, RM_seconds = divmod(RM_remainder, 60)
-    return f"{RM_hours:02d}h{RM_minutes:02d}m{RM_seconds:02d}s"
+    RM_age = f"{RM_hours:02d}h{RM_minutes:02d}m{RM_seconds:02d}s"
+    if RM_days:
+        return f"{RM_days}d{RM_age}"
+    return RM_age
 
 
 def RM_normalize_router_id(RM_router_id_value: str) -> str | None:
@@ -700,15 +855,33 @@ def RM_get_im_interfaces(
     RM_ctx,
     RM_interfaces_provider: Callable | None,
 ) -> tuple[RM_IM_Interface, ...] | CommandResult:
-    if RM_interfaces_provider is None:
-        return ()
+    RM_im_table = RM_IM_interface_table(RM_ctx.state)
+    RM_existing_interfaces = RM_im_table.RM_IM_list()
+    if RM_existing_interfaces or RM_interfaces_provider is None:
+        return RM_existing_interfaces
+    RM_reconcile_result = RM_reconcile_im_interfaces(
+        RM_ctx,
+        RM_interfaces_provider,
+    )
+    if isinstance(RM_reconcile_result, CommandResult):
+        return RM_reconcile_result
+    return RM_reconcile_result.RM_IM_table.RM_IM_list()
+
+
+def RM_reconcile_im_interfaces(
+    RM_ctx,
+    RM_interfaces_provider: Callable,
+) -> RM_IM_ReconcileResult | CommandResult:
     try:
         RM_interfaces = RM_interfaces_provider(RM_ctx)
     except Exception as RM_exc:
         return CommandResult(ok=False, message=f"% RM interface discovery failed: {RM_exc}")
     if isinstance(RM_interfaces, CommandResult):
         return RM_interfaces
-    return RM_IM_interface_table_from_ifnet(tuple(RM_interfaces)).RM_IM_list()
+    return RM_IM_reconcile_from_ifnet(
+        RM_ctx.state,
+        tuple(RM_interfaces),
+    )
 
 
 def RM_get_route_table(
@@ -731,17 +904,50 @@ def RM_refresh_connected_routes_from_interfaces(
     RM_ctx,
     RM_interfaces_provider: Callable | None,
 ) -> RM_RouteTable | CommandResult:
-    RM_interfaces = RM_get_im_interfaces(RM_ctx, RM_interfaces_provider)
-    if isinstance(RM_interfaces, CommandResult):
-        return RM_interfaces
+    if RM_interfaces_provider is None:
+        RM_im_table = RM_IM_interface_table(RM_ctx.state)
+        RM_changed_interfaces = RM_im_table.RM_IM_list()
+        RM_deleted_interfaces = ()
+    else:
+        RM_reconcile_result = RM_reconcile_im_interfaces(
+            RM_ctx,
+            RM_interfaces_provider,
+        )
+        if isinstance(RM_reconcile_result, CommandResult):
+            return RM_reconcile_result
+        RM_im_table = RM_reconcile_result.RM_IM_table
+        RM_changed_interfaces = RM_reconcile_result.RM_IM_changed
+        RM_deleted_interfaces = RM_reconcile_result.RM_IM_deleted
     from .rib import RM_route_table
-    from .IM import RM_IM_InterfaceTable
 
     RM_table = RM_route_table(RM_ctx.state)
-    RM_im_table = RM_IM_InterfaceTable()
-    for RM_interface in RM_interfaces:
-        RM_im_table.RM_IM_upsert(RM_interface)
-    RM_sync_connected_routes_from_im_table(RM_ctx.state, RM_im_table, RM_table)
+    for RM_interface_name in RM_deleted_interfaces:
+        RM_table.RM_replace_routes_for_interface_source(
+            RM_interface_name,
+            "connected",
+            (),
+        )
+    RM_changed_names = {
+        RM_interface.name
+        for RM_interface in RM_changed_interfaces
+    }
+    for RM_interface in RM_im_table.RM_IM_list():
+        RM_has_connected_routes = any(
+            RM_route.source == "connected"
+            for RM_route in RM_table.RM_routes_for_interface(RM_interface.name)
+        )
+        if RM_interface.name not in RM_changed_names and RM_has_connected_routes:
+            continue
+        RM_sync_connected_routes_for_interface(
+            RM_ctx.state,
+            RM_table,
+            RM_interface,
+        )
+    RM_sync_static_routes(
+        RM_ctx.state,
+        RM_im_table.RM_IM_list(),
+        RM_table,
+    )
     return RM_table
 
 
@@ -757,6 +963,7 @@ def RM_format_ip_routing_table(RM_routes) -> str:
         f"         Destinations : {len({RM_route.destination for RM_route in RM_routes})}        Routes : {len(RM_routes)}",
         "",
         "Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface",
+        "",
     ]
     for RM_route in sorted(
         RM_routes,
@@ -775,6 +982,7 @@ def RM_format_ip_routing_table(RM_routes) -> str:
             f"{RM_display_next_hop(RM_route):<15} "
             f"{RM_route.interface.name}"
         )
+    RM_lines.append("")
     return "\n".join(RM_lines)
 
 

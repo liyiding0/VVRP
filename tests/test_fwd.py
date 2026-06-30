@@ -21,12 +21,16 @@ from src.FWD import (
     FWD_EthernetOutputHandler,
     FWD_Forwarder,
     FWD_InputDispatcher,
+    FWD_LoopbackOutputHandler,
     FWD_default_forwarder,
     FWD_default_input_dispatcher,
 )
 from src.IFNET import InterfaceAddress, NetworkInterface
 from src.CMD import CliContext
 from src.IP.ipv4 import IP_build_ipv4_packet
+from src.IP.ICMP.packet import ICMP_build_echo_request
+from src.IP.ICMP.replies import ICMP_wait_echo_reply
+from src.IP.input import IP_handle_local_ipv4_packet
 from src.RM import RMRoute
 from src.SOCK import SOCK_AF_INET, SOCK_IPPROTO_ICMP, SOCK_SOCK_RAW, SOCK_sendto, SOCK_socket
 from src.events import VVRP_event_bus
@@ -281,6 +285,65 @@ class FwdTests(unittest.TestCase):
         self.assertTrue(result.FWD_ok)
         self.assertEqual(b"", result.FWD_frame)
         self.assertIs(route, result.FWD_route)
+
+    def test_loopback_fwd_delivers_local_icmp_request_and_reply(self):
+        state = {}
+        ethernet = NetworkInterface(
+            name="eth4",
+            kind="ethernet",
+            index=1,
+            is_up=True,
+            mac_address="02:00:00:00:00:01",
+            speed_mbps=1000,
+            ifnet_index=1,
+            mtu=1500,
+            addresses=(
+                InterfaceAddress(
+                    family="ipv4",
+                    address="192.0.2.10",
+                    prefix_length=24,
+                ),
+            ),
+        )
+        loopback = fwd_interface("InLoopBack0", kind="loopback")
+        identifier = 0x1234
+        sequence = 1
+        packet = IP_build_ipv4_packet(
+            "192.0.2.10",
+            "192.0.2.10",
+            1,
+            ICMP_build_echo_request(identifier, sequence, b"hello"),
+        )
+        route = FIBEntry(
+            destination=IPv4Network("192.0.2.10/32"),
+            out_if_name="InLoopBack0",
+            out_if_index=0,
+            source_ip="192.0.2.10",
+            source_mac="",
+            next_hop_ip="127.0.0.1",
+            flags="HU",
+        )
+        interfaces = (loopback, ethernet)
+        handler = FWD_LoopbackOutputHandler(
+            lambda current_packet: IP_handle_local_ipv4_packet(
+                state,
+                interfaces,
+                current_packet,
+            )
+        )
+
+        result = handler.FWD_send_packet(packet, route, loopback)
+        reply = ICMP_wait_echo_reply(
+            state,
+            ICMP_source="192.0.2.10",
+            ICMP_destination="192.0.2.10",
+            ICMP_identifier=identifier,
+            ICMP_sequence=sequence,
+            ICMP_timeout_seconds=0,
+        )
+
+        self.assertTrue(result.FWD_ok)
+        self.assertIsNotNone(reply)
 
     def test_fwd_input_dispatches_by_interface_type(self):
         calls = []

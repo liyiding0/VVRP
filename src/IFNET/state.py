@@ -10,7 +10,6 @@ from .models import NetworkInterface
 IFNET_ADMIN_DOWN_STATE_KEY = "ifnet.admin_down"
 IFNET_INTERFACE_ADMINS_STATE_KEY = "ifnet.interface_admins"
 IFNET_INTERFACE_PHYSICALS_STATE_KEY = "ifnet.interface_physicals"
-IFNET_INTERFACE_MACS_STATE_KEY = "ifnet.interface_macs"
 IFNET_INTERFACE_MTUS_STATE_KEY = "ifnet.interface_mtus"
 IFNET_INTERFACE_PROTOCOLS_STATE_KEY = "ifnet.interface_protocols"
 IFNET_INTERFACE_LAST_PHYSICAL_UP_TIMES_STATE_KEY = "ifnet.last_physical_up_times"
@@ -45,21 +44,6 @@ def shutdown_interface(state: dict[str, Any], name: str) -> None:
 def no_shutdown_interface(state: dict[str, Any], name: str) -> None:
     admin_down_interfaces(state).discard(name)
     IFNET_set_interface_admin_status(state, name, "up")
-
-
-def set_interface_mac_address(
-    state: dict[str, Any],
-    name: str,
-    mac_address: str,
-) -> None:
-    interface_mac_addresses(state)[name] = mac_address
-
-
-def remove_interface_mac_address(
-    state: dict[str, Any],
-    name: str,
-) -> None:
-    interface_mac_addresses(state).pop(name, None)
 
 
 def IFNET_set_interface_mtu(
@@ -160,14 +144,6 @@ def _IFNET_interface_has_ipv4_address(interface: NetworkInterface) -> bool:
     if callable(im_addresses_by_family):
         return bool(im_addresses_by_family("ipv4"))
     return False
-
-
-def interface_mac_addresses(state: dict[str, Any]) -> dict[str, str]:
-    value = state.setdefault(IFNET_INTERFACE_MACS_STATE_KEY, {})
-    if not isinstance(value, dict):
-        value = {}
-        state[IFNET_INTERFACE_MACS_STATE_KEY] = value
-    return value
 
 
 def IFNET_interface_mtus(state: dict[str, Any]) -> dict[str, int]:
@@ -278,17 +254,6 @@ def IFNET_is_protocol_up(
     )
 
 
-def mac_address_for_interface(
-    state: dict[str, Any],
-    name: str,
-    default: str,
-) -> str:
-    value = interface_mac_addresses(state).get(name)
-    if isinstance(value, str) and value:
-        return value
-    return default
-
-
 def IFNET_mtu_for_interface(
     state: dict[str, Any],
     name: str,
@@ -306,6 +271,5 @@ def apply_vvrp_interface_state(
 ) -> NetworkInterface:
     return replace(
         interface,
-        mac_address=mac_address_for_interface(state, interface.name, interface.mac_address),
         mtu=IFNET_mtu_for_interface(state, interface.name, interface.mtu),
     )

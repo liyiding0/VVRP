@@ -13,7 +13,7 @@ from src.DPlane.Windows.npcap import NpcapDevice
 from src.ETHERNET import ETHERTYPE_ARP, ETHERTYPE_IPV4, build_ethernet_ii_frame, parse_ethernet_ii_frame
 from src.IFNET import InterfaceAddress, NetworkInterface
 from src.ETHERNET.device import ETHERNET_commit_device_changes, ETHERNET_stage_device_install
-from src.IFNET.state import set_interface_mac_address
+from src.ETHERNET.state import ETHERNET_set_interface_mac_address
 from src.IP.state import IP_set_interface_addresses
 from src.IP.ICMP.packet import ICMP_build_echo_request, ICMP_parse_echo
 from src.IP.ICMP.ping import g_ICMP_IPV4_PROTOCOL_ICMP, ICMP_build_ipv4_packet, ICMP_parse_ipv4_packet
@@ -124,7 +124,7 @@ class DPlanePacketInputTests(unittest.TestCase):
             "eth4",
             (InterfaceAddress(family="ipv4", address="192.168.211.100", prefix_length=24),),
         )
-        set_interface_mac_address(ctx.state, "eth4", "00:E0:4C:11:22:33")
+        ETHERNET_set_interface_mac_address(ctx.state, "eth4", "00:E0:4C:11:22:33")
         remote_mac = "5a:9f:62:39:a3:66"
         remote_ip = "192.168.211.1"
 

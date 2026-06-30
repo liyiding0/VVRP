@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    nav { margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a, nav strong { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; }
+    nav a { color: #1f4f9a; text-decoration: none; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <a href="page-009.html">9</a> <a href="page-010.html">10</a> <strong>11</strong></nav>
+
+            <article class="card" id="100">
+              <div class="meta">
+                <span>2026-06-30_18-13-46</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Fix ping to local VVRP interface addresses</h2>
+              <p>Added FWD loopback local delivery for HU FIB routes. Runtime injects the IP local-input service, which resolves the destination against VVRP interface IP state and returns ICMP replies through the local path into the ping reply inbox.</p>
+              <h3>Files</h3>
+              <ul><li>src/FWD/loopback.py</li><li>src/FWD/forwarder.py</li><li>src/FWD/__init__.py</li><li>src/IP/input.py</li><li>src/IP/__init__.py</li><li>src/VVRP/runtime.py</li><li>tests/test_fwd.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep FWD protocol-agnostic by injecting the IP local-delivery callback; never send local host routes through Ethernet.</li></ul>
+              <h3>Architecture</h3>
+              <p>FWD, IP, VVRP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 39887 -&gt; 42504 bytes
+ context/replays/timeline/index.html    |  58 +++++-
+ context/replays/timeline/page-010.html | 232 +++++++++++++++++++++
+ src/ARP/commands.py                    |  33 ++-
+ src/ARP/protocol.py                    |   1 +
+ src/ARP/table.py                       |  24 ++-
+ src/CMD/examples.py                    |   3 -
+ src/ETHERNET/__init__.py               |  12 ++
+ src/ETHERNET/commands.py               |  36 +---
+ src/ETHERNET/debug.py                  |  12 +-
+ src/ETHERNET/frame_debug.py            | 204 -------------------
+ src/FWD/__init__.py                    |   2 +
+ src/FWD/forwarder.py                   |   7 +
+ src/IFNET/interfaces.py                |   3 +-
+ src/IFNET/state.py                     |  36 ----
+ src/IP/__init__.py                     |   4 +-
+ src/RM/IM/__init__.py                  |   6 +
+ src/RM/IM/table.py                     |  51 +++++
+ src/RM/commands.py                     | 360 ++++++++++++++++++++++++++-------
+ src/RM/models.py                       |   5 +-
+ src/RM/rib.py                          |  50 ++++-
+ src/RM/routes.py                       |   5 +-
+ src/VVRP/runtime.py                    |  19 +-
+ tests/test_arp.py                      |  67 +++++-
+ tests/test_core.py                     |   7 +-
+ tests/test_ethernet.py                 | 187 +++--------------
+ tests/test_fwd.py                      |  63 ++++++
+ tests/test_icmp.py                     |   4 +-
+ tests/test_routing.py                  | 247 ++++++++++++++++++++++
+ 29 files changed, 1189 insertions(+), 549 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="101">
+              <div class="meta">
+                <span>2026-06-30_18-21-30</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Restore local interface entries in show arp</h2>
+              <p>Runtime now synchronizes non-aging interface ARP entries from VVRP Ethernet interfaces and IP addresses. show arp renders them as I - and counts them under Interface while dynamic learning cannot overwrite the authoritative local MAC.</p>
+              <h3>Files</h3>
+              <ul><li>src/ARP/table.py</li><li>src/ARP/commands.py</li><li>src/VVRP/runtime.py</li><li>tests/test_arp.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Use ETHERNET effective MAC and IP-owned interface addresses as the authoritative source; do not depend on capturing VVRP outbound ARP frames.</li></ul>
+              <h3>Architecture</h3>
+              <p>ARP, VVRP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 39887 -&gt; 44354 bytes
+ context/replays/timeline/index.html    |  65 +++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |   4 +-
+ context/replays/timeline/page-009.html |   4 +-
+ context/replays/timeline/page-010.html | 236 ++++++++++++++++++++-
+ src/ARP/commands.py                    |  38 +++-
+ src/ARP/protocol.py                    |   1 +
+ src/ARP/table.py                       |  36 +++-
+ src/CMD/examples.py                    |   3 -
+ src/ETHERNET/__init__.py               |  12 ++
+ src/ETHERNET/commands.py               |  36 +---
+ src/ETHERNET/debug.py                  |  12 +-
+ src/ETHERNET/frame_debug.py            | 204 -------------------
+ src/FWD/__init__.py                    |   2 +
+ src/FWD/forwarder.py                   |   7 +
+ src/IFNET/interfaces.py                |   3 +-
+ src/IFNET/state.py                     |  36 ----
+ src/IP/__init__.py                     |   4 +-
+ src/RM/IM/__init__.py                  |   6 +
+ src/RM/IM/table.py                     |  51 +++++
+ src/RM/commands.py                     | 360 ++++++++++++++++++++++++++-------
+ src/RM/models.py                       |   5 +-
+ src/RM/rib.py                          |  50 ++++-
+ src/RM/routes.py                       |   5 +-
+ src/VVRP/runtime.py                    |  19 +-
+ tests/test_arp.py                      | 101 ++++++++-
+ tests/test_core.py                     |   7 +-
+ tests/test_ethernet.py                 | 187 +++--------------
+ tests/test_fwd.py                      |  63 ++++++
+ tests/test_icmp.py                     |   4 +-
+ tests/test_routing.py                  | 247 ++++++++++++++++++++++
+ 38 files changed, 1264 insertions(+), 572 deletions(-)</pre>
+              </details>
+            </article>
+
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <a href="page-009.html">9</a> <a href="page-010.html">10</a> <strong>11</strong></nav>
+  </main>
+</body>
+</html>

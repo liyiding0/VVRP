@@ -8,7 +8,6 @@ from src.DPlane import DPlane_Backend, DPlane_create_backend
 from src.DPlane.backend import DPlane_AdminProviderAdapter, DPlane_InterfaceProviderAdapter
 from src.DPlane.input import DPlane_PacketInputService
 from src.DPlane.ip_config import DPlane_DhcpClientProvider, DPlane_StaticIpv4Provider
-from src.ETHERNET.frame_debug import ETHERNET_FrameDebugService
 from src.FIB import FIB_sync_active_routes
 from src.FWD import FWD_default_forwarder
 from src.IFNET.admin import InterfaceAdminProvider
@@ -16,6 +15,7 @@ from src.IFNET.discovery import InterfaceProvider
 from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET.inventory import get_ifnet_manager
 from src.IP.dhcp import IP_DhcpClientProvider
+from src.IP.input import IP_handle_local_ipv4_packet
 from src.IP.static import IP_StaticIpv4Provider
 from src.RM.commands import RM_refresh_connected_routes_from_interfaces
 from .models import VVRP_RuntimeContext
@@ -52,11 +52,6 @@ class VVRP_Runtime:
             self.VVRP_static_ipv4_provider
             or DPlane_StaticIpv4Provider(self.VVRP_dplane_backend)
         )
-        self.VVRP_ethernet_frame_debug = ETHERNET_FrameDebugService(
-            ifnet_provider=self.VVRP_ifnet_provider,
-            ifnet_admin_provider=self.VVRP_ifnet_admin_provider,
-            dplane_backend=self.VVRP_dplane_backend,
-        )
         self.VVRP_packet_input = DPlane_PacketInputService(
             DPlane_ifnet_provider=self.VVRP_ifnet_provider,
             DPlane_ifnet_admin_provider=self.VVRP_ifnet_admin_provider,
@@ -66,12 +61,16 @@ class VVRP_Runtime:
     def VVRP_refresh_control_plane(self, VVRP_ctx):
         VVRP_runtime_ctx = self._VVRP_runtime_context(VVRP_ctx)
         self.VVRP_bind_state(VVRP_runtime_ctx.state)
+        VVRP_interfaces = tuple(self.VVRP_list_ifnet_interfaces(VVRP_runtime_ctx))
         VVRP_rm_table = RM_refresh_connected_routes_from_interfaces(
             VVRP_runtime_ctx,
-            lambda VVRP_current_ctx: self.VVRP_list_ifnet_interfaces(VVRP_current_ctx),
+            lambda VVRP_current_ctx: VVRP_interfaces,
         )
         if not _VVRP_is_error_result(VVRP_rm_table):
             FIB_sync_active_routes(VVRP_runtime_ctx.state, VVRP_rm_table.RM_active_routes())
+        VVRP_arp_table = VVRP_runtime_ctx.state.get(ARP_TABLE_STATE_KEY)
+        if isinstance(VVRP_arp_table, ArpTable):
+            VVRP_arp_table.sync_interface_entries(VVRP_interfaces)
         return self.VVRP_packet_input.DPlane_refresh(VVRP_runtime_ctx)
 
     def VVRP_bind_state(self, VVRP_state: dict) -> None:
@@ -98,6 +97,11 @@ class VVRP_Runtime:
             ),
             FWD_arp_table=self.VVRP_arp_table,
             FWD_debug_ctx=VVRP_runtime_ctx,
+            FWD_local_ipv4_input=lambda FWD_packet: IP_handle_local_ipv4_packet(
+                VVRP_runtime_ctx.state,
+                self.VVRP_list_ifnet_interfaces(VVRP_runtime_ctx),
+                FWD_packet,
+            ),
         )
 
     def VVRP_ethernet_port(self, VVRP_interface):
@@ -114,7 +118,6 @@ class VVRP_Runtime:
 
     def VVRP_shutdown(self) -> None:
         self.VVRP_packet_input.DPlane_stop()
-        self.VVRP_ethernet_frame_debug.stop()
 
     def _VVRP_runtime_context(self, VVRP_ctx) -> VVRP_RuntimeContext:
         if isinstance(VVRP_ctx, VVRP_RuntimeContext):

@@ -12,6 +12,8 @@ from src.RM.IM import (
     RM_IM_InterfaceAddressAdded,
     RM_IM_InterfaceChanged,
     RM_IM_InterfaceTable,
+    RM_IM_interface_table,
+    RM_IM_reconcile_from_ifnet,
     RM_IM_register_event_handlers,
 )
 from src.events import VVRP_EventBus
@@ -41,6 +43,109 @@ from src.CMD.running_config import (
 
 
 class RoutingModuleTests(unittest.TestCase):
+    def test_rm_im_table_persists_in_state_and_reconciles_snapshots(self):
+        RM_state = {}
+        RM_interface = routing_ethernet("eth4", "192.168.211.100", 24)
+
+        RM_first = RM_IM_reconcile_from_ifnet(RM_state, (RM_interface,))
+        RM_second = RM_IM_reconcile_from_ifnet(RM_state, (RM_interface,))
+
+        self.assertIs(RM_first.RM_IM_table, RM_second.RM_IM_table)
+        self.assertIs(RM_first.RM_IM_table, RM_IM_interface_table(RM_state))
+        self.assertEqual(("eth4",), tuple(RM_item.name for RM_item in RM_first.RM_IM_changed))
+        self.assertEqual((), RM_second.RM_IM_changed)
+        self.assertEqual((), RM_second.RM_IM_deleted)
+
+    def test_rm_incremental_refresh_keeps_unchanged_interface_routes(self):
+        RM_interfaces = [
+            routing_ethernet("eth4", "192.168.211.100", 24),
+            routing_ethernet("eth5", "192.168.212.100", 24),
+        ]
+        RM_ctx = CliContext(output=__import__("io").StringIO())
+
+        RM_table = RM_refresh_connected_routes_from_interfaces(
+            RM_ctx,
+            lambda RM_current_ctx: tuple(RM_interfaces),
+        )
+        RM_im_table = RM_IM_interface_table(RM_ctx.state)
+        RM_eth5_before = RM_table.RM_routes_for_interface("eth5")
+
+        RM_interfaces[0] = replace(RM_interfaces[0], is_up=False)
+        RM_refreshed_table = RM_refresh_connected_routes_from_interfaces(
+            RM_ctx,
+            lambda RM_current_ctx: tuple(RM_interfaces),
+        )
+        RM_eth5_after = RM_refreshed_table.RM_routes_for_interface("eth5")
+
+        self.assertIs(RM_table, RM_refreshed_table)
+        self.assertIs(RM_im_table, RM_IM_interface_table(RM_ctx.state))
+        self.assertEqual(len(RM_eth5_before), len(RM_eth5_after))
+        self.assertTrue(
+            all(
+                RM_before is RM_after
+                for RM_before, RM_after in zip(RM_eth5_before, RM_eth5_after)
+            )
+        )
+        self.assertTrue(
+            all(
+                not RM_route.eligible
+                for RM_route in RM_table.RM_routes_for_interface("eth4")
+            )
+        )
+
+    def test_rm_incremental_refresh_deletes_removed_interface_and_routes(self):
+        RM_interfaces = [
+            routing_ethernet("eth4", "192.168.211.100", 24),
+            routing_ethernet("eth5", "192.168.212.100", 24),
+        ]
+        RM_ctx = CliContext(output=__import__("io").StringIO())
+        RM_table = RM_refresh_connected_routes_from_interfaces(
+            RM_ctx,
+            lambda RM_current_ctx: tuple(RM_interfaces),
+        )
+
+        RM_interfaces.pop(0)
+        RM_refresh_connected_routes_from_interfaces(
+            RM_ctx,
+            lambda RM_current_ctx: tuple(RM_interfaces),
+        )
+
+        self.assertIsNone(RM_IM_interface_table(RM_ctx.state).RM_IM_get("eth4"))
+        self.assertEqual((), RM_table.RM_routes_for_interface("eth4"))
+        self.assertIsNone(RM_table.RM_lookup("192.168.211.1"))
+        self.assertIsNotNone(RM_table.RM_lookup("192.168.212.1"))
+
+    def test_rm_show_interface_does_not_consume_pending_reconcile_change(self):
+        RM_interfaces = [routing_ethernet("eth4", "192.168.211.100", 24)]
+        RM_registry = CommandRegistry()
+        RM_register_commands(
+            RM_registry,
+            RM_interfaces_provider=lambda RM_ctx: tuple(RM_interfaces),
+        )
+        RM_ctx = CliContext(output=__import__("io").StringIO())
+        RM_ctx.push_mode("hidden")
+        RM_registry.initialize_context(RM_ctx)
+        RM_table = RM_refresh_connected_routes_from_interfaces(
+            RM_ctx,
+            lambda RM_current_ctx: tuple(RM_interfaces),
+        )
+        RM_interfaces[0] = replace(RM_interfaces[0], is_up=False)
+
+        dispatch_line(RM_ctx, RM_registry, "show rm interface")
+
+        self.assertTrue(RM_IM_interface_table(RM_ctx.state).RM_IM_get("eth4").is_up)
+        RM_refresh_connected_routes_from_interfaces(
+            RM_ctx,
+            lambda RM_current_ctx: tuple(RM_interfaces),
+        )
+        self.assertFalse(RM_IM_interface_table(RM_ctx.state).RM_IM_get("eth4").is_up)
+        self.assertTrue(
+            all(
+                not RM_route.eligible
+                for RM_route in RM_table.RM_routes_for_interface("eth4")
+            )
+        )
+
     def test_rm_builds_connected_routes_from_ifnet_interfaces_without_import_state(self):
         RM_state = {}
         IP_set_interface_addresses(
@@ -344,6 +449,11 @@ class RoutingModuleTests(unittest.TestCase):
         RM_outcome = dispatch_line(RM_ctx, RM_registry, "show ip routing-table")
 
         self.assertTrue(RM_outcome.executed)
+        self.assertIn(
+            "Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface\n\n",
+            RM_outcome.message,
+        )
+        self.assertTrue(RM_outcome.message.endswith("\n"))
         RM_text = RM_output.getvalue()
         self.assertIn("Route Flags: R - relay, D - download to fib", RM_text)
         self.assertIn("Routing Tables: Public", RM_text)
@@ -490,6 +600,66 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertIn("192.168.211.0/24", RM_text)
         self.assertIn("Direct routing table status : <Inactive>", RM_text)
         self.assertIn("Destinations : 0        Routes : 0", RM_text)
+
+    def test_inactive_direct_routes_remain_visible_but_do_not_enter_fib(self):
+        RM_registry = CommandRegistry()
+        RM_interfaces = (
+            replace(
+                routing_ethernet("eth4", "192.168.211.100", 24),
+                is_up=False,
+            ),
+        )
+        RM_register_commands(
+            RM_registry,
+            RM_interfaces_provider=lambda RM_ctx: RM_interfaces,
+        )
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        RM_ctx.push_mode("hidden")
+        RM_registry.initialize_context(RM_ctx)
+        RM_table = RM_refresh_connected_routes_from_interfaces(
+            RM_ctx,
+            lambda RM_current_ctx: RM_interfaces,
+        )
+        FIB_sync_active_routes(RM_ctx.state, RM_table.RM_active_routes())
+
+        dispatch_line(RM_ctx, RM_registry, "show ip routing-table protocol direct")
+
+        RM_routes = RM_table.RM_routes_for_source("connected")
+        self.assertEqual(2, len(RM_routes))
+        self.assertTrue(all(not RM_route.eligible for RM_route in RM_routes))
+        self.assertIsNone(RM_table.RM_lookup("192.168.211.1"))
+        self.assertIsNone(FIB_table(RM_ctx.state).FIB_lookup("192.168.211.1"))
+        RM_text = RM_output.getvalue()
+        self.assertIn("Direct routing table status : <Active>", RM_text)
+        self.assertIn("Destinations : 0        Routes : 0", RM_text)
+        self.assertIn("Direct routing table status : <Inactive>", RM_text)
+        self.assertIn("Destinations : 2        Routes : 2", RM_text)
+        self.assertIn("192.168.211.0/24", RM_text)
+        self.assertIn("192.168.211.100/32", RM_text)
+
+    def test_direct_route_age_survives_control_plane_refresh(self):
+        RM_interfaces = (routing_ethernet("eth4", "192.168.211.100", 24),)
+        RM_ctx = CliContext(output=__import__("io").StringIO())
+
+        RM_first_table = RM_refresh_connected_routes_from_interfaces(
+            RM_ctx,
+            lambda RM_current_ctx: RM_interfaces,
+        )
+        RM_first_ages = {
+            str(RM_route.destination): RM_route.created_at
+            for RM_route in RM_first_table.RM_routes_for_source("connected")
+        }
+        RM_second_table = RM_refresh_connected_routes_from_interfaces(
+            RM_ctx,
+            lambda RM_current_ctx: RM_interfaces,
+        )
+        RM_second_ages = {
+            str(RM_route.destination): RM_route.created_at
+            for RM_route in RM_second_table.RM_routes_for_source("connected")
+        }
+
+        self.assertEqual(RM_first_ages, RM_second_ages)
 
     def test_show_rm_interface_displays_detail_in_hidden_mode(self):
         RM_registry = CommandRegistry()
@@ -810,6 +980,73 @@ class RoutingModuleTests(unittest.TestCase):
         self.assertIn("Interface: eth4", RM_verbose_text)
         self.assertRegex(RM_verbose_text, r"Age: \d{2}h\d{2}m\d{2}s")
 
+    def test_show_ip_routing_table_verbose_combines_direct_and_static_status(self):
+        RM_registry = CommandRegistry()
+        RM_interfaces = (routing_ethernet("eth4", "192.168.211.100", 24),)
+
+        def RM_refresh(RM_ctx):
+            RM_table = RM_refresh_connected_routes_from_interfaces(
+                RM_ctx,
+                lambda RM_current_ctx: RM_interfaces,
+            )
+            FIB_sync_active_routes(RM_ctx.state, RM_table.RM_active_routes())
+
+        RM_register_commands(
+            RM_registry,
+            RM_interfaces_provider=lambda RM_ctx: RM_interfaces,
+            RM_after_route_change=RM_refresh,
+        )
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        RM_ctx.push_mode("hidden")
+        RM_registry.initialize_context(RM_ctx)
+        RM_refresh(RM_ctx)
+        dispatch_line(RM_ctx, RM_registry, "ip route-static 3.3.3.0 24 192.168.211.1")
+        dispatch_line(RM_ctx, RM_registry, "ip route-static 2.2.2.0 24 8.8.8.8")
+
+        dispatch_line(RM_ctx, RM_registry, "show ip routing-table verbose")
+
+        RM_text = RM_output.getvalue()
+        self.assertIn("Routing Tables: Public", RM_text)
+        self.assertIn("Destinations : 4        Routes : 4", RM_text)
+        self.assertIn("Destination: 192.168.211.0/24", RM_text)
+        self.assertIn("Protocol: Direct", RM_text)
+        self.assertIn("State: Active Adv", RM_text)
+        self.assertIn("Priority: high", RM_text)
+        self.assertIn("Destination: 192.168.211.100/32", RM_text)
+        self.assertIn("State: Active NoAdv", RM_text)
+        self.assertIn("Destination: 3.3.3.0/24", RM_text)
+        self.assertIn("State: Active Adv Relied", RM_text)
+        self.assertIn("Destination: 2.2.2.0/24", RM_text)
+        self.assertIn("State: Invalid Adv", RM_text)
+        self.assertIn("Interface: Unknown", RM_text)
+
+    def test_show_ip_routing_table_verbose_displays_inactive_direct_route(self):
+        RM_registry = CommandRegistry()
+        RM_interfaces = (
+            replace(
+                routing_ethernet("eth4", "192.168.211.100", 24),
+                is_up=False,
+            ),
+        )
+        RM_register_commands(
+            RM_registry,
+            RM_interfaces_provider=lambda RM_ctx: RM_interfaces,
+        )
+        RM_output = __import__("io").StringIO()
+        RM_ctx = CliContext(output=RM_output)
+        RM_ctx.push_mode("interface", "eth4")
+        RM_registry.initialize_context(RM_ctx)
+
+        dispatch_line(RM_ctx, RM_registry, "show ip routing-table verbose")
+
+        RM_text = RM_output.getvalue()
+        self.assertIn("Destination: 192.168.211.0/24", RM_text)
+        self.assertIn("State: Inactive Adv", RM_text)
+        self.assertIn("Destination: 192.168.211.100/32", RM_text)
+        self.assertIn("State: Inactive NoAdv", RM_text)
+        self.assertNotIn("Flags:  D", RM_text)
+
     def test_show_routing_table_protocol_help_uses_literal_static_subcommands(self):
         RM_registry = CommandRegistry()
         RM_register_commands(RM_registry)
@@ -834,6 +1071,15 @@ class RoutingModuleTests(unittest.TestCase):
             ("inactive", "verbose", "<cr>"),
             tuple(RM_item.display for RM_item in RM_static),
         )
+        RM_routing_table = RM_parser.help_candidates(
+            "show ip routing-table ",
+            mode="hidden",
+            ctx=RM_ctx,
+        )
+        self.assertEqual(
+            ("protocol", "verbose", "<cr>"),
+            tuple(RM_item.display for RM_item in RM_routing_table),
+        )
 
     def test_show_ip_routing_table_family_is_available_in_interface_mode(self):
         RM_registry = CommandRegistry()
@@ -844,6 +1090,7 @@ class RoutingModuleTests(unittest.TestCase):
 
         for RM_command in (
             "show ip routing-table",
+            "show ip routing-table verbose",
             "show ip routing-table protocol direct",
             "show ip routing-table protocol static",
             "show ip routing-table protocol static inactive",

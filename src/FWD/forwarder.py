@@ -6,6 +6,7 @@ from src.FIB import FIBEntry
 from src.IFNET.models import NetworkInterface
 
 from .ethernet import FWD_EthernetOutputHandler
+from .loopback import FWD_LoopbackOutputHandler
 from .models import FWD_OutputHandler, FWD_Result
 from .null import FWD_NullOutputHandler
 
@@ -58,6 +59,7 @@ def FWD_default_forwarder(
     FWD_ethernet_port_provider=None,
     FWD_arp_table=None,
     FWD_debug_ctx=None,
+    FWD_local_ipv4_input=None,
 ) -> FWD_Forwarder:
     FWD_forwarder = FWD_Forwarder(
         FWD_state,
@@ -73,4 +75,9 @@ def FWD_default_forwarder(
         ),
     )
     FWD_forwarder.FWD_register_handler("null", FWD_NullOutputHandler())
+    if FWD_local_ipv4_input is not None:
+        FWD_forwarder.FWD_register_handler(
+            "loopback",
+            FWD_LoopbackOutputHandler(FWD_local_ipv4_input),
+        )
     return FWD_forwarder

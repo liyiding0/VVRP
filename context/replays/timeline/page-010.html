@@ -27,7 +27,7 @@
     <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
   </header>
   <main>
-    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <a href="page-009.html">9</a> <strong>10</strong></nav>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <a href="page-009.html">9</a> <strong>10</strong> <a href="page-011.html">11</a></nav>
 
             <article class="card" id="90">
               <div class="meta">
@@ -123,7 +123,239 @@
               </details>
             </article>
 
-    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <a href="page-009.html">9</a> <strong>10</strong></nav>
+            <article class="card" id="92">
+              <div class="meta">
+                <span>2026-06-30_13-51-51</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Push static routing and CLI improvements to GitHub</h2>
+              <p>Pushed commit 54b0173 to origin/main through proxy 127.0.0.1:12334 after explicit approval to publish session replay files and local paths; 297 tests passed before commit.</p>
+              <h3>Files</h3>
+              <ul><li>src</li><li>tests</li><li>context</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Include context sessions and replay artifacts in the public GitHub push with explicit user approval</li></ul>
+              <h3>Architecture</h3>
+              <p>context, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+
+            <article class="card" id="93">
+              <div class="meta">
+                <span>2026-06-30_14-00-18</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Add verbose routing-table view with inactive Direct routes</h2>
+              <p>Added show ip routing-table verbose with combined Direct and Static VRP-style records, persistent route ages, and inactive Direct candidates retained in RIB but excluded from active Radix/FIB forwarding; protocol direct now displays inactive entries too. 301 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/models.py</li><li>src/RM/rib.py</li><li>src/RM/routes.py</li><li>src/RM/commands.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Represent Direct eligibility explicitly so inactive routes remain observable without becoming forwarding routes</li><li>Generate verbose output from persistent RM state rather than synthesizing route status during display</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 39887 -&gt; 40081 bytes
+ context/replays/timeline/index.html    |   9 +-
+ context/replays/timeline/page-010.html |  20 +++
+ src/RM/commands.py                     | 276 +++++++++++++++++++++++++--------
+ src/RM/models.py                       |   5 +-
+ src/RM/rib.py                          |  50 +++++-
+ src/RM/routes.py                       |   5 +-
+ tests/test_routing.py                  | 137 ++++++++++++++++
+ 8 files changed, 429 insertions(+), 73 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="94">
+              <div class="meta">
+                <span>2026-06-30_16-51-26</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Explain RM data structures and storage ownership</h2>
+              <p>Reviewed RM interface snapshots, static configuration candidates, permanent-resolution cache, candidate RIB indexes, active ECMP indexes, IPv4 radix tree, Router ID state, runtime refresh behavior, and ownership boundaries with CMD/FIB.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Call out that production RM_IM tables are currently refresh-local even though a reserved state key exists</li></ul>
+              <h3>Architecture</h3>
+              <p>RM</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+
+            <article class="card" id="95">
+              <div class="meta">
+                <span>2026-06-30_17-19-17</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Explain current RM_IM usage</h2>
+              <p>Mapped RM_IM usage across production interface snapshot conversion, RM interface display, Direct route generation, Static route resolution, route interface attachment, and the currently test-only EventBus incremental path.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/IM</li><li>src/RM/commands.py</li><li>src/RM/routes.py</li><li>src/RM/static.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Distinguish production refresh-local RM_IM use from the not-yet-runtime-wired persistent EventBus table</li></ul>
+              <h3>Architecture</h3>
+              <p>RM</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+
+            <article class="card" id="96">
+              <div class="meta">
+                <span>2026-06-30_17-29-02</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Persist RM_IM and incrementally update Direct RIB</h2>
+              <p>RM_IM_InterfaceTable now persists in state under rm.im.interfaces, reconciles IFNET snapshots into changed/deleted sets, and updates Direct RIB entries only for affected interfaces while preserving unchanged route objects and ages. Static dependency resolution remains safe and full. 305 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/IM/table.py</li><li>src/RM/IM/__init__.py</li><li>src/RM/commands.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Make control-plane refresh the sole production writer of persistent RM_IM state</li><li>Keep show commands read-only so they cannot consume reconciliation diffs</li><li>Incrementally update Direct routes while globally re-resolving Static routes with recursive dependencies</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 39887 -&gt; 40943 bytes
+ context/replays/timeline/index.html    |  30 ++-
+ context/replays/timeline/page-010.html |  88 ++++++++
+ src/RM/IM/__init__.py                  |   6 +
+ src/RM/IM/table.py                     |  51 +++++
+ src/RM/commands.py                     | 358 ++++++++++++++++++++++++++-------
+ src/RM/models.py                       |   5 +-
+ src/RM/rib.py                          |  50 ++++-
+ src/RM/routes.py                       |   5 +-
+ tests/test_routing.py                  | 242 ++++++++++++++++++++++
+ 10 files changed, 749 insertions(+), 86 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="97">
+              <div class="meta">
+                <span>2026-06-30_17-43-40</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Fix routing-table spacing and reject local IP ARP entries</h2>
+              <p>Added blank lines after the general routing-table header and final route. ARP now rejects and removes entries whose sender IP is a VVRP local interface address while still allowing other IPs that use the same MAC; runtime refresh purges stale local-IP entries. 308 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>src/ARP/table.py</li><li>src/ARP/protocol.py</li><li>src/VVRP/runtime.py</li><li>tests/test_arp.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Enforce the local-address invariant in ARP table writes and refresh cleanup rather than filtering show output</li><li>Identify local ARP entries by local IPv4 address only, never by matching the interface MAC</li></ul>
+              <h3>Architecture</h3>
+              <p>ARP, RM, VVRP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 39887 -&gt; 41341 bytes
+ context/replays/timeline/index.html    |  37 +++-
+ context/replays/timeline/page-010.html | 118 +++++++++++
+ src/ARP/protocol.py                    |   1 +
+ src/ARP/table.py                       |  24 ++-
+ src/RM/IM/__init__.py                  |   6 +
+ src/RM/IM/table.py                     |  51 +++++
+ src/RM/commands.py                     | 360 ++++++++++++++++++++++++++-------
+ src/RM/models.py                       |   5 +-
+ src/RM/rib.py                          |  50 ++++-
+ src/RM/routes.py                       |   5 +-
+ src/VVRP/runtime.py                    |   6 +-
+ tests/test_arp.py                      |  49 +++++
+ tests/test_routing.py                  | 247 ++++++++++++++++++++++
+ 14 files changed, 870 insertions(+), 89 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="98">
+              <div class="meta">
+                <span>2026-06-30_17-52-51</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Align show arp output with VRP</h2>
+              <p>Changed show arp and its filtered variants to VRP-style two-line headers, separators, D-0/S-0 type markers, and Total/Dynamic/Static/Interface summaries while preserving colon-separated MAC addresses. Empty tables now render the full zero-count layout. 308 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/ARP/commands.py</li><li>tests/test_arp.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep interface ARP count at zero because VVRP local interface addresses are intentionally excluded from the ARP table</li></ul>
+              <h3>Architecture</h3>
+              <p>ARP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 39887 -&gt; 41744 bytes
+ context/replays/timeline/index.html    |  44 +++-
+ context/replays/timeline/page-010.html | 152 ++++++++++++++
+ src/ARP/commands.py                    |  33 ++-
+ src/ARP/protocol.py                    |   1 +
+ src/ARP/table.py                       |  24 ++-
+ src/RM/IM/__init__.py                  |   6 +
+ src/RM/IM/table.py                     |  51 +++++
+ src/RM/commands.py                     | 360 ++++++++++++++++++++++++++-------
+ src/RM/models.py                       |   5 +-
+ src/RM/rib.py                          |  50 ++++-
+ src/RM/routes.py                       |   5 +-
+ src/VVRP/runtime.py                    |   6 +-
+ tests/test_arp.py                      |  67 +++++-
+ tests/test_routing.py                  | 247 ++++++++++++++++++++++
+ 15 files changed, 952 insertions(+), 99 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="99">
+              <div class="meta">
+                <span>2026-06-30_18-06-34</span>
+                <span>main</span>
+                <span>54b0173</span>
+              </div>
+              <h2>Fix Ethernet RX debugging and move VVRP MAC ownership to ETHERNET</h2>
+              <p>Removed the independent Npcap debug listener and attached debugging to real Ethernet RX/TX paths. Configured MAC state is now owned by ETHERNET; runtime snapshots use the effective ETHERNET MAC while host MAC stays at the DPlane boundary.</p>
+              <h3>Files</h3>
+              <ul><li>src/ETHERNET/state.py</li><li>src/ETHERNET/commands.py</li><li>src/ETHERNET/debug.py</li><li>src/ETHERNET/input.py</li><li>src/ETHERNET/output.py</li><li>src/ETHERNET/__init__.py</li><li>src/ETHERNET/frame_debug.py</li><li>src/IFNET/state.py</li><li>src/IFNET/interfaces.py</li><li>src/VVRP/runtime.py</li><li>src/CMD/examples.py</li><li>tests/test_ethernet.py</li><li>tests/test_icmp.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep the debugging ethernet command family and implementation entirely in ETHERNET; CMD only registers the module commands.</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, ETHERNET, IFNET, VVRP, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 39887 -&gt; 42753 bytes
+ context/replays/timeline/index.html    |  58 +++++-
+ context/replays/timeline/page-010.html | 232 +++++++++++++++++++++
+ src/ARP/commands.py                    |  33 ++-
+ src/ARP/protocol.py                    |   1 +
+ src/ARP/table.py                       |  24 ++-
+ src/CMD/examples.py                    |   3 -
+ src/ETHERNET/__init__.py               |  12 ++
+ src/ETHERNET/commands.py               |  36 +---
+ src/ETHERNET/debug.py                  |  12 +-
+ src/ETHERNET/frame_debug.py            | 204 -------------------
+ src/IFNET/interfaces.py                |   3 +-
+ src/IFNET/state.py                     |  36 ----
+ src/RM/IM/__init__.py                  |   6 +
+ src/RM/IM/table.py                     |  51 +++++
+ src/RM/commands.py                     | 360 ++++++++++++++++++++++++++-------
+ src/RM/models.py                       |   5 +-
+ src/RM/rib.py                          |  50 ++++-
+ src/RM/routes.py                       |   5 +-
+ src/VVRP/runtime.py                    |  13 +-
+ tests/test_arp.py                      |  67 +++++-
+ tests/test_core.py                     |   7 +-
+ tests/test_ethernet.py                 | 187 +++--------------
+ tests/test_icmp.py                     |   4 +-
+ tests/test_routing.py                  | 247 ++++++++++++++++++++++
+ 25 files changed, 1108 insertions(+), 548 deletions(-)</pre>
+              </details>
+            </article>
+
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <a href="page-009.html">9</a> <strong>10</strong> <a href="page-011.html">11</a></nav>
   </main>
 </body>
 </html>

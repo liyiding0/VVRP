@@ -109,8 +109,59 @@ class ArpTableTests(unittest.TestCase):
         self.assertIsNone(entry)
         self.assertEqual((), table.entries(now=100))
 
+    def test_ignores_unsynced_local_ip_but_allows_local_mac_for_other_ip(self):
+        table = ArpTable(default_age_seconds=30)
+
+        local_ip = table.learn(
+            "10.0.0.1",
+            "66:77:88:99:aa:bb",
+            "eth2",
+            now=100,
+            local_ip_addresses=("10.0.0.1",),
+        )
+        shared_mac = table.learn(
+            "10.0.0.2",
+            "00:11:22:33:44:55",
+            "eth2",
+            now=100,
+            local_ip_addresses=("10.0.0.1",),
+        )
+
+        self.assertIsNone(local_ip)
+        self.assertIsNotNone(shared_mac)
+        self.assertEqual(
+            "00:11:22:33:44:55",
+            table.lookup("10.0.0.2", "eth2", now=100).mac_address,
+        )
+
+    def test_sync_replaces_existing_dynamic_entry_when_ip_becomes_local(self):
+        table = ArpTable(default_age_seconds=30)
+        table.learn("10.0.0.1", "66:77:88:99:aa:bb", "eth2", now=100)
+
+        table.sync_interface_entries((fake_interface(),))
+        entry = table.lookup("10.0.0.1", "eth2", now=100)
+
+        self.assertIsNotNone(entry)
+        self.assertEqual("interface", entry.entry_type)
+        self.assertEqual("00:11:22:33:44:55", entry.mac_address)
+
 
 class ArpProtocolTests(unittest.TestCase):
+    def test_does_not_learn_packet_claiming_local_interface_ip(self):
+        protocol = ArpProtocol()
+        packet = ArpPacket(
+            operation=ARP_REQUEST,
+            sender_mac="66:77:88:99:aa:bb",
+            sender_ip="10.0.0.1",
+            target_mac=ZERO_MAC,
+            target_ip="10.0.0.99",
+        )
+
+        learned = protocol.learn(fake_interface(), packet, now=100)
+
+        self.assertIsNone(learned)
+        self.assertEqual((), protocol.table.entries(now=100))
+
     def test_build_request_uses_broadcast_ethernet_frame(self):
         protocol = ArpProtocol()
 
@@ -215,11 +266,50 @@ class ArpCommandTests(unittest.TestCase):
 
         self.assertIn("IP ADDRESS", text)
         self.assertIn("MAC ADDRESS", text)
+        self.assertIn("VPN-INSTANCE", text)
+        self.assertIn("VLAN/CEVLAN PVC", text)
         self.assertIn("10.0.0.2", text)
         self.assertIn("66:77:88:99:aa:bb", text)
-        self.assertIn("dynamic", text)
+        self.assertIn("D-0", text)
         self.assertIn("10.0.0.3", text)
-        self.assertIn("static", text)
+        self.assertIn("S-0", text)
+        self.assertIn("Total:2", text)
+        self.assertIn("Dynamic:1", text)
+        self.assertIn("Static:1", text)
+        self.assertIn("Interface:0", text)
+        self.assertEqual(2, text.count("------------------------------------------------------------------------------"))
+
+    def test_show_arp_displays_runtime_interface_entry(self):
+        table = ArpTable(default_age_seconds=1200)
+        table.sync_interface_entries((fake_interface(),))
+        registry = build_default_registry(arp_table=table)
+        output = io.StringIO()
+        ctx = CliContext(output=output)
+
+        self.assertTrue(dispatch_line(ctx, registry, "show arp").executed)
+        text = output.getvalue()
+
+        self.assertIn("10.0.0.1", text)
+        self.assertIn("00:11:22:33:44:55", text)
+        self.assertIn("I -", text)
+        self.assertIn("Interface:1", text)
+        self.assertIn("Dynamic:0", text)
+
+    def test_dynamic_learning_does_not_replace_interface_entry(self):
+        table = ArpTable()
+        interface = fake_interface()
+        table.sync_interface_entries((interface,))
+
+        learned = table.learn(
+            "10.0.0.1",
+            "66:77:88:99:aa:bb",
+            "eth2",
+            local_ip_addresses=("10.0.0.1",),
+        )
+
+        self.assertIsNotNone(learned)
+        self.assertEqual("interface", learned.entry_type)
+        self.assertEqual("00:11:22:33:44:55", learned.mac_address)
 
     def test_show_arp_filters_by_type_interface_and_ip(self):
         table = ArpTable(default_age_seconds=1200)
@@ -257,7 +347,12 @@ class ArpCommandTests(unittest.TestCase):
         ctx = CliContext(output=output)
 
         self.assertTrue(dispatch_line(ctx, registry, "show arp").executed)
-        self.assertEqual("ARP entry not found\n", output.getvalue())
+        empty_text = output.getvalue()
+        self.assertIn("IP ADDRESS", empty_text)
+        self.assertIn("Total:0", empty_text)
+        self.assertIn("Dynamic:0", empty_text)
+        self.assertIn("Static:0", empty_text)
+        self.assertIn("Interface:0", empty_text)
 
         outcome = dispatch_line(ctx, registry, "show arp 999.0.0.1")
         self.assertTrue(outcome.executed)

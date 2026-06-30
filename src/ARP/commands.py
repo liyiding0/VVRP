@@ -91,29 +91,51 @@ def _arp_table(ctx, table: ArpTable | None) -> ArpTable:
 
 
 def _format_arp_entries(entries: tuple[ArpEntry, ...]) -> str:
-    if not entries:
-        return "ARP entry not found"
-
     now = time.time()
+    separator = "------------------------------------------------------------------------------"
     lines = [
-        "IP ADDRESS      MAC ADDRESS        EXPIRE(M) TYPE        INTERFACE",
+        "IP ADDRESS      MAC ADDRESS        EXPIRE(M) TYPE        INTERFACE   VPN-INSTANCE",
+        "                                           VLAN/CEVLAN PVC",
+        separator,
     ]
     for entry in entries:
         lines.append(
             f"{entry.ip_address:<15} "
             f"{entry.mac_address:<18} "
-            f"{_display_expire_minutes(entry, now):>9} "
-            f"{entry.entry_type:<11} "
+            f"{_display_expire_minutes(entry, now):<9} "
+            f"{_display_arp_type(entry):<11} "
             f"{entry.interface_name}"
         )
+    dynamic_count = sum(entry.entry_type == "dynamic" for entry in entries)
+    static_count = sum(entry.entry_type == "static" for entry in entries)
+    interface_count = sum(entry.entry_type == "interface" for entry in entries)
+    lines.extend(
+        (
+            separator,
+            (
+                f"Total:{len(entries)}"
+                f"{'':<9} Dynamic:{dynamic_count}"
+                f"{'':<7} Static:{static_count}"
+                f"{'':<5} Interface:{interface_count}"
+            ),
+        )
+    )
     return "\n".join(lines)
 
 
 def _display_expire_minutes(entry: ArpEntry, now: float) -> str:
-    if entry.entry_type == "static":
-        return "-"
+    if entry.entry_type in {"static", "interface"}:
+        return ""
     remaining = max(0, int((entry.updated_at + entry.age_seconds - now) / 60))
     return str(remaining)
+
+
+def _display_arp_type(entry: ArpEntry) -> str:
+    if entry.entry_type == "dynamic":
+        return "D-0"
+    if entry.entry_type == "interface":
+        return "I -"
+    return "S-0"
 
 
 def _normalize_ipv4_address(value: str) -> str | None:

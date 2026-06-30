@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
 from src.CMD.models import CliContext, CommandResult
 from src.CMD.registry import CommandRegistry
@@ -13,11 +13,10 @@ from src.IFNET.models import NetworkInterface
 from src.IFNET.state import (
     IFNET_remove_interface_mtu,
     IFNET_set_interface_mtu,
-    remove_interface_mac_address,
-    set_interface_mac_address,
 )
 
 from .debug import is_ethernet_frame_brief_debug_enabled, set_ethernet_frame_brief_debug
+from .state import ETHERNET_remove_interface_mac_address, ETHERNET_set_interface_mac_address
 
 
 ETHERNET_DEBUG_MODES = ("privileged", "config", "hidden")
@@ -31,9 +30,6 @@ def register_ethernet_commands(
     modes: Sequence[str] = ETHERNET_DEBUG_MODES,
     ifnet_provider: InterfaceProvider | None = None,
     ifnet_admin_provider: InterfaceAdminProvider | None = None,
-    frame_debug_start: Callable[[CliContext], str] | None = None,
-    frame_debug_stop: Callable[[], str] | None = None,
-    frame_debug_status: Callable[[], str] | None = None,
 ) -> None:
     @registry.command(
         f"mac-address <mac_address:{MAC_ADDRESS_PATTERN}>",
@@ -58,7 +54,7 @@ def register_ethernet_commands(
         validation_error = _validate_configured_mac_address(normalized, device_interface)
         if validation_error:
             return CommandResult(ok=False, message=validation_error)
-        set_interface_mac_address(ctx.state, vvrp_interface.name, normalized)
+        ETHERNET_set_interface_mac_address(ctx.state, vvrp_interface.name, normalized)
         config_error = set_interface_config_command(
             ctx,
             vvrp_interface.name,
@@ -76,7 +72,7 @@ def register_ethernet_commands(
         interface = _current_vvrp_interface(ctx, ifnet_provider, ifnet_admin_provider)
         if isinstance(interface, CommandResult):
             return interface
-        remove_interface_mac_address(ctx.state, interface.name)
+        ETHERNET_remove_interface_mac_address(ctx.state, interface.name)
         config_error = remove_interface_config_command(ctx, interface.name, "mac-address")
         return CommandResult(ok=not config_error, message=config_error)
 
@@ -127,9 +123,6 @@ def register_ethernet_commands(
     )
     def debugging_ethernet_frame_brief(ctx, args):
         set_ethernet_frame_brief_debug(ctx, True)
-        detail = _call_frame_debug_start(ctx, frame_debug_start)
-        if detail:
-            return CommandResult(message=f"Ethernet frame brief debugging is on ({detail})")
         return CommandResult(message="Ethernet frame brief debugging is on")
 
     @registry.command(
@@ -139,9 +132,6 @@ def register_ethernet_commands(
     )
     def no_debugging_ethernet_frame_brief(ctx, args):
         set_ethernet_frame_brief_debug(ctx, False)
-        detail = _call_frame_debug_stop(frame_debug_stop)
-        if detail:
-            return CommandResult(message=f"Ethernet frame brief debugging is off ({detail})")
         return CommandResult(message="Ethernet frame brief debugging is off")
 
     @registry.command(
@@ -151,25 +141,7 @@ def register_ethernet_commands(
     )
     def show_debugging_ethernet(ctx, args):
         state = "on" if is_ethernet_frame_brief_debug_enabled(ctx) else "off"
-        detail = frame_debug_status() if frame_debug_status is not None else ""
-        if detail:
-            return CommandResult(message=f"Ethernet frame brief debugging is {state} ({detail})")
         return CommandResult(message=f"Ethernet frame brief debugging is {state}")
-
-
-def _call_frame_debug_start(ctx: CliContext, callback: Callable[[CliContext], str] | None) -> str:
-    if callback is None:
-        return ""
-    try:
-        return callback(ctx)
-    except RuntimeError as exc:
-        return f"listener start failed: {exc}"
-
-
-def _call_frame_debug_stop(callback: Callable[[], str] | None) -> str:
-    if callback is None:
-        return ""
-    return callback()
 
 
 def _current_vvrp_interface(

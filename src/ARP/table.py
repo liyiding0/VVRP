@@ -10,7 +10,7 @@ from src.ETHERNET import format_mac_address, parse_mac_address
 
 
 DEFAULT_ARP_AGE_SECONDS = 20 * 60
-ArpEntryType = Literal["dynamic", "static"]
+ArpEntryType = Literal["dynamic", "static", "interface"]
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class ArpEntry:
     age_seconds: int = DEFAULT_ARP_AGE_SECONDS
 
     def is_expired(self, now: float) -> bool:
-        if self.entry_type == "static":
+        if self.entry_type in {"static", "interface"}:
             return False
         return now - self.updated_at >= self.age_seconds
 
@@ -50,13 +50,18 @@ class ArpTable:
         interface_name: str,
         now: float | None = None,
         entry_type: ArpEntryType = "dynamic",
+        local_ip_addresses: tuple[str, ...] = (),
     ) -> ArpEntry | None:
         if _should_ignore_arp_ip(ip_address):
             return None
+        normalized_ip = str(ipaddress.IPv4Address(ip_address))
+        normalized_mac = format_mac_address(parse_mac_address(mac_address))
+        if normalized_ip in local_ip_addresses:
+            return self._entries.get((str(interface_name), normalized_ip))
         timestamp = time.time() if now is None else float(now)
         entry = ArpEntry(
-            ip_address=str(ip_address),
-            mac_address=format_mac_address(parse_mac_address(mac_address)),
+            ip_address=normalized_ip,
+            mac_address=normalized_mac,
             interface_name=str(interface_name),
             entry_type=entry_type,
             updated_at=timestamp,
@@ -100,6 +105,29 @@ class ArpTable:
 
     def clear(self) -> None:
         self._entries.clear()
+
+    def sync_interface_entries(self, interfaces: tuple) -> None:
+        desired: dict[tuple[str, str], tuple[str, str, str]] = {}
+        for interface in interfaces:
+            if interface.kind != "ethernet" or not interface.mac_address:
+                continue
+            for address in interface.addresses_by_family("ipv4"):
+                normalized_ip = str(ipaddress.IPv4Address(address.address))
+                desired[(interface.name, normalized_ip)] = (
+                    normalized_ip,
+                    format_mac_address(parse_mac_address(interface.mac_address)),
+                    interface.name,
+                )
+        for key, entry in tuple(self._entries.items()):
+            if entry.entry_type == "interface" and key not in desired:
+                self._entries.pop(key)
+        for key, (ip_address, mac_address, interface_name) in desired.items():
+            self._entries[key] = ArpEntry(
+                ip_address=ip_address,
+                mac_address=mac_address,
+                interface_name=interface_name,
+                entry_type="interface",
+            )
 
 
 def _should_ignore_arp_ip(ip_address: str) -> bool:

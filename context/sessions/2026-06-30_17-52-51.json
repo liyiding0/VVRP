@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-30_17-52-51",
+  "prompt": "Align show arp output with VRP",
+  "changed_files": [
+    "src/ARP/commands.py",
+    "tests/test_arp.py"
+  ],
+  "note": "Changed show arp and its filtered variants to VRP-style two-line headers, separators, D-0/S-0 type markers, and Total/Dynamic/Static/Interface summaries while preserving colon-separated MAC addresses. Empty tables now render the full zero-count layout. 308 tests pass.",
+  "decisions": [
+    "Keep interface ARP count at zero because VVRP local interface addresses are intentionally excluded from the ARP table"
+  ],
+  "codex_output": "",
+  "git_commit": "54b0173dea0cf1785dc7ce6405bc79d4a0402b5b",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-010.html",
+    "src/ARP/commands.py",
+    "src/ARP/protocol.py",
+    "src/ARP/table.py",
+    "src/RM/IM/__init__.py",
+    "src/RM/IM/table.py",
+    "src/RM/commands.py",
+    "src/RM/models.py",
+    "src/RM/rib.py",
+    "src/RM/routes.py",
+    "src/VVRP/runtime.py",
+    "tests/test_arp.py",
+    "tests/test_routing.py",
+    "context/commits/54b0173dea0c.json",
+    "context/sessions/2026-06-30_13-51-51.json",
+    "context/sessions/2026-06-30_14-00-18.json",
+    "context/sessions/2026-06-30_16-51-26.json",
+    "context/sessions/2026-06-30_17-19-17.json",
+    "context/sessions/2026-06-30_17-29-02.json",
+    "context/sessions/2026-06-30_17-43-40.json"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 39887 -> 41744 bytes\n context/replays/timeline/index.html    |  44 +++-\n context/replays/timeline/page-010.html | 152 ++++++++++++++\n src/ARP/commands.py                    |  33 ++-\n src/ARP/protocol.py                    |   1 +\n src/ARP/table.py                       |  24 ++-\n src/RM/IM/__init__.py                  |   6 +\n src/RM/IM/table.py                     |  51 +++++\n src/RM/commands.py                     | 360 ++++++++++++++++++++++++++-------\n src/RM/models.py                       |   5 +-\n src/RM/rib.py                          |  50 ++++-\n src/RM/routes.py                       |   5 +-\n src/VVRP/runtime.py                    |   6 +-\n tests/test_arp.py                      |  67 +++++-\n tests/test_routing.py                  | 247 ++++++++++++++++++++++\n 15 files changed, 952 insertions(+), 99 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex d96010d..a3209d6 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 6f22b15..bbcd412 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>92 events, split into 10 page(s).</p>\n+    <p>98 events, split into 10 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -668,6 +668,48 @@\n               <td>5d5a587</td>\n               <td>main</td>\n             </tr>\n+\n+            <tr>\n+              <td>2026-06-30_13-51-51</td>\n+              <td><a href=\"page-010.html#92\">Push static routing and CLI improvements to GitHub</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_14-00-18</td>\n+              <td><a href=\"page-010.html#93\">Add verbose routing-table view with inactive Direct routes</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_16-51-26</td>\n+              <td><a href=\"page-010.html#94\">Explain RM data structures and storage ownership</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_17-19-17</td>\n+              <td><a href=\"page-010.html#95\">Explain current RM_IM usage</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_17-29-02</td>\n+              <td><a href=\"page-010.html#96\">Persist RM_IM and incrementally update Direct RIB</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_17-43-40</td>\n+              <td><a href=\"page-010.html#97\">Fix routing-table spacing and reject local IP ARP entries</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-010.html b/context/replays/timeline/page-010.html\nindex 4201dc9..51ef88c 100644\n--- a/context/replays/timeline/page-010.html\n+++ b/context/replays/timeline/page-010.html\n@@ -123,6 +123,158 @@\n               </details>\n             </article>\n \n+            <article class=\"card\" id=\"92\">\n+              <div class=\"meta\">\n+                <span>2026-06-30_13-51-51</span>\n+                <span>main</span>\n+                <span>54b0173</span>\n+              </div>\n+              <h2>Push static routing and CLI improvements to GitHub</h2>\n... truncated 1427 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "ARP",
+      "tests"
+    ]
+  }
+}

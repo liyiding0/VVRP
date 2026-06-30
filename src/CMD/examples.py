@@ -127,9 +127,6 @@ def build_default_registry(
         modes=("privileged", "config", "hidden"),
         ifnet_provider=active_runtime.VVRP_ifnet_provider,
         ifnet_admin_provider=active_runtime.VVRP_ifnet_admin_provider,
-        frame_debug_start=active_runtime.VVRP_ethernet_frame_debug.start,
-        frame_debug_stop=active_runtime.VVRP_ethernet_frame_debug.stop,
-        frame_debug_status=active_runtime.VVRP_ethernet_frame_debug.status,
     )
 
     @registry.command(

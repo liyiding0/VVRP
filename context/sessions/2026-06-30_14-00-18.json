@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-30_14-00-18",
+  "prompt": "Add verbose routing-table view with inactive Direct routes",
+  "changed_files": [
+    "src/RM/models.py",
+    "src/RM/rib.py",
+    "src/RM/routes.py",
+    "src/RM/commands.py",
+    "tests/test_routing.py"
+  ],
+  "note": "Added show ip routing-table verbose with combined Direct and Static VRP-style records, persistent route ages, and inactive Direct candidates retained in RIB but excluded from active Radix/FIB forwarding; protocol direct now displays inactive entries too. 301 tests pass.",
+  "decisions": [
+    "Represent Direct eligibility explicitly so inactive routes remain observable without becoming forwarding routes",
+    "Generate verbose output from persistent RM state rather than synthesizing route status during display"
+  ],
+  "codex_output": "",
+  "git_commit": "54b0173dea0cf1785dc7ce6405bc79d4a0402b5b",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-010.html",
+    "src/RM/commands.py",
+    "src/RM/models.py",
+    "src/RM/rib.py",
+    "src/RM/routes.py",
+    "tests/test_routing.py",
+    "context/commits/54b0173dea0c.json",
+    "context/sessions/2026-06-30_13-51-51.json"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 39887 -> 40081 bytes\n context/replays/timeline/index.html    |   9 +-\n context/replays/timeline/page-010.html |  20 +++\n src/RM/commands.py                     | 276 +++++++++++++++++++++++++--------\n src/RM/models.py                       |   5 +-\n src/RM/rib.py                          |  50 +++++-\n src/RM/routes.py                       |   5 +-\n tests/test_routing.py                  | 137 ++++++++++++++++\n 8 files changed, 429 insertions(+), 73 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex d96010d..edd480c 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 6f22b15..4d2b5c6 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>92 events, split into 10 page(s).</p>\n+    <p>93 events, split into 10 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -668,6 +668,13 @@\n               <td>5d5a587</td>\n               <td>main</td>\n             </tr>\n+\n+            <tr>\n+              <td>2026-06-30_13-51-51</td>\n+              <td><a href=\"page-010.html#92\">Push static routing and CLI improvements to GitHub</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-010.html b/context/replays/timeline/page-010.html\nindex 4201dc9..f81e971 100644\n--- a/context/replays/timeline/page-010.html\n+++ b/context/replays/timeline/page-010.html\n@@ -123,6 +123,26 @@\n               </details>\n             </article>\n \n+            <article class=\"card\" id=\"92\">\n+              <div class=\"meta\">\n+                <span>2026-06-30_13-51-51</span>\n+                <span>main</span>\n+                <span>54b0173</span>\n+              </div>\n+              <h2>Push static routing and CLI improvements to GitHub</h2>\n+              <p>Pushed commit 54b0173 to origin/main through proxy 127.0.0.1:12334 after explicit approval to publish session replay files and local paths; 297 tests passed before commit.</p>\n+              <h3>Files</h3>\n+              <ul><li>src</li><li>tests</li><li>context</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>Include context sessions and replay artifacts in the public GitHub push with explicit user approval</li></ul>\n+              <h3>Architecture</h3>\n+              <p>context, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre></pre>\n+              </details>\n+            </article>\n+\n     <nav><a href=\"page-001.html\">1</a> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a> <a href=\"page-007.html\">7</a> <a href=\"page-008.html\">8</a> <a href=\"page-009.html\">9</a> <strong>10</strong></nav>\n   </main>\n </body>\ndiff --git a/src/RM/commands.py b/src/RM/commands.py\nindex 2719dc3..8d380c5 100644\n--- a/src/RM/commands.py\n+++ b/src/RM/commands.py\n@@ -235,6 +235,22 @@ def RM_register_commands(\n             return RM_table\n         return CommandResult(message=RM_format_ip_routing_table(RM_table.RM_active_routes()))\n \n+    @RM_registry.command(\n+        \"show ip routing-table verbose\",\n+        help_text=\"Show verbose information of routing table\",\n+        modes=RM_ALL_SHOW_MODES,\n+    )\n+    def RM_show_ip_routing_table_verbose(RM_ctx, RM_args):\n+        RM_table = RM_get_route_table(\n+            RM_ctx,\n+            RM_interfaces_provider,\n+        )\n+        if isinstance(RM_table, CommandResult):\n... truncated 656 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "RM",
+      "tests"
+    ]
+  }
+}

@@ -8,6 +8,7 @@ from .frame import ETHERTYPE_ARP, ETHERTYPE_IPV4, ETHERTYPE_IPV6, EthernetFrame
 
 
 ETHERNET_FRAME_BRIEF_DEBUG_STATE_KEY = "ethernet.debug.frame_brief"
+g_ETHERNET_FRAME_DEBUG_OUTPUT_STATE_KEY = "ethernet.debug.output"
 EthernetFrameDirection = Literal["rx", "tx"]
 
 
@@ -17,6 +18,10 @@ def is_ethernet_frame_brief_debug_enabled(ctx: VVRP_RuntimeContext) -> bool:
 
 def set_ethernet_frame_brief_debug(ctx: VVRP_RuntimeContext, enabled: bool) -> None:
     ctx.state[ETHERNET_FRAME_BRIEF_DEBUG_STATE_KEY] = bool(enabled)
+    if enabled:
+        ctx.state[g_ETHERNET_FRAME_DEBUG_OUTPUT_STATE_KEY] = ctx.output
+    else:
+        ctx.state.pop(g_ETHERNET_FRAME_DEBUG_OUTPUT_STATE_KEY, None)
 
 
 def debug_ethernet_frame(
@@ -27,7 +32,12 @@ def debug_ethernet_frame(
 ) -> None:
     if not is_ethernet_frame_brief_debug_enabled(ctx):
         return
-    ctx.write(format_ethernet_frame_brief(interface_name, direction, frame))
+    ETHERNET_message = format_ethernet_frame_brief(interface_name, direction, frame)
+    ETHERNET_output = ctx.state.get(g_ETHERNET_FRAME_DEBUG_OUTPUT_STATE_KEY)
+    if ETHERNET_output is None:
+        ctx.write(ETHERNET_message)
+        return
+    print(ETHERNET_message, file=ETHERNET_output)
 
 
 def format_ethernet_frame_brief(

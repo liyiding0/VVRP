@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-30_17-29-02",
+  "prompt": "Persist RM_IM and incrementally update Direct RIB",
+  "changed_files": [
+    "src/RM/IM/table.py",
+    "src/RM/IM/__init__.py",
+    "src/RM/commands.py",
+    "tests/test_routing.py"
+  ],
+  "note": "RM_IM_InterfaceTable now persists in state under rm.im.interfaces, reconciles IFNET snapshots into changed/deleted sets, and updates Direct RIB entries only for affected interfaces while preserving unchanged route objects and ages. Static dependency resolution remains safe and full. 305 tests pass.",
+  "decisions": [
+    "Make control-plane refresh the sole production writer of persistent RM_IM state",
+    "Keep show commands read-only so they cannot consume reconciliation diffs",
+    "Incrementally update Direct routes while globally re-resolving Static routes with recursive dependencies"
+  ],
+  "codex_output": "",
+  "git_commit": "54b0173dea0cf1785dc7ce6405bc79d4a0402b5b",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-010.html",
+    "src/RM/IM/__init__.py",
+    "src/RM/IM/table.py",
+    "src/RM/commands.py",
+    "src/RM/models.py",
+    "src/RM/rib.py",
+    "src/RM/routes.py",
+    "tests/test_routing.py",
+    "context/commits/54b0173dea0c.json",
+    "context/sessions/2026-06-30_13-51-51.json",
+    "context/sessions/2026-06-30_14-00-18.json",
+    "context/sessions/2026-06-30_16-51-26.json",
+    "context/sessions/2026-06-30_17-19-17.json"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 39887 -> 40943 bytes\n context/replays/timeline/index.html    |  30 ++-\n context/replays/timeline/page-010.html |  88 ++++++++\n src/RM/IM/__init__.py                  |   6 +\n src/RM/IM/table.py                     |  51 +++++\n src/RM/commands.py                     | 358 ++++++++++++++++++++++++++-------\n src/RM/models.py                       |   5 +-\n src/RM/rib.py                          |  50 ++++-\n src/RM/routes.py                       |   5 +-\n tests/test_routing.py                  | 242 ++++++++++++++++++++++\n 10 files changed, 749 insertions(+), 86 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex d96010d..4eeaadc 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 6f22b15..e66aa44 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>92 events, split into 10 page(s).</p>\n+    <p>96 events, split into 10 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -668,6 +668,34 @@\n               <td>5d5a587</td>\n               <td>main</td>\n             </tr>\n+\n+            <tr>\n+              <td>2026-06-30_13-51-51</td>\n+              <td><a href=\"page-010.html#92\">Push static routing and CLI improvements to GitHub</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_14-00-18</td>\n+              <td><a href=\"page-010.html#93\">Add verbose routing-table view with inactive Direct routes</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_16-51-26</td>\n+              <td><a href=\"page-010.html#94\">Explain RM data structures and storage ownership</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_17-19-17</td>\n+              <td><a href=\"page-010.html#95\">Explain current RM_IM usage</a></td>\n+              <td>54b0173</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-010.html b/context/replays/timeline/page-010.html\nindex 4201dc9..c9f8e94 100644\n--- a/context/replays/timeline/page-010.html\n+++ b/context/replays/timeline/page-010.html\n@@ -123,6 +123,94 @@\n               </details>\n             </article>\n \n+            <article class=\"card\" id=\"92\">\n+              <div class=\"meta\">\n+                <span>2026-06-30_13-51-51</span>\n+                <span>main</span>\n+                <span>54b0173</span>\n+              </div>\n+              <h2>Push static routing and CLI improvements to GitHub</h2>\n+              <p>Pushed commit 54b0173 to origin/main through proxy 127.0.0.1:12334 after explicit approval to publish session replay files and local paths; 297 tests passed before commit.</p>\n+              <h3>Files</h3>\n+              <ul><li>src</li><li>tests</li><li>context</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>Include context sessions and replay artifacts in the public GitHub push with explicit user approval</li></ul>\n+              <h3>Architecture</h3>\n+              <p>context, tests</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre></pre>\n+              </details>\n+            </article>\n+\n+            <article class=\"card\" id=\"93\">\n... truncated 1081 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "RM",
+      "tests"
+    ]
+  }
+}

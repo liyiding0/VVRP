@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import time
 import unittest
 from ipaddress import IPv4Network
 
@@ -26,13 +25,11 @@ from src.ETHERNET import (
 from src.CMD import CliContext, CommandParser, CommandRegistry, ParseStatus, dispatch_line
 from src.CMD.examples import build_default_registry
 from src.ARP import ARP_REPLY, ARP_REQUEST, ArpPacket, get_arp_table
-from src.DPlane import DPlane_PlatformInfo, DPlane_Result
 from src.ETHERNET.adjacency import ETHERNET_resolve_adjacency
-from src.ETHERNET.frame_debug import ETHERNET_FrameDebugService
-from src.DPlane.Windows.npcap import NpcapDevice
 from src.ETHERNET.device import ETHERNET_commit_device_changes, ETHERNET_stage_device_install
+from src.ETHERNET.state import ETHERNET_set_interface_mac_address
 from src.FIB import FIBEntry
-from src.IFNET.state import set_interface_mac_address
+from src.IFNET.interfaces import IFNET_ethernet_interface_snapshots
 from src.IFNET import InterfaceAddress, NetworkInterface
 from src.IP.ipv4 import IP_build_ipv4_packet
 
@@ -80,54 +77,6 @@ def fake_interface() -> NetworkInterface:
 class FakeInterfaceProvider:
     def list_interfaces(self) -> tuple[NetworkInterface, ...]:
         return (fake_interface(),)
-
-
-class FakeNpcapLibrary:
-    def list_devices(self) -> tuple[NpcapDevice, ...]:
-        return (
-            NpcapDevice(
-                name=r"\Device\NPF_{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
-                description="eth4",
-            ),
-        )
-
-
-class FakeDPlaneBackend:
-    def DPlane_list_packet_devices(self) -> tuple[NpcapDevice, ...]:
-        return FakeNpcapLibrary().list_devices()
-
-    @property
-    def DPlane_platform(self):
-        return DPlane_PlatformInfo(kind="windows", system="Windows")
-
-    def DPlane_list_host_interfaces(self):
-        return ()
-
-    def DPlane_find_packet_device(self, DPlane_interface, DPlane_devices=None):
-        for DPlane_device in tuple(DPlane_devices or self.DPlane_list_packet_devices()):
-            if DPlane_interface.name in (DPlane_device.name, DPlane_device.description):
-                return DPlane_device
-        return None
-
-    def DPlane_open_packet_port(self, DPlane_device):
-        raise RuntimeError("FakeDPlaneBackend does not provide packet ports")
-
-    def DPlane_set_interface_enabled(self, DPlane_interface, DPlane_enabled):
-        return DPlane_Result(ok=True)
-
-    def DPlane_install_forwarding_entry(self, DPlane_entry):
-        return DPlane_Result(ok=True)
-
-    def DPlane_delete_forwarding_entry(self, DPlane_entry):
-        return DPlane_Result(ok=True)
-
-
-class DebugPacketPort(FakePacketPort):
-    def recv_frame(self) -> bytes | None:
-        frame = super().recv_frame()
-        if frame is None:
-            time.sleep(0.01)
-        return frame
 
 
 class EthernetAdjacencyTests(unittest.TestCase):
@@ -296,72 +245,30 @@ class EthernetDebugTests(unittest.TestCase):
         self.assertTrue(dispatch_line(ctx, registry, "show debugging ethernet").executed)
         self.assertIn("off", output.getvalue())
 
-    def test_debugging_ethernet_command_starts_dplane_listener(self):
-        arp = ArpPacket(
-            operation=ARP_REPLY,
-            sender_mac="66:77:88:99:aa:bb",
-            sender_ip="10.0.0.2",
-            target_mac="00:11:22:33:44:55",
-            target_ip="10.0.0.1",
-        )
+    def test_main_ethernet_input_writes_rx_to_current_debug_output(self):
+        from src.ETHERNET.input import ETHERNET_InputHandler
+
+        stale_output = io.StringIO()
+        current_output = io.StringIO()
+        ctx = CliContext(output=current_output)
+        registry = CommandRegistry()
+        register_ethernet_commands(registry)
+        ctx.push_mode("privileged")
+        self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)
+        runtime_ctx = CliContext(state=ctx.state, output=stale_output)
         raw = build_ethernet_ii_frame(
             destination="00:11:22:33:44:55",
             source="66:77:88:99:aa:bb",
-            ethertype=ETHERTYPE_ARP,
-            payload=arp.to_bytes(),
+            ethertype=ETHERTYPE_IPV4,
+            payload=b"not-an-ip-packet",
         )
-        ports: list[DebugPacketPort] = []
-
-        def port_factory(device):
-            port = DebugPacketPort(frames=(raw,))
-            ports.append(port)
-            return port
-
-        service = ETHERNET_FrameDebugService(
-            ifnet_provider=FakeInterfaceProvider(),
-            dplane_backend=FakeDPlaneBackend(),
-            port_factory=port_factory,
-            packet_filter="ether proto 0x0806",
+        ETHERNET_InputHandler(runtime_ctx, lambda frame: None).ETHERNET_handle_frame(
+            fake_interface(),
+            raw,
         )
-        registry = CommandRegistry()
-        register_ethernet_commands(
-            registry,
-            frame_debug_start=service.start,
-            frame_debug_stop=service.stop,
-            frame_debug_status=service.status,
-        )
-        output = io.StringIO()
-        ctx = CliContext(output=output)
-        ctx.push_mode("privileged")
-        ETHERNET_stage_device_install(ctx.state, "eth4")
-        ETHERNET_commit_device_changes(ctx.state)
 
-        self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)
-
-        deadline = time.time() + 1
-        while "ETHERNET/FRAME: eth4 RX" not in output.getvalue() and time.time() < deadline:
-            time.sleep(0.01)
-
-        self.assertIn("1 listener(s) running", output.getvalue())
-        self.assertIn("ETHERNET/FRAME: eth4 RX", output.getvalue())
-        self.assertEqual(["ether proto 0x0806"], ports[0].filters)
-        learned = get_arp_table(ctx.state).lookup("10.0.0.2", "eth4")
-        self.assertIsNotNone(learned)
-        self.assertEqual("66:77:88:99:aa:bb", learned.mac_address)
-
-        self.assertTrue(dispatch_line(ctx, registry, "no debugging ethernet frame brief").executed)
-
-        output.truncate(0)
-        output.seek(0)
-        self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)
-        self.assertTrue(is_ethernet_frame_brief_debug_enabled(ctx))
-        self.assertIn("on", output.getvalue())
-
-        output.truncate(0)
-        output.seek(0)
-        self.assertTrue(dispatch_line(ctx, registry, "no debugging ethernet frame brief").executed)
-        self.assertFalse(is_ethernet_frame_brief_debug_enabled(ctx))
-        self.assertIn("off", output.getvalue())
+        self.assertIn("ETHERNET/FRAME: eth4 RX", current_output.getvalue())
+        self.assertEqual("", stale_output.getvalue())
 
     def test_ethernet_input_learns_arp_seen_on_interface_even_for_other_subnet(self):
         from src.ETHERNET.input import ETHERNET_InputHandler
@@ -388,57 +295,17 @@ class EthernetDebugTests(unittest.TestCase):
         self.assertIsNotNone(learned)
         self.assertEqual("66:77:88:99:aa:bb", learned.mac_address)
 
-    def test_debugging_ethernet_filters_host_mac_after_VVRP_mac_override(self):
-        host_raw = build_ethernet_ii_frame(
-            destination="66:77:88:99:aa:bb",
-            source="00:11:22:33:44:55",
-            ethertype=ETHERTYPE_IPV4,
-            payload=b"host",
-        )
-        VVRP_raw = build_ethernet_ii_frame(
-            destination="02:00:00:00:00:01",
-            source="66:77:88:99:aa:bb",
-            ethertype=ETHERTYPE_IPV4,
-            payload=b"VVRP",
-        )
-        ports: list[DebugPacketPort] = []
-
-        def port_factory(device):
-            port = DebugPacketPort(frames=(host_raw, VVRP_raw))
-            ports.append(port)
-            return port
-
-        service = ETHERNET_FrameDebugService(
-            ifnet_provider=FakeInterfaceProvider(),
-            dplane_backend=FakeDPlaneBackend(),
-            port_factory=port_factory,
-            packet_filter="ether proto 0x0800",
-        )
-        registry = CommandRegistry()
-        register_ethernet_commands(
-            registry,
-            frame_debug_start=service.start,
-            frame_debug_stop=service.stop,
-            frame_debug_status=service.status,
-        )
-        output = io.StringIO()
-        ctx = CliContext(output=output)
-        ctx.push_mode("privileged")
+    def test_runtime_snapshot_uses_configured_ethernet_mac_not_host_mac(self):
+        ctx = CliContext(output=io.StringIO())
         ETHERNET_stage_device_install(ctx.state, "eth4")
         ETHERNET_commit_device_changes(ctx.state)
-        set_interface_mac_address(ctx.state, "eth4", "02:00:00:00:00:01")
+        ETHERNET_set_interface_mac_address(ctx.state, "eth4", "02:00:00:00:00:01")
 
-        self.assertTrue(dispatch_line(ctx, registry, "debugging ethernet frame brief").executed)
+        interfaces = IFNET_ethernet_interface_snapshots(ctx.state, (fake_interface(),))
+        ethernet = next(interface for interface in interfaces if interface.name == "eth4")
 
-        deadline = time.time() + 1
-        while "dst=02:00:00:00:00:01" not in output.getvalue() and time.time() < deadline:
-            time.sleep(0.01)
-
-        text = output.getvalue()
-        self.assertNotIn("src=00:11:22:33:44:55", text)
-        self.assertIn("dst=02:00:00:00:00:01", text)
-
-        self.assertTrue(dispatch_line(ctx, registry, "no debugging ethernet frame brief").executed)
+        self.assertEqual("02:00:00:00:00:01", ethernet.mac_address)
+        self.assertEqual("00:11:22:33:44:55", fake_interface().mac_address)
 
     def test_debugging_ethernet_command_help_and_modes(self):
         registry = CommandRegistry()

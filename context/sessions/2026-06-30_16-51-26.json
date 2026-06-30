@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-30_16-51-26",
+  "prompt": "Explain RM data structures and storage ownership",
+  "changed_files": [
+    "src/RM"
+  ],
+  "note": "Reviewed RM interface snapshots, static configuration candidates, permanent-resolution cache, candidate RIB indexes, active ECMP indexes, IPv4 radix tree, Router ID state, runtime refresh behavior, and ownership boundaries with CMD/FIB.",
+  "decisions": [
+    "Call out that production RM_IM tables are currently refresh-local even though a reserved state key exists"
+  ],
+  "codex_output": "",
+  "git_commit": "54b0173dea0cf1785dc7ce6405bc79d4a0402b5b",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-010.html",
+    "src/RM/commands.py",
+    "src/RM/models.py",
+    "src/RM/rib.py",
+    "src/RM/routes.py",
+    "tests/test_routing.py",
+    "context/commits/54b0173dea0c.json",
+    "context/sessions/2026-06-30_13-51-51.json",
+    "context/sessions/2026-06-30_14-00-18.json"
+  ],
+  "diff_stat": "",
+  "diff_summary": "",
+  "architecture": {
+    "touched_modules": [
+      "RM"
+    ]
+  }
+}

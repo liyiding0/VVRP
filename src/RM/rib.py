@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .models import RMRoute
 
@@ -56,6 +56,7 @@ class RM_RouteTable:
         RM_key = RM_route_key(RM_route)
         RM_old_route = self._RM_routes_by_key.get(RM_key)
         if RM_old_route is not None:
+            RM_route = replace(RM_route, created_at=RM_old_route.created_at)
             self.RM_delete_route(RM_old_route)
 
         self._RM_routes_by_key[RM_key] = RM_route
@@ -69,6 +70,7 @@ class RM_RouteTable:
             RM_key = RM_route_key(RM_route)
             RM_old_route = self._RM_routes_by_key.get(RM_key)
             if RM_old_route is not None:
+                RM_route = replace(RM_route, created_at=RM_old_route.created_at)
                 self.RM_delete_route(RM_old_route, RM_rebuild=False)
             self._RM_routes_by_key[RM_key] = RM_route
             self._RM_routes_by_prefix.setdefault(RM_route.destination, []).append(RM_route)
@@ -117,9 +119,24 @@ class RM_RouteTable:
         return self._RM_routes_from_keys(self._RM_routes_by_source.get(RM_source, set()))
 
     def RM_replace_routes_for_source(self, RM_source: str, RM_routes: tuple[RMRoute, ...]) -> None:
+        RM_old_created_at = {
+            RM_route_key(RM_route): RM_route.created_at
+            for RM_route in self.RM_routes_for_source(RM_source)
+        }
         for RM_route in self.RM_routes_for_source(RM_source):
             self.RM_delete_route(RM_route, RM_rebuild=False)
-        self.RM_add_routes(RM_routes)
+        self.RM_add_routes(
+            tuple(
+                replace(
+                    RM_route,
+                    created_at=RM_old_created_at.get(
+                        RM_route_key(RM_route),
+                        RM_route.created_at,
+                    ),
+                )
+                for RM_route in RM_routes
+            )
+        )
 
     def RM_replace_routes_for_interface_source(
         self,
@@ -127,10 +144,26 @@ class RM_RouteTable:
         RM_source: str,
         RM_routes: tuple[RMRoute, ...],
     ) -> None:
+        RM_old_created_at = {
+            RM_route_key(RM_route): RM_route.created_at
+            for RM_route in self.RM_routes_for_interface(RM_interface_name)
+            if RM_route.source == RM_source
+        }
         for RM_route in tuple(self.RM_routes_for_interface(RM_interface_name)):
             if RM_route.source == RM_source:
                 self.RM_delete_route(RM_route, RM_rebuild=False)
-        self.RM_add_routes(RM_routes)
+        self.RM_add_routes(
+            tuple(
+                replace(
+                    RM_route,
+                    created_at=RM_old_created_at.get(
+                        RM_route_key(RM_route),
+                        RM_route.created_at,
+                    ),
+                )
+                for RM_route in RM_routes
+            )
+        )
 
     def RM_lookup(self, RM_destination_ip: str) -> RMRoute | None:
         return self._RM_ipv4_active_tree.RM_lookup(RM_destination_ip)
@@ -175,19 +208,24 @@ def RM_select_active_route(RM_routes: tuple[RMRoute, ...]) -> RMRoute | None:
 
 
 def RM_select_active_routes(RM_routes: tuple[RMRoute, ...]) -> tuple[RMRoute, ...]:
-    if not RM_routes:
+    RM_eligible_routes = tuple(
+        RM_route
+        for RM_route in RM_routes
+        if RM_route.eligible
+    )
+    if not RM_eligible_routes:
         return ()
     RM_best_rank = min(
         (
             RM_route.preference,
             RM_source_rank(RM_route.source),
         )
-        for RM_route in RM_routes
+        for RM_route in RM_eligible_routes
     )
     return tuple(sorted(
         (
             RM_route
-            for RM_route in RM_routes
+            for RM_route in RM_eligible_routes
             if (RM_route.preference, RM_source_rank(RM_route.source)) == RM_best_rank
         ),
         key=lambda RM_route: (

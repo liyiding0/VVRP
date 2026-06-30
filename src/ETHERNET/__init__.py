@@ -30,6 +30,13 @@ from .frame import (
     parse_mac_address,
 )
 from .port import EthernetPort, RawEthernetPort
+from .state import (
+    ETHERNET_apply_interface_state,
+    ETHERNET_interface_mac_addresses,
+    ETHERNET_mac_address_for_interface,
+    ETHERNET_remove_interface_mac_address,
+    ETHERNET_set_interface_mac_address,
+)
 
 __all__ = [
     "BROADCAST_MAC",
@@ -38,6 +45,11 @@ __all__ = [
     "ETHERNET_MAX_PAYLOAD_LENGTH",
     "ETHERNET_MIN_FRAME_LENGTH",
     "ETHERNET_FRAME_BRIEF_DEBUG_STATE_KEY",
+    "ETHERNET_apply_interface_state",
+    "ETHERNET_interface_mac_addresses",
+    "ETHERNET_mac_address_for_interface",
+    "ETHERNET_remove_interface_mac_address",
+    "ETHERNET_set_interface_mac_address",
     "ETHERTYPE_8021Q",
     "ETHERTYPE_ARP",
     "ETHERTYPE_IPV4",

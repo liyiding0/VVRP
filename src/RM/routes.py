@@ -42,8 +42,7 @@ def RM_connected_routes_from_im(
             RM_interface,
             IFNET_recompute_protocol=True,
         )
-        if not IFNET_is_protocol_up(RM_state, RM_interface.name):
-            continue
+        RM_eligible = IFNET_is_protocol_up(RM_state, RM_interface.name)
         for RM_address in RM_route_interface_addresses_by_family(RM_interface, "ipv4"):
             if RM_address.prefix_length is None:
                 continue
@@ -59,6 +58,7 @@ def RM_connected_routes_from_im(
                         interface=RM_interface,
                         source_ip=RM_address.address,
                         preference=0,
+                        eligible=RM_eligible,
                     )
                 )
             RM_routes.append(
@@ -69,6 +69,7 @@ def RM_connected_routes_from_im(
                     source_ip=RM_address.address,
                     next_hop="127.0.0.1",
                     preference=0,
+                    eligible=RM_eligible,
                 )
             )
     return tuple(RM_routes)

@@ -27,6 +27,13 @@ class RM_IM_InterfaceAddressAdded:
     address: InterfaceAddress
 
 
+@dataclass(frozen=True)
+class RM_IM_ReconcileResult:
+    RM_IM_table: "RM_IM_InterfaceTable"
+    RM_IM_changed: tuple[RM_IM_Interface, ...]
+    RM_IM_deleted: tuple[str, ...]
+
+
 class RM_IM_InterfaceTable:
     def __init__(self) -> None:
         self._RM_IM_interfaces: dict[str, RM_IM_Interface] = {}
@@ -42,6 +49,50 @@ class RM_IM_InterfaceTable:
 
     def RM_IM_list(self) -> tuple[RM_IM_Interface, ...]:
         return tuple(self._RM_IM_interfaces[RM_IM_name] for RM_IM_name in sorted(self._RM_IM_interfaces))
+
+
+def RM_IM_interface_table(RM_IM_state: dict) -> RM_IM_InterfaceTable:
+    RM_IM_existing = RM_IM_state.get(g_RM_IM_TABLE_STATE_KEY)
+    if isinstance(RM_IM_existing, RM_IM_InterfaceTable):
+        return RM_IM_existing
+    RM_IM_existing = RM_IM_InterfaceTable()
+    RM_IM_state[g_RM_IM_TABLE_STATE_KEY] = RM_IM_existing
+    return RM_IM_existing
+
+
+def RM_IM_reconcile_from_ifnet(
+    RM_IM_state: dict,
+    RM_IM_interfaces: tuple[NetworkInterface, ...],
+) -> RM_IM_ReconcileResult:
+    RM_IM_table = RM_IM_interface_table(RM_IM_state)
+    RM_IM_new_interfaces = {
+        RM_IM_interface.name: RM_IM_from_ifnet_interface(
+            RM_IM_interface,
+            RM_IM_include_addresses=True,
+        )
+        for RM_IM_interface in RM_IM_interfaces
+    }
+    RM_IM_existing_names = {
+        RM_IM_interface.name
+        for RM_IM_interface in RM_IM_table.RM_IM_list()
+    }
+    RM_IM_changed = []
+    for RM_IM_name in sorted(RM_IM_new_interfaces):
+        RM_IM_interface = RM_IM_new_interfaces[RM_IM_name]
+        if RM_IM_table.RM_IM_get(RM_IM_name) == RM_IM_interface:
+            continue
+        RM_IM_table.RM_IM_upsert(RM_IM_interface)
+        RM_IM_changed.append(RM_IM_interface)
+
+    RM_IM_deleted = tuple(sorted(RM_IM_existing_names - set(RM_IM_new_interfaces)))
+    for RM_IM_name in RM_IM_deleted:
+        RM_IM_table.RM_IM_delete(RM_IM_name)
+
+    return RM_IM_ReconcileResult(
+        RM_IM_table=RM_IM_table,
+        RM_IM_changed=tuple(RM_IM_changed),
+        RM_IM_deleted=RM_IM_deleted,
+    )
 
 
 def RM_IM_interface_table_from_ifnet(RM_IM_interfaces: tuple[NetworkInterface, ...]) -> RM_IM_InterfaceTable:

@@ -76,6 +76,7 @@ class ArpProtocol:
             packet.sender_mac,
             interface.name,
             now=now,
+            local_ip_addresses=_interface_ipv4_addresses(interface),
         )
 
     def age(self, now: float | None = None) -> tuple[ArpEntry, ...]:

@@ -34,12 +34,13 @@ def IFNET_ethernet_interface_snapshots(
     IFNET_host_interfaces: tuple[NetworkInterface, ...],
 ) -> tuple[NetworkInterface, ...]:
     from src.ETHERNET.device import ETHERNET_installed_device_names
+    from src.ETHERNET.state import ETHERNET_apply_interface_state
 
     IFNET_installed = ETHERNET_installed_device_names(IFNET_state)
     return IFNET_interface_snapshots(
         IFNET_state,
         tuple(
-            IFNET_interface
+            ETHERNET_apply_interface_state(IFNET_state, IFNET_interface)
             for IFNET_interface in IFNET_host_interfaces
             if IFNET_interface.name in IFNET_installed
         ),
