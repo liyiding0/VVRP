@@ -49,7 +49,7 @@ class RM_RouteTable:
         self._RM_routes_by_prefix: dict[ipaddress.IPv4Network, list[RMRoute]] = {}
         self._RM_routes_by_interface: dict[str, set[tuple]] = {}
         self._RM_routes_by_source: dict[str, set[tuple]] = {}
-        self._RM_active_by_prefix: dict[ipaddress.IPv4Network, RMRoute] = {}
+        self._RM_active_by_prefix: dict[ipaddress.IPv4Network, tuple[RMRoute, ...]] = {}
         self._RM_ipv4_active_tree = RM_IPv4RadixTree()
 
     def RM_add_route(self, RM_route: RMRoute) -> None:
@@ -99,11 +99,12 @@ class RM_RouteTable:
 
     def RM_active_routes(self) -> tuple[RMRoute, ...]:
         return tuple(
-            self._RM_active_by_prefix[RM_prefix]
+            RM_route
             for RM_prefix in sorted(
                 self._RM_active_by_prefix,
                 key=lambda RM_prefix: (int(RM_prefix.network_address), RM_prefix.prefixlen),
             )
+            for RM_route in self._RM_active_by_prefix[RM_prefix]
         )
 
     def RM_routes_for_prefix(self, RM_prefix: ipaddress.IPv4Network) -> tuple[RMRoute, ...]:
@@ -141,11 +142,11 @@ class RM_RouteTable:
         self._RM_active_by_prefix = {}
         self._RM_ipv4_active_tree = RM_IPv4RadixTree()
         for RM_prefix, RM_routes in self._RM_routes_by_prefix.items():
-            RM_active_route = RM_select_active_route(tuple(RM_routes))
-            if RM_active_route is None:
+            RM_active_routes = RM_select_active_routes(tuple(RM_routes))
+            if not RM_active_routes:
                 continue
-            self._RM_active_by_prefix[RM_prefix] = RM_active_route
-            self._RM_ipv4_active_tree.RM_insert(RM_active_route)
+            self._RM_active_by_prefix[RM_prefix] = RM_active_routes
+            self._RM_ipv4_active_tree.RM_insert(RM_active_routes[0])
 
     @staticmethod
     def _RM_remove_index_key(RM_index: dict[str, set[tuple]], RM_name: str, RM_key: tuple) -> None:
@@ -169,18 +170,32 @@ def RM_route_key(RM_route: RMRoute) -> tuple:
 
 
 def RM_select_active_route(RM_routes: tuple[RMRoute, ...]) -> RMRoute | None:
+    RM_active_routes = RM_select_active_routes(RM_routes)
+    return RM_active_routes[0] if RM_active_routes else None
+
+
+def RM_select_active_routes(RM_routes: tuple[RMRoute, ...]) -> tuple[RMRoute, ...]:
     if not RM_routes:
-        return None
-    return min(
-        RM_routes,
-        key=lambda RM_route: (
+        return ()
+    RM_best_rank = min(
+        (
             RM_route.preference,
             RM_source_rank(RM_route.source),
+        )
+        for RM_route in RM_routes
+    )
+    return tuple(sorted(
+        (
+            RM_route
+            for RM_route in RM_routes
+            if (RM_route.preference, RM_source_rank(RM_route.source)) == RM_best_rank
+        ),
+        key=lambda RM_route: (
             RM_route.interface.name,
             RM_route.next_hop or "",
             RM_route.source_ip,
         ),
-    )
+    ))
 
 
 def RM_source_rank(RM_source: str) -> int:

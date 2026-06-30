@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-30_09-11-41",
+  "prompt": "Add RM Router ID command family",
+  "changed_files": [
+    "src/RM/state.py",
+    "src/RM/commands.py",
+    "src/RM/__init__.py",
+    "tests/test_routing.py",
+    "tests/test_core.py"
+  ],
+  "note": "Added RM-owned Router ID state plus router id, no router id, and show router id commands with running-configuration persistence and IPv4 validation; 276 tests pass.",
+  "decisions": [
+    "Keep Router ID state owned by RM while CMD only parses and renders commands",
+    "Display 0.0.0.0 when no Router ID is configured"
+  ],
+  "codex_output": "",
+  "git_commit": "5d5a587cb128da273c3c7ba20ea264322778b2ad",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-008.html",
+    "src/FIB/commands.py",
+    "src/FIB/models.py",
+    "src/FIB/table.py",
+    "src/RM/__init__.py",
+    "src/RM/commands.py",
+    "src/RM/routes.py",
+    "tests/test_core.py",
+    "tests/test_routing.py",
+    "context/commits/5d5a587cb128.json",
+    "context/sessions/2026-06-29_16-06-04.json",
+    "context/sessions/2026-06-29_16-21-56.json",
+    "context/sessions/2026-06-29_16-42-26.json",
+    "src/RM/state.py"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 32669 -> 33617 bytes\n context/replays/timeline/index.html    |  23 ++++++-\n context/replays/timeline/page-008.html |  73 ++++++++++++++++++++\n src/FIB/commands.py                    |  36 +++++++---\n src/FIB/models.py                      |   8 ++-\n src/FIB/table.py                       |  77 ++++++++++++++++++---\n src/RM/__init__.py                     |   4 ++\n src/RM/commands.py                     |  54 ++++++++++++++-\n src/RM/routes.py                       |  25 +++----\n tests/test_core.py                     |   2 +\n tests/test_routing.py                  | 121 +++++++++++++++++++++++++++++++--\n 11 files changed, 384 insertions(+), 39 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex 046f215..c8790b3 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 2d53105..ecdf58f 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>77 events, split into 8 page(s).</p>\n+    <p>80 events, split into 8 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -563,6 +563,27 @@\n               <td>b9e1b90</td>\n               <td>main</td>\n             </tr>\n+\n+            <tr>\n+              <td>2026-06-29_16-06-04</td>\n+              <td><a href=\"page-008.html#77\">Commit and push forwarding runtime and IFNET improvements</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-29_16-21-56</td>\n+              <td><a href=\"page-008.html#78\">Add local IPv4 host routes for interfaces</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-29_16-42-26</td>\n+              <td><a href=\"page-008.html#79\">Align show fib with VRP forwarding semantics</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-008.html b/context/replays/timeline/page-008.html\nindex 417044c..25aa5eb 100644\n--- a/context/replays/timeline/page-008.html\n+++ b/context/replays/timeline/page-008.html\n@@ -279,6 +279,79 @@\n               </details>\n             </article>\n \n+            <article class=\"card\" id=\"77\">\n+              <div class=\"meta\">\n+                <span>2026-06-29_16-06-04</span>\n+                <span>main</span>\n+                <span>5d5a587</span>\n+              </div>\n+              <h2>Commit and push forwarding runtime and IFNET improvements</h2>\n+              <p>Committed 5d5a587 with Ethernet/FWD boundary cleanup, ICMP Ctrl-C handling, VVRP/CMD startup UX, VRP-style IFNET detail output, documentation, OpenWRT notes, and replay updates; pushed main to GitHub through proxy 127.0.0.1:12334</p>\n+              <h3>Files</h3>\n+              <ul><li>src</li><li>tests</li><li>README.md</li><li>openWRT runtime readme.txt</li><li>context</li><li>tools/timeline.py</li></ul>\n+              <h3>Decisions</h3>\n+              <ul><li>Push directly to main without a PR as requested</li><li>Use 12334 after the earlier 7890 connectivity failure</li></ul>\n+              <h3>Architecture</h3>\n+              <p>context, tests, tools</p>\n+              <details>\n+                <summary>Diff stat</summary>\n+                <pre></pre>\n+              </details>\n+            </article>\n+\n+            <article class=\"card\" id=\"78\">\n+              <div class=\"meta\">\n+                <span>2026-06-29_16-21-56</span>\n+                <span>main</span>\n+                <span>5d5a587</span>\n+              </div>\n+              <h2>Add local IPv4 host routes for interfaces</h2>\n+              <p>RM now creates a Direct /32 local host route with next hop 127.0.0.1 for every active interface IPv4 address, alongside the connected network route; native /32 addresses are deduplicated</p>\n... truncated 642 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "RM",
+      "tests"
+    ]
+  }
+}

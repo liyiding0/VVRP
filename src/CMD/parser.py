@@ -14,6 +14,15 @@ from .models import (
 from .registry import CommandRegistry, TrieEdge, TrieNode
 
 
+_IPV4_PARAMETER_NAMES = {
+    "destination",
+    "ip",
+    "ip_address",
+    "next_hop",
+    "router_id",
+}
+
+
 @dataclass(frozen=True)
 class _TokenSlice:
     text: str
@@ -495,7 +504,7 @@ class CommandParser:
         )
 
     def _parameter_accepts_partial(self, edge: TrieEdge, value: str) -> bool:
-        if edge.token.name == "ip_address":
+        if edge.token.name in _IPV4_PARAMETER_NAMES:
             return _is_partial_ipv4_address(value)
         if edge.token.name == "mask":
             return _is_partial_ipv4_mask(value)

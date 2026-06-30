@@ -96,6 +96,7 @@ def build_default_registry(
         registry,
         RM_interfaces_provider=lambda ctx: active_runtime.VVRP_list_ifnet_interfaces(ctx),
         RM_modes=("hidden",),
+        RM_after_route_change=active_runtime.VVRP_refresh_control_plane,
     )
     FIB_register_commands(registry, FIB_modes=SHOW_MODES)
     register_dplane_commands(

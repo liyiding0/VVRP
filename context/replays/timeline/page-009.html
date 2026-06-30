@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    nav { margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a, nav strong { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; }
+    nav a { color: #1f4f9a; text-decoration: none; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <strong>9</strong> <a href="page-010.html">10</a></nav>
+
+            <article class="card" id="80">
+              <div class="meta">
+                <span>2026-06-30_09-11-41</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Add RM Router ID command family</h2>
+              <p>Added RM-owned Router ID state plus router id, no router id, and show router id commands with running-configuration persistence and IPv4 validation; 276 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/state.py</li><li>src/RM/commands.py</li><li>src/RM/__init__.py</li><li>tests/test_routing.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep Router ID state owned by RM while CMD only parses and renders commands</li><li>Display 0.0.0.0 when no Router ID is configured</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 33617 bytes
+ context/replays/timeline/index.html    |  23 ++++++-
+ context/replays/timeline/page-008.html |  73 ++++++++++++++++++++
+ src/FIB/commands.py                    |  36 +++++++---
+ src/FIB/models.py                      |   8 ++-
+ src/FIB/table.py                       |  77 ++++++++++++++++++---
+ src/RM/__init__.py                     |   4 ++
+ src/RM/commands.py                     |  54 ++++++++++++++-
+ src/RM/routes.py                       |  25 +++----
+ tests/test_core.py                     |   2 +
+ tests/test_routing.py                  | 121 +++++++++++++++++++++++++++++++--
+ 11 files changed, 384 insertions(+), 39 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="81">
+              <div class="meta">
+                <span>2026-06-30_09-19-46</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Make config commands available in hidden mode by default</h2>
+              <p>CommandRegistry now automatically exposes config-mode commands in hidden mode unless config_in_hidden=False is specified; Router ID uses the shared policy and 279 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/CMD/registry.py</li><li>src/RM/commands.py</li><li>tests/test_core.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Enforce config-to-hidden inheritance centrally in CMD instead of duplicating mode lists in each module</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 35178 bytes
+ context/replays/timeline/index.html    |  30 ++++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 +++++++++++++++++-
+ src/CMD/registry.py                    |  13 +++-
+ src/FIB/commands.py                    |  36 +++++++--
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       |  77 +++++++++++++++---
+ src/RM/__init__.py                     |   4 +
+ src/RM/commands.py                     |  54 ++++++++++++-
+ src/RM/routes.py                       |  25 +++---
+ tests/test_core.py                     |  21 +++++
+ tests/test_routing.py                  | 138 +++++++++++++++++++++++++++++++--
+ 19 files changed, 455 insertions(+), 56 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="82">
+              <div class="meta">
+                <span>2026-06-30_09-24-14</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Use a blinking underline cursor in the VVRP CLI</h2>
+              <p>Configured Prompt Toolkit to request its native BLINKING_UNDERLINE cursor shape for modern Windows and Linux terminals; 279 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/CMD/interactive.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Use terminal-native cursor blinking instead of a Python redraw timer</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 35543 bytes
+ context/replays/timeline/index.html    |  37 ++++++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 +++++++++++++++++-
+ src/CMD/interactive.py                 |   2 +
+ src/CMD/registry.py                    |  13 +++-
+ src/FIB/commands.py                    |  36 +++++++--
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       |  77 +++++++++++++++---
+ src/RM/__init__.py                     |   4 +
+ src/RM/commands.py                     |  54 ++++++++++++-
+ src/RM/routes.py                       |  25 +++---
+ tests/test_core.py                     |  21 +++++
+ tests/test_routing.py                  | 138 +++++++++++++++++++++++++++++++--
+ 20 files changed, 464 insertions(+), 56 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="83">
+              <div class="meta">
+                <span>2026-06-30_09-32-18</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Keep the VVRP cursor blinking after command input</h2>
+              <p>Prompt Toolkit stops cursor blinking during redraw; CMD now reapplies BLINKING_UNDERLINE after every show_cursor call so typing no longer leaves a static cursor. 280 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/CMD/interactive.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Restore the terminal cursor shape in the Prompt Toolkit output redraw path</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 35800 bytes
+ context/replays/timeline/index.html    |  44 ++++++++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 +++++++++++++++++-
+ src/CMD/interactive.py                 |  19 +++++
+ src/CMD/registry.py                    |  13 +++-
+ src/FIB/commands.py                    |  36 +++++++--
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       |  77 +++++++++++++++---
+ src/RM/__init__.py                     |   4 +
+ src/RM/commands.py                     |  54 ++++++++++++-
+ src/RM/routes.py                       |  25 +++---
+ tests/test_core.py                     |  48 ++++++++++++
+ tests/test_routing.py                  | 138 +++++++++++++++++++++++++++++++--
+ 20 files changed, 515 insertions(+), 56 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="84">
+              <div class="meta">
+                <span>2026-06-30_09-54-26</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Add the IPv4 static route command family</h2>
+              <p>Added VRP-style ip route-static and no ip route-static configuration with mask length/dotted masks, next-hop/interface resolution, preference, tag, description, permanent, no-advertise, default routes, persistence, ECMP RIB/FIB support, and NULL0 discard forwarding; 291 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/static.py</li><li>src/RM/models.py</li><li>src/RM/rib.py</li><li>src/RM/routes.py</li><li>src/RM/commands.py</li><li>src/RM/__init__.py</li><li>src/FIB/table.py</li><li>src/FWD/null.py</li><li>src/FWD/forwarder.py</li><li>src/FWD/__init__.py</li><li>src/CMD/examples.py</li><li>tests/test_routing.py</li><li>tests/test_fwd.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep configured static candidates separate from resolved RMRoute entries</li><li>Re-resolve static routes whenever connected interfaces change and synchronize active routes to FIB immediately</li><li>Retain the last successful resolution for permanent routes</li><li>Represent equal-preference routes as ECMP entries and use stable destination-based FIB selection</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, FIB, FWD, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 36006 bytes
+ context/replays/timeline/index.html    |  51 +++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 ++++-
+ src/CMD/examples.py                    |   1 +
+ src/CMD/interactive.py                 |  19 ++
+ src/CMD/registry.py                    |  13 +-
+ src/FIB/commands.py                    |  36 ++-
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       | 116 +++++++-
+ src/FWD/__init__.py                    |   2 +
+ src/FWD/forwarder.py                   |   2 +
+ src/RM/__init__.py                     |  16 +
+ src/RM/commands.py                     | 337 ++++++++++++++++++++-
+ src/RM/models.py                       |   4 +
+ src/RM/rib.py                          |  37 ++-
+ src/RM/routes.py                       |  30 +-
+ tests/test_core.py                     |  48 +++
+ tests/test_fwd.py                      |  16 +
+ tests/test_routing.py                  | 518 ++++++++++++++++++++++++++++++++-
+ 26 files changed, 1287 insertions(+), 72 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="85">
+              <div class="meta">
+                <span>2026-06-30_10-31-32</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Explain the current VVRP routing architecture</h2>
+              <p>Reviewed and explained connected/static route production, RM candidate and active indexes, radix LPM, recursive resolution, ECMP, FIB synchronization, forwarding dispatch, runtime refresh triggers, and current limitations.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM</li><li>src/FIB</li><li>src/FWD</li><li>src/VVRP/runtime.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Distinguish the production full-refresh path from the available but not yet runtime-wired RM EventBus path</li></ul>
+              <h3>Architecture</h3>
+              <p>FIB, FWD, RM, VVRP</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+
+            <article class="card" id="86">
+              <div class="meta">
+                <span>2026-06-30_11-20-42</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Fix partial IPv4 coloring for static route destinations</h2>
+              <p>Generalized IPv4 partial-token recognition to destination, router_id, FIB ip, and next_hop parameters. ip route-static 1. is now ambiguous/yellow, a complete address is green, and impossible prefixes are red; 292 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/CMD/parser.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Model partial IPv4 coloring as a parser-level semantic shared by command families</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 36810 bytes
+ context/replays/timeline/index.html    |  65 ++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 ++++-
+ src/CMD/examples.py                    |   1 +
+ src/CMD/interactive.py                 |  19 ++
+ src/CMD/parser.py                      |  11 +-
+ src/CMD/registry.py                    |  13 +-
+ src/FIB/commands.py                    |  36 ++-
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       | 116 +++++++-
+ src/FWD/__init__.py                    |   2 +
+ src/FWD/forwarder.py                   |   2 +
+ src/RM/__init__.py                     |  16 +
+ src/RM/commands.py                     | 337 ++++++++++++++++++++-
+ src/RM/models.py                       |   4 +
+ src/RM/rib.py                          |  37 ++-
+ src/RM/routes.py                       |  30 +-
+ tests/test_core.py                     |  63 ++++
+ tests/test_fwd.py                      |  16 +
+ tests/test_routing.py                  | 518 ++++++++++++++++++++++++++++++++-
+ 27 files changed, 1326 insertions(+), 73 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="87">
+              <div class="meta">
+                <span>2026-06-30_11-38-43</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Add VRP-style static route protocol displays</h2>
+              <p>Implemented literal show ip routing-table protocol direct/static command branches, static Active and Inactive sections, inactive-only filtering, verbose route paragraphs, configured route counts, Unknown unresolved interfaces, flags, tags, and persistent route age; 295 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>src/RM/static.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Build static display state by correlating RM_StaticRouteConfig candidates with resolved and active RMRoute entries</li><li>Expose only implemented protocol literals and defer matching-output pipeline support</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 37099 bytes
+ context/replays/timeline/index.html    |  72 +++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 +++-
+ src/CMD/examples.py                    |   1 +
+ src/CMD/interactive.py                 |  19 +
+ src/CMD/parser.py                      |  11 +-
+ src/CMD/registry.py                    |  13 +-
+ src/FIB/commands.py                    |  36 +-
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       | 116 +++++-
+ src/FWD/__init__.py                    |   2 +
+ src/FWD/forwarder.py                   |   2 +
+ src/RM/__init__.py                     |  16 +
+ src/RM/commands.py                     | 549 +++++++++++++++++++++++++++-
+ src/RM/models.py                       |   4 +
+ src/RM/rib.py                          |  37 +-
+ src/RM/routes.py                       |  30 +-
+ tests/test_core.py                     |  63 ++++
+ tests/test_fwd.py                      |  16 +
+ tests/test_routing.py                  | 635 ++++++++++++++++++++++++++++++++-
+ 27 files changed, 1657 insertions(+), 78 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="88">
+              <div class="meta">
+                <span>2026-06-30_13-34-00</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Align direct route protocol display with VRP</h2>
+              <p>Changed show ip routing-table protocol direct to use VRP-style Public routing table, Active, and Inactive sections while retaining Direct route flags and next-hop/interface columns; 295 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep protocol-specific Direct formatting separate from the general routing-table display</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 37427 bytes
+ context/replays/timeline/index.html    |  79 +++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 +++-
+ src/CMD/examples.py                    |   1 +
+ src/CMD/interactive.py                 |  19 +
+ src/CMD/parser.py                      |  11 +-
+ src/CMD/registry.py                    |  13 +-
+ src/FIB/commands.py                    |  36 +-
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       | 116 +++++-
+ src/FWD/__init__.py                    |   2 +
+ src/FWD/forwarder.py                   |   2 +
+ src/RM/__init__.py                     |  16 +
+ src/RM/commands.py                     | 596 +++++++++++++++++++++++++++++-
+ src/RM/models.py                       |   4 +
+ src/RM/rib.py                          |  37 +-
+ src/RM/routes.py                       |  30 +-
+ tests/test_core.py                     |  63 ++++
+ tests/test_fwd.py                      |  16 +
+ tests/test_routing.py                  | 643 ++++++++++++++++++++++++++++++++-
+ 27 files changed, 1718 insertions(+), 79 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="89">
+              <div class="meta">
+                <span>2026-06-30_13-39-49</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Lock routing-table commands to interface mode</h2>
+              <p>Confirmed the show ip routing-table family already worked in interface view, unified registrations on RM_ALL_SHOW_MODES, and added regression coverage for base, direct, static, inactive, and verbose commands; 296 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/commands.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Preserve existing behavior and add regression coverage rather than introducing a redundant command registration</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 37619 bytes
+ context/replays/timeline/index.html    |  86 ++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 +++-
+ src/CMD/examples.py                    |   1 +
+ src/CMD/interactive.py                 |  19 +
+ src/CMD/parser.py                      |  11 +-
+ src/CMD/registry.py                    |  13 +-
+ src/FIB/commands.py                    |  36 +-
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       | 116 +++++-
+ src/FWD/__init__.py                    |   2 +
+ src/FWD/forwarder.py                   |   2 +
+ src/RM/__init__.py                     |  16 +
+ src/RM/commands.py                     | 600 ++++++++++++++++++++++++++++-
+ src/RM/models.py                       |   4 +
+ src/RM/rib.py                          |  37 +-
+ src/RM/routes.py                       |  30 +-
+ tests/test_core.py                     |  63 ++++
+ tests/test_fwd.py                      |  16 +
+ tests/test_routing.py                  | 663 ++++++++++++++++++++++++++++++++-
+ 27 files changed, 1747 insertions(+), 81 deletions(-)</pre>
+              </details>
+            </article>
+
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <strong>9</strong> <a href="page-010.html">10</a></nav>
+  </main>
+</body>
+</html>

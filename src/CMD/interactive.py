@@ -17,6 +17,10 @@ def _preserve_help_input(text: str) -> str:
     return text.split("?", 1)[0]
 
 
+def _question_mark_help_input(text_before_cursor: str) -> str:
+    return f"{text_before_cursor}?"
+
+
 def _format_help_screen_update(prompt_text: str, input_text: str, help_text: str) -> str:
     if not help_text:
         return f"{prompt_text}{input_text}"
@@ -60,6 +64,17 @@ def _render_input_with_token_styles(
     if position < len(input_text):
         fragments.append(input_text[position:])
     return "".join(fragments)
+
+
+def _keep_blinking_cursor(output, cursor_shape):
+    original_show_cursor = output.show_cursor
+
+    def show_cursor() -> None:
+        original_show_cursor()
+        output.set_cursor_shape(cursor_shape)
+
+    output.show_cursor = show_cursor
+    return output
 
 
 def _run_plain_cli(
@@ -135,11 +150,13 @@ def run_interactive_cli(
         from prompt_toolkit import PromptSession
         from prompt_toolkit.application import run_in_terminal
         from prompt_toolkit.completion import Completer, Completion
+        from prompt_toolkit.cursor_shapes import CursorShape
         from prompt_toolkit.document import Document
         from prompt_toolkit.formatted_text import ANSI
         from prompt_toolkit.history import FileHistory, InMemoryHistory
         from prompt_toolkit.key_binding import KeyBindings
         from prompt_toolkit.lexers import Lexer
+        from prompt_toolkit.output.defaults import create_output
         from prompt_toolkit.shortcuts import print_formatted_text
         from prompt_toolkit.styles import Style
     except ImportError:
@@ -233,6 +250,18 @@ def run_interactive_cli(
 
     key_bindings = KeyBindings()
 
+    @key_bindings.add("?")
+    def _(event) -> None:
+        buffer = event.current_buffer
+        input_text = _question_mark_help_input(
+            buffer.document.text_before_cursor,
+        )
+        parsed_for_color = parser.parse(input_text, mode=ctx.mode, ctx=ctx)
+        help_text = format_help(
+            parser.help_candidates(input_text, mode=ctx.mode, ctx=ctx)
+        )
+        show_help(input_text, help_text, parsed_for_color.token_statuses)
+
     @key_bindings.add(" ")
     def _(event) -> None:
         buffer = event.current_buffer
@@ -306,6 +335,10 @@ def run_interactive_cli(
         active_history = FileHistory(str(history_path))
     except OSError:
         active_history = InMemoryHistory()
+    active_output = _keep_blinking_cursor(
+        create_output(),
+        CursorShape.BLINKING_UNDERLINE,
+    )
     session = PromptSession(
         lexer=RouterCommandLexer(),
         completer=RouterCommandCompleter(),
@@ -313,6 +346,8 @@ def run_interactive_cli(
         history=active_history,
         key_bindings=key_bindings,
         style=style,
+        cursor=CursorShape.BLINKING_UNDERLINE,
+        output=active_output,
     )
 
     while not ctx.exit_requested:

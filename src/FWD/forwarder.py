@@ -7,6 +7,7 @@ from src.IFNET.models import NetworkInterface
 
 from .ethernet import FWD_EthernetOutputHandler
 from .models import FWD_OutputHandler, FWD_Result
+from .null import FWD_NullOutputHandler
 
 
 class FWD_Forwarder:
@@ -71,4 +72,5 @@ def FWD_default_forwarder(
             FWD_debug_ctx=FWD_debug_ctx,
         ),
     )
+    FWD_forwarder.FWD_register_handler("null", FWD_NullOutputHandler())
     return FWD_forwarder

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from ipaddress import IPv4Network
 
 
@@ -13,7 +14,8 @@ class FIBEntry:
     source_mac: str
     next_hop_ip: str
     mtu: int | None = None
-    flags: str = "D"
+    flags: str = "U"
+    installed_at: float = field(default_factory=time.monotonic, compare=False)
 
 
 @dataclass(frozen=True)
@@ -25,4 +27,4 @@ class FIB_InstallRequest:
     source_mac: str
     next_hop_ip: str = ""
     mtu: int | None = None
-    flags: str = "D"
+    flags: str = "U"

@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-30_09-32-18",
+  "prompt": "Keep the VVRP cursor blinking after command input",
+  "changed_files": [
+    "src/CMD/interactive.py",
+    "tests/test_core.py"
+  ],
+  "note": "Prompt Toolkit stops cursor blinking during redraw; CMD now reapplies BLINKING_UNDERLINE after every show_cursor call so typing no longer leaves a static cursor. 280 tests pass.",
+  "decisions": [
+    "Restore the terminal cursor shape in the Prompt Toolkit output redraw path"
+  ],
+  "codex_output": "",
+  "git_commit": "5d5a587cb128da273c3c7ba20ea264322778b2ad",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-001.html",
+    "context/replays/timeline/page-002.html",
+    "context/replays/timeline/page-003.html",
+    "context/replays/timeline/page-004.html",
+    "context/replays/timeline/page-005.html",
+    "context/replays/timeline/page-006.html",
+    "context/replays/timeline/page-007.html",
+    "context/replays/timeline/page-008.html",
+    "src/CMD/interactive.py",
+    "src/CMD/registry.py",
+    "src/FIB/commands.py",
+    "src/FIB/models.py",
+    "src/FIB/table.py",
+    "src/RM/__init__.py",
+    "src/RM/commands.py",
+    "src/RM/routes.py",
+    "tests/test_core.py",
+    "tests/test_routing.py",
+    "context/commits/5d5a587cb128.json",
+    "context/replays/timeline/page-009.html",
+    "context/sessions/2026-06-29_16-06-04.json",
+    "context/sessions/2026-06-29_16-21-56.json",
+    "context/sessions/2026-06-29_16-42-26.json",
+    "context/sessions/2026-06-30_09-11-41.json",
+    "context/sessions/2026-06-30_09-19-46.json",
+    "context/sessions/2026-06-30_09-24-14.json",
+    "src/RM/state.py"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 32669 -> 35800 bytes\n context/replays/timeline/index.html    |  44 ++++++++++-\n context/replays/timeline/page-001.html |   4 +-\n context/replays/timeline/page-002.html |   4 +-\n context/replays/timeline/page-003.html |   4 +-\n context/replays/timeline/page-004.html |   4 +-\n context/replays/timeline/page-005.html |   4 +-\n context/replays/timeline/page-006.html |   4 +-\n context/replays/timeline/page-007.html |   4 +-\n context/replays/timeline/page-008.html |  77 +++++++++++++++++-\n src/CMD/interactive.py                 |  19 +++++\n src/CMD/registry.py                    |  13 +++-\n src/FIB/commands.py                    |  36 +++++++--\n src/FIB/models.py                      |   8 +-\n src/FIB/table.py                       |  77 +++++++++++++++---\n src/RM/__init__.py                     |   4 +\n src/RM/commands.py                     |  54 ++++++++++++-\n src/RM/routes.py                       |  25 +++---\n tests/test_core.py                     |  48 ++++++++++++\n tests/test_routing.py                  | 138 +++++++++++++++++++++++++++++++--\n 20 files changed, 515 insertions(+), 56 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex 046f215..9afa8b1 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 2d53105..87a6350 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>77 events, split into 8 page(s).</p>\n+    <p>83 events, split into 9 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -563,6 +563,48 @@\n               <td>b9e1b90</td>\n               <td>main</td>\n             </tr>\n+\n+            <tr>\n+              <td>2026-06-29_16-06-04</td>\n+              <td><a href=\"page-008.html#77\">Commit and push forwarding runtime and IFNET improvements</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-29_16-21-56</td>\n+              <td><a href=\"page-008.html#78\">Add local IPv4 host routes for interfaces</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-29_16-42-26</td>\n+              <td><a href=\"page-008.html#79\">Align show fib with VRP forwarding semantics</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_09-11-41</td>\n+              <td><a href=\"page-009.html#80\">Add RM Router ID command family</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_09-19-46</td>\n+              <td><a href=\"page-009.html#81\">Make config commands available in hidden mode by default</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_09-24-14</td>\n+              <td><a href=\"page-009.html#82\">Use a blinking underline cursor in the VVRP CLI</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n             </tbody>\n     </table>\n   </main>\ndiff --git a/context/replays/timeline/page-001.html b/context/replays/timeline/page-001.html\nindex ad9d892..38467cd 100644\n--- a/context/replays/timeline/page-001.html\n+++ b/context/replays/timeline/page-001.html\n@@ -27,7 +27,7 @@\n     <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>\n   </header>\n   <main>\n-    <nav><strong>1</strong> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a> <a href=\"page-007.html\">7</a> <a href=\"page-008.html\">8</a></nav>\n+    <nav><strong>1</strong> <a href=\"page-002.html\">2</a> <a href=\"page-003.html\">3</a> <a href=\"page-004.html\">4</a> <a href=\"page-005.html\">5</a> <a href=\"page-006.html\">6</a> <a href=\"page-007.html\">7</a> <a href=\"page-008.html\">8</a> <a href=\"page-009.html\">9</a></nav>\n \n             <article class=\"card\" id=\"0\">\n               <div class=\"meta\">\n@@ -252,7 +252,7 @@\n               </details>\n... truncated 1001 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CMD",
+      "tests"
+    ]
+  }
+}

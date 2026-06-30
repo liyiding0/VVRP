@@ -16,6 +16,7 @@ from src.events import VVRP_EventBus
 
 from .models import RMRoute, RM_route_interface_addresses_by_family
 from .rib import RM_RouteTable, RM_route_table, RM_route_table_from_routes
+from .static import RM_sync_static_routes
 
 
 def RM_connected_routes(
@@ -49,26 +50,27 @@ def RM_connected_routes_from_im(
             RM_network = ipaddress.IPv4Interface(
                 f"{RM_address.address}/{RM_address.prefix_length}"
             ).network
-            RM_routes.append(
-                RMRoute(
-                    destination=RM_network,
-                    source="connected",
-                    interface=RM_interface,
-                    source_ip=RM_address.address,
-                    preference=0,
-                )
-            )
-            if RM_interface.kind == "loopback":
+            RM_host_route = ipaddress.IPv4Network(f"{RM_address.address}/32")
+            if RM_network != RM_host_route:
                 RM_routes.append(
                     RMRoute(
-                        destination=ipaddress.IPv4Network(f"{RM_address.address}/32"),
+                        destination=RM_network,
                         source="connected",
                         interface=RM_interface,
                         source_ip=RM_address.address,
-                        next_hop="127.0.0.1",
                         preference=0,
                     )
                 )
+            RM_routes.append(
+                RMRoute(
+                    destination=RM_host_route,
+                    source="connected",
+                    interface=RM_interface,
+                    source_ip=RM_address.address,
+                    next_hop="127.0.0.1",
+                    preference=0,
+                )
+            )
     return tuple(RM_routes)
 
 
@@ -114,6 +116,7 @@ def RM_sync_connected_routes_from_im_table(
         "connected",
         RM_connected_routes_from_im(RM_state, RM_im_table.RM_IM_list()),
     )
+    RM_sync_static_routes(RM_state, RM_im_table.RM_IM_list(), RM_table)
 
 
 def RM_register_route_event_handlers(
@@ -130,15 +133,18 @@ def RM_register_route_event_handlers(
         if RM_interface is None:
             return
         RM_sync_connected_routes_for_interface(RM_state, RM_active_table, RM_interface)
+        RM_sync_static_routes(RM_state, RM_im_table.RM_IM_list(), RM_active_table)
 
     def RM_handle_interface_deleted(RM_event: RM_IM_InterfaceDeleted) -> None:
         RM_active_table.RM_replace_routes_for_interface_source(RM_event.name, "connected", ())
+        RM_sync_static_routes(RM_state, RM_im_table.RM_IM_list(), RM_active_table)
 
     def RM_handle_address_added(RM_event: RM_IM_InterfaceAddressAdded) -> None:
         RM_interface = RM_im_table.RM_IM_get(RM_event.name)
         if RM_interface is None:
             return
         RM_sync_connected_routes_for_interface(RM_state, RM_active_table, RM_interface)
+        RM_sync_static_routes(RM_state, RM_im_table.RM_IM_list(), RM_active_table)
 
     RM_bus.VVRP_subscribe(RM_IM_InterfaceChanged, RM_handle_interface_changed)
     RM_bus.VVRP_subscribe(RM_IM_InterfaceDeleted, RM_handle_interface_deleted)

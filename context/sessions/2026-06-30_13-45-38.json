@@ -1,0 +1,71 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-30_13-45-38",
+  "prompt": "Show CLI question-mark help immediately",
+  "changed_files": [
+    "src/CMD/interactive.py",
+    "tests/test_core.py"
+  ],
+  "note": "Added an immediate Prompt Toolkit ? key binding that renders contextual help without waiting for Enter and without inserting ? into the command buffer; 297 tests pass.",
+  "decisions": [
+    "Handle ? as an interactive control key while retaining the existing line-based fallback behavior"
+  ],
+  "codex_output": "",
+  "git_commit": "5d5a587cb128da273c3c7ba20ea264322778b2ad",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-001.html",
+    "context/replays/timeline/page-002.html",
+    "context/replays/timeline/page-003.html",
+    "context/replays/timeline/page-004.html",
+    "context/replays/timeline/page-005.html",
+    "context/replays/timeline/page-006.html",
+    "context/replays/timeline/page-007.html",
+    "context/replays/timeline/page-008.html",
+    "src/CMD/examples.py",
+    "src/CMD/interactive.py",
+    "src/CMD/parser.py",
+    "src/CMD/registry.py",
+    "src/FIB/commands.py",
+    "src/FIB/models.py",
+    "src/FIB/table.py",
+    "src/FWD/__init__.py",
+    "src/FWD/forwarder.py",
+    "src/RM/__init__.py",
+    "src/RM/commands.py",
+    "src/RM/models.py",
+    "src/RM/rib.py",
+    "src/RM/routes.py",
+    "tests/test_core.py",
+    "tests/test_fwd.py",
+    "tests/test_routing.py",
+    "context/commits/5d5a587cb128.json",
+    "context/replays/timeline/page-009.html",
+    "context/sessions/2026-06-29_16-06-04.json",
+    "context/sessions/2026-06-29_16-21-56.json",
+    "context/sessions/2026-06-29_16-42-26.json",
+    "context/sessions/2026-06-30_09-11-41.json",
+    "context/sessions/2026-06-30_09-19-46.json",
+    "context/sessions/2026-06-30_09-24-14.json",
+    "context/sessions/2026-06-30_09-32-18.json",
+    "context/sessions/2026-06-30_09-54-26.json",
+    "context/sessions/2026-06-30_10-31-32.json",
+    "context/sessions/2026-06-30_11-20-42.json",
+    "context/sessions/2026-06-30_11-38-43.json",
+    "context/sessions/2026-06-30_13-34-00.json",
+    "context/sessions/2026-06-30_13-39-49.json",
+    "src/FWD/null.py",
+    "src/RM/state.py",
+    "src/RM/static.py"
+  ],
+  "diff_stat": "context/replays/timeline.zip           | Bin 32669 -> 37865 bytes\n context/replays/timeline/index.html    |  93 ++++-\n context/replays/timeline/page-001.html |   4 +-\n context/replays/timeline/page-002.html |   4 +-\n context/replays/timeline/page-003.html |   4 +-\n context/replays/timeline/page-004.html |   4 +-\n context/replays/timeline/page-005.html |   4 +-\n context/replays/timeline/page-006.html |   4 +-\n context/replays/timeline/page-007.html |   4 +-\n context/replays/timeline/page-008.html |  77 +++-\n src/CMD/examples.py                    |   1 +\n src/CMD/interactive.py                 |  35 ++\n src/CMD/parser.py                      |  11 +-\n src/CMD/registry.py                    |  13 +-\n src/FIB/commands.py                    |  36 +-\n src/FIB/models.py                      |   8 +-\n src/FIB/table.py                       | 116 +++++-\n src/FWD/__init__.py                    |   2 +\n src/FWD/forwarder.py                   |   2 +\n src/RM/__init__.py                     |  16 +\n src/RM/commands.py                     | 600 ++++++++++++++++++++++++++++-\n src/RM/models.py                       |   4 +\n src/RM/rib.py                          |  37 +-\n src/RM/routes.py                       |  30 +-\n tests/test_core.py                     |  71 ++++\n tests/test_fwd.py                      |  16 +\n tests/test_routing.py                  | 663 ++++++++++++++++++++++++++++++++-\n 27 files changed, 1778 insertions(+), 81 deletions(-)",
+  "diff_summary": "diff --git a/context/replays/timeline.zip b/context/replays/timeline.zip\nindex 046f215..f86f964 100644\nBinary files a/context/replays/timeline.zip and b/context/replays/timeline.zip differ\ndiff --git a/context/replays/timeline/index.html b/context/replays/timeline/index.html\nindex 2d53105..4832f1f 100644\n--- a/context/replays/timeline/index.html\n+++ b/context/replays/timeline/index.html\n@@ -17,7 +17,7 @@\n <body>\n   <header>\n     <h1>Codex Development Timeline</h1>\n-    <p>77 events, split into 8 page(s).</p>\n+    <p>90 events, split into 9 page(s).</p>\n   </header>\n   <main>\n     <table>\n@@ -563,6 +563,97 @@\n               <td>b9e1b90</td>\n               <td>main</td>\n             </tr>\n+\n+            <tr>\n+              <td>2026-06-29_16-06-04</td>\n+              <td><a href=\"page-008.html#77\">Commit and push forwarding runtime and IFNET improvements</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-29_16-21-56</td>\n+              <td><a href=\"page-008.html#78\">Add local IPv4 host routes for interfaces</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-29_16-42-26</td>\n+              <td><a href=\"page-008.html#79\">Align show fib with VRP forwarding semantics</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_09-11-41</td>\n+              <td><a href=\"page-009.html#80\">Add RM Router ID command family</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_09-19-46</td>\n+              <td><a href=\"page-009.html#81\">Make config commands available in hidden mode by default</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_09-24-14</td>\n+              <td><a href=\"page-009.html#82\">Use a blinking underline cursor in the VVRP CLI</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_09-32-18</td>\n+              <td><a href=\"page-009.html#83\">Keep the VVRP cursor blinking after command input</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_09-54-26</td>\n+              <td><a href=\"page-009.html#84\">Add the IPv4 static route command family</a></td>\n+              <td>5d5a587</td>\n+              <td>main</td>\n+            </tr>\n+\n+            <tr>\n+              <td>2026-06-30_10-31-32</td>\n+              <td><a href=\"page-009.html#85\">Explain the current VVRP routing architecture</a></td>\n... truncated 2563 lines ...",
+  "architecture": {
+    "touched_modules": [
+      "CMD",
+      "tests"
+    ]
+  }
+}

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Development Timeline</title>
+  <style>
+    body { margin: 0; font-family: Consolas, 'Segoe UI', monospace; background: #f6f7f9; color: #20242a; }
+    header { padding: 28px 36px; background: #111827; color: white; }
+    h1 { margin: 0; font-size: 28px; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px; }
+    nav { margin-bottom: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    nav a, nav strong { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; }
+    nav a { color: #1f4f9a; text-decoration: none; }
+    .card { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 20px; margin-bottom: 18px; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; color: #5c6675; font-size: 13px; }
+    h2 { margin: 10px 0 8px; font-size: 20px; }
+    h3 { margin: 16px 0 6px; font-size: 14px; color: #374151; }
+    ul { margin: 0; padding-left: 22px; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    summary { cursor: pointer; color: #1f4f9a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex Development Timeline</h1>
+    <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
+  </header>
+  <main>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <a href="page-009.html">9</a> <strong>10</strong></nav>
+
+            <article class="card" id="90">
+              <div class="meta">
+                <span>2026-06-30_13-45-38</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Show CLI question-mark help immediately</h2>
+              <p>Added an immediate Prompt Toolkit ? key binding that renders contextual help without waiting for Enter and without inserting ? into the command buffer; 297 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src/CMD/interactive.py</li><li>tests/test_core.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Handle ? as an interactive control key while retaining the existing line-based fallback behavior</li></ul>
+              <h3>Architecture</h3>
+              <p>CMD, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 37865 bytes
+ context/replays/timeline/index.html    |  93 ++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 +++-
+ src/CMD/examples.py                    |   1 +
+ src/CMD/interactive.py                 |  35 ++
+ src/CMD/parser.py                      |  11 +-
+ src/CMD/registry.py                    |  13 +-
+ src/FIB/commands.py                    |  36 +-
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       | 116 +++++-
+ src/FWD/__init__.py                    |   2 +
+ src/FWD/forwarder.py                   |   2 +
+ src/RM/__init__.py                     |  16 +
+ src/RM/commands.py                     | 600 ++++++++++++++++++++++++++++-
+ src/RM/models.py                       |   4 +
+ src/RM/rib.py                          |  37 +-
+ src/RM/routes.py                       |  30 +-
+ tests/test_core.py                     |  71 ++++
+ tests/test_fwd.py                      |  16 +
+ tests/test_routing.py                  | 663 ++++++++++++++++++++++++++++++++-
+ 27 files changed, 1778 insertions(+), 81 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="91">
+              <div class="meta">
+                <span>2026-06-30_13-49-12</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Commit and push RM routing and CLI improvements</h2>
+              <p>Preparing the accumulated Router ID, IPv4 static routing, recursive resolution, ECMP/FIB, NULL0 forwarding, VRP-style route displays, config-to-hidden inheritance, cursor, coloring, and immediate help changes for direct main push; 297 tests pass.</p>
+              <h3>Files</h3>
+              <ul><li>src</li><li>tests</li><li>context</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Push directly to main without PR as requested</li><li>Use backup proxy 127.0.0.1:12334 after two 7890 failures</li></ul>
+              <h3>Architecture</h3>
+              <p>context, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 39568 bytes
+ context/replays/timeline/index.html    | 100 ++++-
+ context/replays/timeline/page-001.html |   4 +-
+ context/replays/timeline/page-002.html |   4 +-
+ context/replays/timeline/page-003.html |   4 +-
+ context/replays/timeline/page-004.html |   4 +-
+ context/replays/timeline/page-005.html |   4 +-
+ context/replays/timeline/page-006.html |   4 +-
+ context/replays/timeline/page-007.html |   4 +-
+ context/replays/timeline/page-008.html |  77 +++-
+ src/CMD/examples.py                    |   1 +
+ src/CMD/interactive.py                 |  35 ++
+ src/CMD/parser.py                      |  11 +-
+ src/CMD/registry.py                    |  13 +-
+ src/FIB/commands.py                    |  36 +-
+ src/FIB/models.py                      |   8 +-
+ src/FIB/table.py                       | 116 +++++-
+ src/FWD/__init__.py                    |   2 +
+ src/FWD/forwarder.py                   |   2 +
+ src/RM/__init__.py                     |  16 +
+ src/RM/commands.py                     | 600 ++++++++++++++++++++++++++++-
+ src/RM/models.py                       |   4 +
+ src/RM/rib.py                          |  37 +-
+ src/RM/routes.py                       |  30 +-
+ tests/test_core.py                     |  71 ++++
+ tests/test_fwd.py                      |  16 +
+ tests/test_routing.py                  | 663 ++++++++++++++++++++++++++++++++-
+ 27 files changed, 1785 insertions(+), 81 deletions(-)</pre>
+              </details>
+            </article>
+
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <a href="page-008.html">8</a> <a href="page-009.html">9</a> <strong>10</strong></nav>
+  </main>
+</body>
+</html>

@@ -266,6 +266,22 @@ class FwdTests(unittest.TestCase):
         self.assertFalse(result.FWD_ok)
         self.assertIn("unsupported interface type: ppp", result.FWD_message)
 
+    def test_default_fwd_silently_discards_null0_packet(self):
+        state = {}
+        interface = fwd_interface("NULL0", kind="null")
+        route = fwd_route(interface, "198.51.100.0/24", "")
+        packet = IP_build_ipv4_packet("192.0.2.10", "198.51.100.1", 1, b"hello")
+        forwarder = FWD_default_forwarder(
+            state,
+            FWD_interfaces_provider=lambda: (interface,),
+        )
+
+        result = forwarder.FWD_send_packet(packet, route)
+
+        self.assertTrue(result.FWD_ok)
+        self.assertEqual(b"", result.FWD_frame)
+        self.assertIs(route, result.FWD_route)
+
     def test_fwd_input_dispatches_by_interface_type(self):
         calls = []
 

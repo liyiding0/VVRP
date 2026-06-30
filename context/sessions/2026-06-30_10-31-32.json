@@ -1,0 +1,69 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-30_10-31-32",
+  "prompt": "Explain the current VVRP routing architecture",
+  "changed_files": [
+    "src/RM",
+    "src/FIB",
+    "src/FWD",
+    "src/VVRP/runtime.py"
+  ],
+  "note": "Reviewed and explained connected/static route production, RM candidate and active indexes, radix LPM, recursive resolution, ECMP, FIB synchronization, forwarding dispatch, runtime refresh triggers, and current limitations.",
+  "decisions": [
+    "Distinguish the production full-refresh path from the available but not yet runtime-wired RM EventBus path"
+  ],
+  "codex_output": "",
+  "git_commit": "5d5a587cb128da273c3c7ba20ea264322778b2ad",
+  "git_branch": "main",
+  "git_dirty_files": [
+    "ontext/replays/timeline.zip",
+    "context/replays/timeline/index.html",
+    "context/replays/timeline/page-001.html",
+    "context/replays/timeline/page-002.html",
+    "context/replays/timeline/page-003.html",
+    "context/replays/timeline/page-004.html",
+    "context/replays/timeline/page-005.html",
+    "context/replays/timeline/page-006.html",
+    "context/replays/timeline/page-007.html",
+    "context/replays/timeline/page-008.html",
+    "src/CMD/examples.py",
+    "src/CMD/interactive.py",
+    "src/CMD/registry.py",
+    "src/FIB/commands.py",
+    "src/FIB/models.py",
+    "src/FIB/table.py",
+    "src/FWD/__init__.py",
+    "src/FWD/forwarder.py",
+    "src/RM/__init__.py",
+    "src/RM/commands.py",
+    "src/RM/models.py",
+    "src/RM/rib.py",
+    "src/RM/routes.py",
+    "tests/test_core.py",
+    "tests/test_fwd.py",
+    "tests/test_routing.py",
+    "context/commits/5d5a587cb128.json",
+    "context/replays/timeline/page-009.html",
+    "context/sessions/2026-06-29_16-06-04.json",
+    "context/sessions/2026-06-29_16-21-56.json",
+    "context/sessions/2026-06-29_16-42-26.json",
+    "context/sessions/2026-06-30_09-11-41.json",
+    "context/sessions/2026-06-30_09-19-46.json",
+    "context/sessions/2026-06-30_09-24-14.json",
+    "context/sessions/2026-06-30_09-32-18.json",
+    "context/sessions/2026-06-30_09-54-26.json",
+    "src/FWD/null.py",
+    "src/RM/state.py",
+    "src/RM/static.py"
+  ],
+  "diff_stat": "",
+  "diff_summary": "",
+  "architecture": {
+    "touched_modules": [
+      "FIB",
+      "FWD",
+      "RM",
+      "VVRP"
+    ]
+  }
+}

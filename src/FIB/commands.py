@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from src.CMD.models import CommandResult
 from src.CMD.registry import CommandRegistry
 
@@ -37,14 +39,18 @@ def FIB_register_commands(
 
 def FIB_format_entries(FIB_entries: tuple[FIBEntry, ...]) -> str:
     FIB_lines = [
-        "Route Flags: G - gateway route, H - host route,    U - up route",
-        "             S - static route,  D - dynamic route, B - black hole route",
-        "------------------------------------------------------------------------------",
-        f"{'Destination/Mask':<19} {'Nexthop':<15} {'Flag':<5} {'TimeStamp':<10} {'Interface':<16} TunnelID",
+        "Route Flags: G - Gateway Route, H - Host Route,    U - Up Route",
+        "             S - Static Route,  D - Dynamic Route, B - Black Hole Route",
+        "--------------------------------------------------------------------------------",
+        " FIB Table:",
+        f" Total number of Routes : {len(FIB_entries)} ",
+        "",
+        f"{'Destination/Mask':<18} {'Nexthop':<15} {'Flag':<5} {'TimeStamp':<13} {'Interface':<14} TunnelID",
     ]
     if not FIB_entries:
         FIB_lines.append("No FIB entries found")
         return "\n".join(FIB_lines)
+    FIB_now = time.monotonic()
     for FIB_entry in sorted(
         FIB_entries,
         key=lambda FIB_entry: (
@@ -54,11 +60,25 @@ def FIB_format_entries(FIB_entries: tuple[FIBEntry, ...]) -> str:
         ),
     ):
         FIB_lines.append(
-            f"{str(FIB_entry.destination):<19} "
-            f"{FIB_entry.next_hop_ip:<15} "
+            f"{str(FIB_entry.destination):<18} "
+            f"{_FIB_display_next_hop(FIB_entry):<15} "
             f"{FIB_entry.flags:<5} "
-            f"{'0':<10} "
-            f"{FIB_entry.out_if_name:<16} "
+            f"{_FIB_display_timestamp(FIB_entry, FIB_now):<13} "
+            f"{_FIB_display_interface(FIB_entry.out_if_name):<14} "
             "0x0"
         )
     return "\n".join(FIB_lines)
+
+
+def _FIB_display_next_hop(FIB_entry: FIBEntry) -> str:
+    return FIB_entry.next_hop_ip or FIB_entry.source_ip
+
+
+def _FIB_display_timestamp(FIB_entry: FIBEntry, FIB_now: float) -> str:
+    return f"t[{max(0, int(FIB_now - FIB_entry.installed_at))}]"
+
+
+def _FIB_display_interface(FIB_interface_name: str) -> str:
+    if FIB_interface_name.startswith("Ethernet"):
+        return f"Eth{FIB_interface_name[len('Ethernet'):]}"
+    return FIB_interface_name

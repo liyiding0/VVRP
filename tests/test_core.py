@@ -30,6 +30,7 @@ from src.CMD.interactive import (
     _format_colored_help_screen_update,
     _format_help_screen_update,
     _preserve_help_input,
+    _question_mark_help_input,
     _render_input_with_token_styles,
     _reload_context,
     run_interactive_cli,
@@ -212,6 +213,7 @@ class ParserTests(unittest.TestCase):
                 ("fib", "Show IPv4 FIB entries"),
                 ("interfaces", "Show VVRP interfaces"),
                 ("ip", "Show IP information"),
+                ("router", "Show configured router ID"),
                 ("running-configuration", "Show current running configuration"),
                 ("saved-configuration", "Show saved configuration"),
                 ("version", "Show software version"),
@@ -263,6 +265,7 @@ class ParserTests(unittest.TestCase):
                 "fib",
                 "interfaces",
                 "ip",
+                "router",
                 "running-configuration",
                 "saved-configuration",
                 "version",
@@ -302,6 +305,21 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(TokenStyle.VALID, valid.token_statuses[3].style)
 
         invalid = parser.parse("ip address 192.168.999", mode="interface")
+        self.assertEqual(ParseStatus.INVALID, invalid.status)
+        self.assertEqual(TokenStyle.INVALID, invalid.token_statuses[2].style)
+
+    def test_partial_static_route_destination_token_style(self):
+        parser = CommandParser(build_default_registry())
+
+        partial = parser.parse("ip route-static 1.", mode="hidden")
+        self.assertEqual(ParseStatus.AMBIGUOUS, partial.status)
+        self.assertEqual(TokenStyle.AMBIGUOUS, partial.token_statuses[2].style)
+
+        valid = parser.parse("ip route-static 1.1.1.1", mode="hidden")
+        self.assertEqual(ParseStatus.VALID_UNIQUE, valid.status)
+        self.assertEqual(TokenStyle.VALID, valid.token_statuses[2].style)
+
+        invalid = parser.parse("ip route-static 256.", mode="hidden")
         self.assertEqual(ParseStatus.INVALID, invalid.status)
         self.assertEqual(TokenStyle.INVALID, invalid.token_statuses[2].style)
 
@@ -429,6 +447,25 @@ class ParserTests(unittest.TestCase):
 
 
 class RegistryTests(unittest.TestCase):
+    def test_config_commands_are_available_in_hidden_mode_by_default(self):
+        registry = CommandRegistry()
+
+        @registry.command("router id", modes=("config",))
+        def handler(ctx, args):
+            return CommandResult(message="ok")
+
+        self.assertTrue(CommandParser(registry).parse("router id", mode="hidden").executable)
+
+    def test_config_commands_can_explicitly_exclude_hidden_mode(self):
+        registry = CommandRegistry()
+
+        @registry.command("config-only", modes=("config",), config_in_hidden=False)
+        def handler(ctx, args):
+            return CommandResult(message="ok")
+
+        self.assertTrue(CommandParser(registry).parse("config-only", mode="config").executable)
+        self.assertFalse(CommandParser(registry).parse("config-only", mode="hidden").executable)
+
     def test_duplicate_registration_raises(self):
         registry = CommandRegistry()
 
@@ -522,6 +559,40 @@ class DispatchTests(unittest.TestCase):
 
 
 class InteractiveTests(unittest.TestCase):
+    def test_question_mark_help_uses_current_input_without_inserting_into_buffer(self):
+        self.assertEqual("ip ?", _question_mark_help_input("ip "))
+        self.assertEqual(
+            "show ip routing-table?",
+            _question_mark_help_input("show ip routing-table"),
+        )
+
+    def test_blinking_cursor_shape_is_restored_after_each_show(self):
+        from src.CMD.interactive import _keep_blinking_cursor
+
+        calls = []
+
+        class FakeOutput:
+            def show_cursor(self):
+                calls.append("show")
+
+            def set_cursor_shape(self, shape):
+                calls.append(("shape", shape))
+
+        output = _keep_blinking_cursor(FakeOutput(), "blinking-underline")
+
+        output.show_cursor()
+        output.show_cursor()
+
+        self.assertEqual(
+            [
+                "show",
+                ("shape", "blinking-underline"),
+                "show",
+                ("shape", "blinking-underline"),
+            ],
+            calls,
+        )
+
     def test_preserve_help_input_removes_question_mark_and_suffix(self):
         self.assertEqual("show ip ", _preserve_help_input("show ip ?"))
         self.assertEqual("show ip", _preserve_help_input("show ip?"))

@@ -19,6 +19,10 @@ class RMRoute:
     source_ip: str
     next_hop: str | None = None
     preference: int = 0
+    tag: int | None = None
+    description: str = ""
+    permanent: bool = False
+    no_advertise: bool = False
 
     @property
     def prefix_length(self) -> int:

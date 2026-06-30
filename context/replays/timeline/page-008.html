@@ -27,7 +27,7 @@
     <p>AI behavior log, Git binding, replay, decisions, and architecture evolution.</p>
   </header>
   <main>
-    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <strong>8</strong></nav>
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <strong>8</strong> <a href="page-009.html">9</a> <a href="page-010.html">10</a></nav>
 
             <article class="card" id="70">
               <div class="meta">
@@ -279,7 +279,80 @@
               </details>
             </article>
 
-    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <strong>8</strong></nav>
+            <article class="card" id="77">
+              <div class="meta">
+                <span>2026-06-29_16-06-04</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Commit and push forwarding runtime and IFNET improvements</h2>
+              <p>Committed 5d5a587 with Ethernet/FWD boundary cleanup, ICMP Ctrl-C handling, VVRP/CMD startup UX, VRP-style IFNET detail output, documentation, OpenWRT notes, and replay updates; pushed main to GitHub through proxy 127.0.0.1:12334</p>
+              <h3>Files</h3>
+              <ul><li>src</li><li>tests</li><li>README.md</li><li>openWRT runtime readme.txt</li><li>context</li><li>tools/timeline.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Push directly to main without a PR as requested</li><li>Use 12334 after the earlier 7890 connectivity failure</li></ul>
+              <h3>Architecture</h3>
+              <p>context, tests, tools</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre></pre>
+              </details>
+            </article>
+
+            <article class="card" id="78">
+              <div class="meta">
+                <span>2026-06-29_16-21-56</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Add local IPv4 host routes for interfaces</h2>
+              <p>RM now creates a Direct /32 local host route with next hop 127.0.0.1 for every active interface IPv4 address, alongside the connected network route; native /32 addresses are deduplicated</p>
+              <h3>Files</h3>
+              <ul><li>src/RM/routes.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Keep the RIB host route associated with the original configured interface to match VRP display ip routing-table semantics</li></ul>
+              <h3>Architecture</h3>
+              <p>RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 32957 bytes
+ context/replays/timeline/index.html    |   9 ++++++++-
+ context/replays/timeline/page-008.html |  20 ++++++++++++++++++++
+ src/RM/routes.py                       |  25 +++++++++++++------------
+ tests/test_routing.py                  |  31 ++++++++++++++++++++++++++-----
+ 5 files changed, 67 insertions(+), 18 deletions(-)</pre>
+              </details>
+            </article>
+
+            <article class="card" id="79">
+              <div class="meta">
+                <span>2026-06-29_16-42-26</span>
+                <span>main</span>
+                <span>5d5a587</span>
+              </div>
+              <h2>Align show fib with VRP forwarding semantics</h2>
+              <p>Added VRP-style FIB table headers, route totals, HU/U flags, age timestamps, displayed direct-route nexthops, and local /32 installation through full-name InLoopBack0 while preserving forwarding adjacency semantics</p>
+              <h3>Files</h3>
+              <ul><li>src/FIB/models.py</li><li>src/FIB/table.py</li><li>src/FIB/commands.py</li><li>src/RM/routes.py</li><li>tests/test_routing.py</li></ul>
+              <h3>Decisions</h3>
+              <ul><li>Use the full VVRP interface name InLoopBack0 instead of Huawei&#x27;s abbreviated InLoop0</li><li>Preserve install timestamps across unchanged FIB resynchronization</li><li>Map RIB local host routes to InLoopBack0 only at the RM-to-FIB boundary</li></ul>
+              <h3>Architecture</h3>
+              <p>FIB, RM, tests</p>
+              <details>
+                <summary>Diff stat</summary>
+                <pre>context/replays/timeline.zip           | Bin 32669 -&gt; 33267 bytes
+ context/replays/timeline/index.html    |  16 ++++++-
+ context/replays/timeline/page-008.html |  45 +++++++++++++++++++
+ src/FIB/commands.py                    |  36 +++++++++++----
+ src/FIB/models.py                      |   8 ++--
+ src/FIB/table.py                       |  77 +++++++++++++++++++++++++++++----
+ src/RM/routes.py                       |  25 ++++++-----
+ tests/test_routing.py                  |  65 +++++++++++++++++++++++++---
+ 8 files changed, 234 insertions(+), 38 deletions(-)</pre>
+              </details>
+            </article>
+
+    <nav><a href="page-001.html">1</a> <a href="page-002.html">2</a> <a href="page-003.html">3</a> <a href="page-004.html">4</a> <a href="page-005.html">5</a> <a href="page-006.html">6</a> <a href="page-007.html">7</a> <strong>8</strong> <a href="page-009.html">9</a> <a href="page-010.html">10</a></nav>
   </main>
 </body>
 </html>

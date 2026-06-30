@@ -46,9 +46,17 @@ class CommandRegistry:
         help_text: str = "",
         modes: str | Iterable[str] = "*",
         hidden: bool = False,
+        config_in_hidden: bool = True,
     ) -> Callable[[CommandHandler], CommandHandler]:
         def decorator(handler: CommandHandler) -> CommandHandler:
-            self.register(pattern, handler, help_text=help_text, modes=modes, hidden=hidden)
+            self.register(
+                pattern,
+                handler,
+                help_text=help_text,
+                modes=modes,
+                hidden=hidden,
+                config_in_hidden=config_in_hidden,
+            )
             return handler
 
         return decorator
@@ -60,6 +68,7 @@ class CommandRegistry:
         help_text: str = "",
         modes: str | Iterable[str] = "*",
         hidden: bool = False,
+        config_in_hidden: bool = True,
     ) -> CommandSpec:
         tokens = tuple(self._parse_pattern(pattern))
         if not tokens:
@@ -67,6 +76,8 @@ class CommandRegistry:
 
         token_key = tuple(token.key for token in tokens)
         modes_key = self._normalize_modes(modes)
+        if config_in_hidden and "config" in modes_key and "hidden" not in modes_key:
+            modes_key = (*modes_key, "hidden")
         for existing_key, existing_command in self._commands_by_key.items():
             existing_token_key, _ = existing_key
             if existing_token_key != token_key:
